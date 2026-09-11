@@ -133,7 +133,7 @@ const activeConversationThreadId = computed(() => {
   return route.path.startsWith('/agent') ? currentThreadId.value : null
 })
 const organizationName = computed(() => {
-  return infoStore.organization.name || infoStore.branding.name || '知识管理平台'
+  return infoStore.organization.name || infoStore.branding.name || '稽查数字员工'
 })
 
 // 下面是导航菜单部分，添加智能体项

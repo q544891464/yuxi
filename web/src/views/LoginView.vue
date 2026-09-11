@@ -307,7 +307,7 @@ const brandOrgName = computed(() => {
 })
 const brandName = computed(() => {
   const orgName = brandOrgName.value
-  const brandNameRaw = infoStore.branding?.name?.trim() || '知识管理平台'
+  const brandNameRaw = infoStore.branding?.name?.trim() || '稽查数字员工'
 
   if (orgName && brandNameRaw && orgName !== brandNameRaw) {
     return brandNameRaw
