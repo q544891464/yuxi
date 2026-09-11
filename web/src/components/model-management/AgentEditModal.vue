@@ -157,7 +157,8 @@ const runtimeConfigSegment = computed(() =>
 )
 const isRuntimeAgentModalTab = (key) => runtimeAgentModalTabs.includes(key)
 const getDefaultBackendId = () => DEFAULT_AGENT_BACKEND_ID
-const isSubAgentBackend = (backendId) => backendId === SUB_AGENT_BACKEND_ID
+const isSubAgentBackend = (backendId) =>
+  [SUB_AGENT_BACKEND_ID, 'EvidenceReviewSubagent'].includes(backendId)
 
 const getInitialShareConfig = () => ({
   version: 2,

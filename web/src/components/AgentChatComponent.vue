@@ -1987,6 +1987,9 @@ const currentDebugMessages = computed(() =>
 
 // 供深层 TaskTool 读取子线程实时轨迹 / 首次运行时定位 child_thread_id
 provide('getThreadOngoingMessages', getThreadOngoingMessages)
+provide('openEvidenceReviewSource', (reference) => {
+  openPanelPreview({ path: reference.file_path, name: reference.document || undefined })
+})
 provide('getSubagentThreadIdByToolCall', getSubagentThreadIdByToolCall)
 
 // 解析父级 ongoing 里的全部子智能体启动调用（按消息顺序），统一供面板与状态判定使用。

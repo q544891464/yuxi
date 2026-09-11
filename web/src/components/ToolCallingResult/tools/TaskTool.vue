@@ -1,9 +1,5 @@
 <template>
-  <BaseToolCall
-    :tool-call="toolCall"
-    :status="baseStatus"
-    :force-show-result="hasDisplayResult"
-  >
+  <BaseToolCall :tool-call="toolCall" :status="baseStatus" :force-show-result="hasDisplayResult">
     <template #header>
       <div class="sep-header">
         <span class="note">{{ subagentDisplayName }}</span>
@@ -23,7 +19,13 @@
 
     <template #result>
       <div class="task-result">
-        <MarkdownPreview compact :content="String(displayResult)" class="md-preview-wrapper" />
+        <EvidenceReviewResult v-if="evidenceReview" :result="evidenceReview" />
+        <MarkdownPreview
+          v-else
+          compact
+          :content="String(displayResult)"
+          class="md-preview-wrapper"
+        />
       </div>
     </template>
   </BaseToolCall>
@@ -33,6 +35,8 @@
 import { computed, inject } from 'vue'
 import BaseToolCall from '../BaseToolCall.vue'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import EvidenceReviewResult from './EvidenceReviewResult.vue'
+import { parseEvidenceReview } from '@/utils/evidence_review'
 import { MessageProcessor } from '@/utils/messageProcessor'
 import { getToolCallDisplayStatus, parseToolCallArgs } from '../toolRegistry'
 
@@ -85,6 +89,7 @@ const displayResult = computed(() => {
   return props.toolCall.tool_call_result?.content ?? props.toolCall.result ?? ''
 })
 const hasDisplayResult = computed(() => displayResult.value !== '')
+const evidenceReview = computed(() => parseEvidenceReview(displayResult.value))
 const shortDescription = computed(() => {
   const desc = description.value
   if (!desc) return ''

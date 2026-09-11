@@ -58,6 +58,73 @@ const render = (component, props) =>
       .use(createRouter({ history: createMemoryHistory(), routes: [] }))
   )
 
+test('事实证据审查在同步和异步子任务中展示风险与证据，而不是原始 JSON', async () => {
+  const result = {
+    review_type: 'fact_evidence_review',
+    overall_status: 'risk',
+    summary: {
+      violation_count: 1,
+      fact_count: 1,
+      sufficient_count: 0,
+      basically_sufficient_count: 0,
+      doubtful_count: 0,
+      insufficient_count: 1,
+      high_risk_count: 1
+    },
+    violation_reviews: [
+      {
+        violation_id: 'V1',
+        violation_name: '收入归属',
+        inspection_fact: '收款属于企业',
+        overall_risk: 'high',
+        overall_conclusion: '需补证',
+        fact_reviews: [
+          {
+            fact_id: 'F1',
+            fact: '个人收款归属',
+            conclusion: 'insufficient',
+            risk_level: 'high',
+            evidence: [],
+            issues: ['当前材料不足以确认'],
+            missing_evidence: ['企业销售记录'],
+            recommendation: '补充对应合同',
+            evidence_analysis: '缺乏企业收入联系',
+            source_reference: { document: '合成报告', section: '检查情况', page: 2 }
+          }
+        ]
+      }
+    ],
+    evidence_conflicts: [],
+    evidence_gaps: [],
+    review_findings: [],
+    limitations: ['未能回查原始材料']
+  }
+  for (const [name, content] of [
+    ['task', `> 子智能体线程 ID: child\n\n---\n\n${JSON.stringify(result)}`],
+    [
+      'subagent_await',
+      JSON.stringify({ status: 'completed', result: { output: JSON.stringify(result) } })
+    ]
+  ]) {
+    const html = await render(ToolCallRenderer, {
+      toolCall: {
+        id: name,
+        name,
+        args: { subagent_slug: 'evidence-review' },
+        status: 'completed',
+        tool_call_result: { content }
+      },
+      defaultExpanded: true
+    })
+    assert.match(html, /事实证据审查结果/)
+    assert.match(html, /risk high/)
+    assert.match(html, /个人收款归属/)
+    assert.match(html, /补充对应合同/)
+    assert.match(html, /合成报告.*检查情况.*第 2 页/)
+    assert.doesNotMatch(html, /&quot;review_type&quot;/)
+  }
+})
+
 for (const [name, fields] of Object.entries({
   调用错误且没有结果: { status: 'error', error_message: '无法执行' },
   调用错误且结果为空: {

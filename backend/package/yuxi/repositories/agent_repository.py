@@ -18,6 +18,7 @@ DEFAULT_AGENT_SLUG = "default-chatbot"
 DEFAULT_AGENT_NAME = "智能助手"
 DEFAULT_AGENT_BACKEND_ID = "ChatbotAgent"
 SUB_AGENT_BACKEND_ID = "SubAgentBackend"
+EVIDENCE_REVIEW_BACKEND_ID = "EvidenceReviewSubagent"
 DEFAULT_AGENT_DESCRIPTION = "基础的对话机器人，可以回答问题，可在配置中启用需要的工具。"
 DEFAULT_SHARE_CONFIG = {
     "version": 2,
@@ -115,7 +116,7 @@ def is_builtin_agent(agent: Agent) -> bool:
 
 
 def resolve_agent_is_subagent(backend_id: str, is_subagent: bool | None = None) -> bool:
-    expected = backend_id == SUB_AGENT_BACKEND_ID
+    expected = backend_id in {SUB_AGENT_BACKEND_ID, EVIDENCE_REVIEW_BACKEND_ID}
     if is_subagent is not None and bool(is_subagent) != expected:
         raise ValueError("SubAgentBackend 与 is_subagent 必须保持一致")
     return expected
@@ -234,6 +235,20 @@ class AgentRepository:
             backend_id=SUB_AGENT_BACKEND_ID,
             name=GENERAL_PURPOSE_AGENT_NAME,
             description=GENERAL_PURPOSE_AGENT_DESCRIPTION,
+            config_context={},
+            is_subagent=True,
+            created_by=created_by,
+        )
+
+    async def ensure_evidence_review_subagent(self, *, created_by: str | None = None) -> Agent:
+        """通过已有内置定义机制注册事实证据审查岗位。"""
+        from yuxi.agents.buildin.evidence_review.prompt import CALL_DESCRIPTION
+
+        return await self._ensure_builtin_agent(
+            slug="evidence-review",
+            backend_id=EVIDENCE_REVIEW_BACKEND_ID,
+            name="事实证据审查子智能体",
+            description=CALL_DESCRIPTION,
             config_context={},
             is_subagent=True,
             created_by=created_by,
