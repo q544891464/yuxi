@@ -135,7 +135,7 @@ const activeConversationThreadId = computed(() => {
   return consumerChat.value || route.path.startsWith('/agent') ? currentThreadId.value : null
 })
 const organizationName = computed(() => {
-  return infoStore.organization.name || infoStore.branding.name || '稽查数字员工'
+  return infoStore.organization.name || infoStore.branding.name || '智能辅助审理数字人'
 })
 
 // 下面是导航菜单部分，添加智能体项
@@ -356,7 +356,7 @@ provide('settingsModal', {
     <header v-if="consumerChat" class="consumer-topbar">
       <RouterLink to="/chat" class="consumer-brand">
         <span class="consumer-logo" aria-hidden="true"></span>
-        <span><strong>稽查数字员工</strong><small>税务稽查智能助手</small></span>
+        <span><strong>智能辅助审理数字人</strong><small>税务审理智能助手</small></span>
       </RouterLink>
       <UserInfoComponent :show-role="false" />
     </header>

@@ -19,6 +19,12 @@ _SKILLS_ROOT = Path(__file__).resolve().parent
 
 BUILTIN_SKILLS: list[BuiltinSkillSpec] = [
     BuiltinSkillSpec(
+        slug="tax-inspection-report-parser",
+        source_dir=_SKILLS_ROOT / "tax-inspection-report-parser",
+        description="解析税务稽查报告，提取案件事实、证据、税费及依据，输出结构化数据、原文溯源和缺失项，不作最终审理结论。",
+        version="1.0",
+    ),
+    BuiltinSkillSpec(
         slug="image-gen",
         source_dir=_SKILLS_ROOT / "image-gen",
         description="在 Agent 沙盒中生成图片并保存到 outputs，默认支持 Qwen-Image，也可接入其它图片生成接口。",

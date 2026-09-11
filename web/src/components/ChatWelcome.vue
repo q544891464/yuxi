@@ -1,12 +1,12 @@
 <template>
-  <section class="chat-welcome" aria-label="稽查数字员工欢迎页">
+  <section class="chat-welcome" aria-label="智能辅助审理数字人欢迎页">
     <div class="welcome-hero">
-      <div class="assistant-portrait" role="img" aria-label="稽查数字员工形象"></div>
+      <div class="assistant-portrait" role="img" aria-label="智能辅助审理数字人形象"></div>
       <div class="welcome-copy">
         <span class="welcome-eyebrow">专业 · 规范 · 智能 · 高效</span>
         <h1>您好！</h1>
         <div class="welcome-rule"></div>
-        <p>我是您的稽查数字员工，<br />请问需要协助什么？</p>
+        <p>我是您的智能辅助审理数字人，<br />请问需要协助什么？</p>
       </div>
       <span class="welcome-motto">以数治税<br />以智助查</span>
     </div>
@@ -18,6 +18,18 @@
       </div>
       <span class="role-note">依法稽查 · 精准高效</span>
     </div>
+    <section class="skill-entry" aria-label="审理技能">
+      <div class="skill-entry-copy">
+        <span class="skill-entry-tag">报告解析</span>
+        <h2>稽查报告结构化解析</h2>
+        <p>提取案件信息、违法事实、证据和税费数据，保留原文出处，标记缺失与冲突。</p>
+        <small>上传 Word、PDF 或粘贴报告正文后发送，不作最终审理结论。</small>
+        <small v-if="!reportParserAvailable" role="status">当前智能体尚未启用此技能</small>
+      </div>
+      <button type="button" :disabled="!reportParserAvailable" @click="useReportParser">
+        使用技能<ChevronRight :size="18" />
+      </button>
+    </section>
     <div class="welcome-questions" aria-label="建议问题">
       <button
         v-for="question in questions"
@@ -32,8 +44,24 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { ChevronRight, ShieldCheck } from '@lucide/vue'
-defineEmits(['prompt'])
+import { formatMentionToken } from '@/utils/mention_token'
+const props = defineProps({ skills: { type: Array, default: () => [] } })
+const emit = defineEmits(['prompt'])
+const reportParserSlug = 'tax-inspection-report-parser'
+const reportParserAvailable = computed(() =>
+  props.skills.some((skill) => skill.slug === reportParserSlug)
+)
+
+// 使用当前智能体允许的技能引用，保留用户上传材料和确认发送的步骤。
+const useReportParser = () => {
+  if (!reportParserAvailable.value) return
+  emit(
+    'prompt',
+    `${formatMentionToken('skill', reportParserSlug)} 请解析我提供的税务稽查报告，输出案件摘要、结构化 JSON、原文溯源、异常和缺失项；如尚未提供报告，请先提示我上传或粘贴正文。`
+  )
+}
 const questions = [
   '企业涉税风险如何初筛？',
   '发票异常如何核查？',
@@ -152,6 +180,58 @@ const questions = [
   color: #7d96bb;
   font-size: 13px;
   white-space: nowrap;
+}
+.skill-entry {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin: 16px 0;
+  padding: 22px 24px;
+  border: 1px solid #d5e5ff;
+  border-radius: 22px;
+  background: #ffffffd9;
+}
+.skill-entry-copy {
+  flex: 1;
+}
+.skill-entry-tag {
+  color: #1765ff;
+  font-size: 12px;
+}
+.skill-entry h2 {
+  margin: 6px 0 8px;
+  font-size: 20px;
+  color: #112452;
+}
+.skill-entry p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #526c96;
+}
+.skill-entry small {
+  display: block;
+  color: #6f82a0;
+  line-height: 1.7;
+}
+.skill-entry button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: #1765ff;
+  color: white;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.skill-entry button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.skill-entry button:focus-visible {
+  outline: 2px solid #1765ff;
+  outline-offset: 4px;
 }
 .welcome-questions {
   display: grid;
