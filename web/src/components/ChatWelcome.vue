@@ -51,27 +51,31 @@ const questions = [
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 220px;
+  min-height: 280px;
+  margin-top: 40px;
   border: 1px solid white;
   border-radius: 26px;
-  overflow: hidden;
+  overflow: visible;
   background: linear-gradient(135deg, #d9eaff, #f6fbff 65%, #deedff);
 }
 .welcome-hero::after {
   content: '';
   position: absolute;
-  width: 80%;
-  height: 200px;
-  right: -20%;
-  bottom: -135px;
-  border-radius: 50%;
+  width: 60%;
+  height: 100px;
+  right: 0;
+  bottom: 0;
+  border-radius: 100% 0 26px 0;
   background: #bddbff66;
-  transform: rotate(-15deg);
+  pointer-events: none;
 }
 .assistant-portrait {
-  flex: 0 0 225px;
-  height: 220px;
-  background: url('/cydx/assistant-sheet.png') no-repeat -390px -28px / 850px 637.5px;
+  flex: 0 0 268px;
+  height: 320px;
+  margin: -40px 24px 0 16px;
+  align-self: flex-end;
+  background: url('/cydx/assistant-sheet.png') no-repeat -5px -36px / 557px 417.75px;
+  clip-path: polygon(0 0, 72% 0, 72% 45%, 100% 45%, 100% 70%, 88% 100%, 0 100%);
   mix-blend-mode: multiply;
 }
 
@@ -183,7 +187,7 @@ const questions = [
     display: none;
   }
   .assistant-portrait {
-    flex-basis: 225px;
+    flex-basis: 268px;
   }
 }
 @media (max-width: 640px) {
@@ -193,8 +197,9 @@ const questions = [
   .assistant-portrait {
     flex-basis: 130px;
     height: 140px;
-    background-size: 490px 367.5px;
-    background-position: -225px -17px;
+    background-size: 245px 183.75px;
+    background-position: -2px -16px;
+    margin: 0 8px 0 0;
   }
   .welcome-eyebrow {
     display: none;
