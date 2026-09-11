@@ -1,5 +1,5 @@
 <template>
-  <div class="agent-view">
+  <div class="agent-view" :class="{ 'consumer-agent': consumerChat }">
     <div class="agent-view-body">
       <!-- 中间内容区域 -->
       <div class="content">
@@ -9,6 +9,9 @@
           :initial-project-id="routeDraftProjectId"
           @thread-change="handleThreadChange"
         >
+          <template v-if="consumerChat" #welcome="{ setPrompt }">
+            <ChatWelcome @prompt="setPrompt" />
+          </template>
           <template #input-actions-left="{ hasActiveThread, isCreatingThread }">
             <a-dropdown
               v-if="selectedAgentId"
@@ -80,7 +83,7 @@
 
                   <div class="config-dropdown-divider"></div>
 
-                  <div class="config-dropdown-actions">
+                  <div v-if="!consumerChat" class="config-dropdown-actions">
                     <button
                       type="button"
                       class="config-dropdown-item action-item"
@@ -106,6 +109,7 @@
       </div>
     </div>
     <AgentEditModal
+      v-if="!consumerChat"
       ref="agentEditModalRef"
       :backend-options="agentBackendOptions"
       @saved="handleAgentSaved"
@@ -120,6 +124,7 @@ import { Settings2, ChevronDown, Check, Plus } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import { agentApi } from '@/apis/agent_api'
 import { useOutsidePointerdown } from '@/composables/useOutsidePointerdown'
+import ChatWelcome from '@/components/ChatWelcome.vue'
 import AgentChatComponent from '@/components/AgentChatComponent.vue'
 import AgentEditModal from '@/components/model-management/AgentEditModal.vue'
 import { isBuiltinAgent, useAgentStore } from '@/stores/agent'
@@ -138,6 +143,8 @@ const agentEditModalRef = ref(null)
 const agentStore = useAgentStore()
 const route = useRoute()
 const router = useRouter()
+const consumerChat = computed(() => route.meta.consumerChat === true)
+const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
 
 // 从 agentStore 中获取响应式状态
 const { agents, selectedAgentId, isLoadingConfig } = storeToRefs(agentStore)
@@ -174,7 +181,7 @@ const syncSelectedThreadFromRoute = async () => {
     const ok = await chatComponent.selectThreadFromRoute(threadId)
     if (ok === null) return
     if (threadId && !ok) {
-      await router.replace({ name: 'AgentComp' })
+      await router.replace({ name: entryRoute.value })
     }
   } catch (error) {
     handleChatError(error, 'load')
@@ -201,7 +208,7 @@ const consumeRouteAgentSelection = async () => {
   } finally {
     const nextQuery = { ...route.query }
     delete nextQuery.agent_id
-    await router.replace({ name: 'AgentComp', query: nextQuery })
+    await router.replace({ name: entryRoute.value, query: nextQuery })
   }
 }
 
@@ -233,9 +240,9 @@ const handleThreadChange = (threadId) => {
   if (currentRouteThreadId === nextThreadId) return
 
   if (nextThreadId) {
-    router.replace({ name: 'AgentCompWithThreadId', params: { thread_id: nextThreadId } })
+    router.replace({ name: `${entryRoute.value}WithThreadId`, params: { thread_id: nextThreadId } })
   } else {
-    router.replace({ name: 'AgentComp' })
+    router.replace({ name: entryRoute.value })
   }
 }
 

@@ -166,7 +166,9 @@
 
               <!-- 打招呼区域 - 在输入框上方 -->
               <div v-if="!conversations.length" class="chat-greeting-input">
-                <h1>{{ randomGreeting }}</h1>
+                <slot name="welcome" :set-prompt="(text) => (userInput = text)">
+                  <h1>{{ randomGreeting }}</h1>
+                </slot>
               </div>
 
               <section

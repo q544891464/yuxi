@@ -43,7 +43,14 @@ test('首页按认证状态进入登录页或智能体，过期会话不能停�
   try {
     for (const scenario of [
       { name: '未登录', token: null, userId: null, isLoggedIn: false, expected: '/login' },
-      { name: '已登录', token: 'test-token', userId: 1, isLoggedIn: true, expected: '/agent' },
+      {
+        name: '已登录',
+        token: 'test-token',
+        userId: 1,
+        isLoggedIn: true,
+        isAdmin: true,
+        expected: '/agent'
+      },
       { name: '过期会话', token: 'expired', userId: null, isLoggedIn: true, expected: '/login' }
     ]) {
       await t.test(scenario.name, async () => {
@@ -70,9 +77,51 @@ test('首页按认证状态进入登录页或智能体，过期会话不能停�
 })
 
 test('已登录访问登录页默认进入智能体，同时保留合法的深链接', async () => {
-  const router = createTestRouter({ token: 'test-token', userId: 1, isLoggedIn: true })
+  const router = createTestRouter({
+    token: 'test-token',
+    userId: 1,
+    isLoggedIn: true,
+    isAdmin: true
+  })
   await router.push('/login')
   assert.equal(router.currentRoute.value.path, '/agent')
   await router.push('/login?redirect=/workspace')
   assert.equal(router.currentRoute.value.path, '/workspace')
+})
+
+// 通过真实路由执行直接访问与登录回跳，防止普通用户绕过入口分流。
+test('普通用户入口和管理员工作台访问隔离', async () => {
+  const router = createTestRouter({
+    token: 'test-token',
+    userId: 2,
+    isLoggedIn: true,
+    isAdmin: false
+  })
+  for (const path of [
+    '/',
+    '/login',
+    '/agent',
+    '/agent/thread-1',
+    '/login?redirect=/agent/thread-1'
+  ]) {
+    await router.push(path)
+    assert.equal(router.currentRoute.value.path, '/chat', path)
+    assert.equal(router.currentRoute.value.meta.consumerChat, true)
+  }
+  await router.push('/chat/thread-1')
+  assert.equal(router.currentRoute.value.params.thread_id, 'thread-1')
+  assert.equal(router.currentRoute.value.name, 'ChatCompWithThreadId')
+})
+
+test('管理员可选择用户界面并保留工作台深链接', async () => {
+  const router = createTestRouter({
+    token: 'test-token',
+    userId: 1,
+    isLoggedIn: true,
+    isAdmin: true
+  })
+  await router.push('/agent/thread-1')
+  assert.equal(router.currentRoute.value.name, 'AgentCompWithThreadId')
+  await router.push('/chat')
+  assert.equal(router.currentRoute.value.name, 'ChatComp')
 })

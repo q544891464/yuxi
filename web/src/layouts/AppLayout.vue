@@ -127,10 +127,13 @@ onUnmounted(() => {
 
 const route = useRoute()
 const router = useRouter()
+const consumerChat = computed(() => route.meta.consumerChat === true)
+const historyOpen = ref(false)
+const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
 
 const activeTaskCount = computed(() => activeCountRef.value || 0)
 const activeConversationThreadId = computed(() => {
-  return route.path.startsWith('/agent') ? currentThreadId.value : null
+  return consumerChat.value || route.path.startsWith('/agent') ? currentThreadId.value : null
 })
 const organizationName = computed(() => {
   return infoStore.organization.name || infoStore.branding.name || '稽查数字员工'
@@ -199,6 +202,10 @@ const setSidebarCollapsed = (collapsed) => {
 }
 
 const toggleSidebar = () => {
+  if (consumerChat.value) {
+    historyOpen.value = false
+    return
+  }
   setSidebarCollapsed(!sidebarCollapsed.value)
 }
 
@@ -228,7 +235,8 @@ const loadProjects = async () => {
 const handleSelectChat = (threadId) => {
   if (!threadId) return
   if (!chatThreadsStore.setCurrentThreadId(threadId)) return
-  router.push({ name: 'AgentCompWithThreadId', params: { thread_id: threadId } })
+  historyOpen.value = false
+  router.push({ name: `${entryRoute.value}WithThreadId`, params: { thread_id: threadId } })
 }
 
 const handleSearchThreadFound = (thread) => {
@@ -242,13 +250,14 @@ const handleSearchSelectThread = (thread) => {
 }
 
 const handleCreateConversationFromSearch = () => {
+  historyOpen.value = false
   if (!chatThreadsStore.setCurrentThreadId(null)) return
-  router.push({ name: 'AgentComp' })
+  router.push({ name: entryRoute.value })
 }
 
 const handleCreateProjectChat = async (projectId) => {
   if (!projectId || projectPendingId.value || threadCreationInFlight.value) return
-  await router.push({ name: 'AgentComp', query: { project_id: projectId } })
+  await router.push({ name: entryRoute.value, query: { project_id: projectId } })
   chatThreadsStore.setCurrentThreadId(null)
 }
 
@@ -265,7 +274,7 @@ const handleDeleteChat = async (threadId) => {
   try {
     await chatThreadsStore.deleteThread(threadId)
     if (route.params.thread_id === threadId) {
-      await router.replace({ name: 'AgentComp' })
+      await router.replace({ name: entryRoute.value })
     }
   } catch (error) {
     console.warn('删除对话失败:', error)
@@ -316,7 +325,7 @@ const handleDeleteProject = async (projectId) => {
     const removedThreadIds = chatThreadsStore.removeThreadsByProject(projectId)
     projectsStore.removeProject(projectId)
     if (removedThreadIds.includes(route.params.thread_id)) {
-      await router.replace({ name: 'AgentComp' })
+      await router.replace({ name: entryRoute.value })
     }
     message.success('项目及其中对话已删除，项目文件夹已保留')
   } catch (error) {
@@ -329,7 +338,7 @@ const handleDeleteProject = async (projectId) => {
 watch(
   () => [route.path, route.params.thread_id],
   () => {
-    if (!route.path.startsWith('/agent')) return
+    if (!consumerChat.value && !route.path.startsWith('/agent')) return
     if (threadCreationInFlight.value) return
     const threadId = typeof route.params.thread_id === 'string' ? route.params.thread_id : null
     chatThreadsStore.setCurrentThreadId(threadId)
@@ -344,10 +353,45 @@ provide('settingsModal', {
 </script>
 
 <template>
-  <div class="app-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
-    <div class="header">
+  <div
+    class="app-layout"
+    :class="{
+      'sidebar-collapsed': !consumerChat && sidebarCollapsed,
+      'consumer-layout': consumerChat
+    }"
+  >
+    <header v-if="consumerChat" class="consumer-topbar">
+      <RouterLink to="/chat" class="consumer-brand">
+        <span class="consumer-logo" aria-hidden="true"></span>
+        <span><strong>稽查数字员工</strong><small>税务稽查智能助手</small></span>
+      </RouterLink>
+      <nav aria-label="聊天导航">
+        <button
+          type="button"
+          :disabled="threadCreationInFlight"
+          @click="handleCreateConversationFromSearch"
+        >
+          <MessageCirclePlus :size="18" />新对话
+        </button>
+        <button type="button" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen">
+          历史对话
+        </button>
+      </nav>
+      <UserInfoComponent :show-role="false" />
+    </header>
+    <button
+      v-if="consumerChat && historyOpen"
+      class="history-backdrop"
+      aria-label="关闭历史对话"
+      @click="historyOpen = false"
+    ></button>
+    <div
+      v-show="!consumerChat || historyOpen"
+      class="header"
+      :class="{ 'consumer-history': consumerChat }"
+    >
       <div class="sidebar-brand" @click.stop>
-        <router-link v-if="!sidebarCollapsed" to="/" class="brand-link">
+        <router-link v-if="consumerChat || !sidebarCollapsed" to="/" class="brand-link">
           <img
             v-if="infoStore.organization.avatar"
             :src="infoStore.organization.avatar"
@@ -364,7 +408,11 @@ provide('settingsModal', {
         >
           <PanelLeftOpen class="brand-expand-icon" size="20" />
         </button>
-        <div v-if="!sidebarCollapsed" class="sidebar-header-actions" aria-label="侧边栏操作">
+        <div
+          v-if="consumerChat || !sidebarCollapsed"
+          class="sidebar-header-actions"
+          aria-label="侧边栏操作"
+        >
           <button
             type="button"
             class="sidebar-header-action"
@@ -384,7 +432,7 @@ provide('settingsModal', {
           </button>
         </div>
       </div>
-      <div class="nav">
+      <div v-if="!consumerChat" class="nav">
         <RouterLink
           v-if="primaryNavItem"
           :to="primaryNavItem.path"
@@ -407,7 +455,7 @@ provide('settingsModal', {
         </RouterLink>
 
         <button
-          v-if="sidebarCollapsed"
+          v-if="!consumerChat && sidebarCollapsed"
           type="button"
           class="nav-item"
           :class="{ active: conversationSearchOpen }"
@@ -442,7 +490,7 @@ provide('settingsModal', {
       </div>
       <div class="fill">
         <ConversationNavSection
-          v-if="!sidebarCollapsed"
+          v-if="consumerChat || !sidebarCollapsed"
           class="sidebar-conversations"
           :current-chat-id="activeConversationThreadId"
           :chats-list="threads"
@@ -521,6 +569,172 @@ provide('settingsModal', {
 </template>
 
 <style lang="less" scoped>
+.app-layout.consumer-layout {
+  --main-color: #1765ff;
+  flex-direction: column;
+  min-width: 0;
+  height: 100dvh;
+  background:
+    radial-gradient(ellipse at 0 90%, #d6e9ff 0, transparent 45%),
+    linear-gradient(135deg, #f7fbff, #edf6ff);
+  .consumer-topbar {
+    height: 76px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 0 36px;
+    background: #ffffffbd;
+    border-bottom: 1px solid #fff;
+  }
+  .consumer-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: #122657;
+  }
+  .consumer-brand strong {
+    display: block;
+    font-size: 21px;
+    letter-spacing: 1px;
+  }
+  .consumer-brand small {
+    display: block;
+    color: #6b86af;
+    font-size: 12px;
+    margin-top: 3px;
+  }
+  .consumer-logo {
+    width: 48px;
+    height: 56px;
+    flex-shrink: 0;
+    background: url('/cydx/logo-sheet.png') no-repeat -15px -96px / 355px 266.25px;
+    mix-blend-mode: multiply;
+  }
+  nav {
+    display: flex;
+    gap: 6px;
+    background: #e5efff;
+    border-radius: 30px;
+    padding: 5px;
+  }
+  nav button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 26px;
+    padding: 10px 20px;
+    color: #25477d;
+    background: transparent;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  nav button:first-child {
+    background: #1765ff;
+    color: white;
+  }
+  nav button:focus-visible {
+    outline: 2px solid #1765ff;
+    outline-offset: 2px;
+  }
+  .consumer-history {
+    position: absolute;
+    z-index: 310;
+    top: 76px;
+    left: 0;
+    height: calc(100dvh - 76px);
+    width: 300px;
+    background: #f6faff;
+    box-shadow: 10px 0 40px #1d467525;
+  }
+  .history-backdrop {
+    position: fixed;
+    inset: 76px 0 0;
+    background: #142c5325;
+    border: 0;
+    z-index: 300;
+  }
+  #app-router-view {
+    height: 0;
+    min-height: 0;
+  }
+  :deep(.consumer-agent) {
+    height: 100%;
+  }
+  :deep(.chat),
+  :deep(.chat-main),
+  :deep(.chat-content-container) {
+    background: transparent;
+  }
+  :deep(.chat-header:not(.has-active-thread)) {
+    display: none;
+  }
+  :deep(.chat-main:has(.start-screen)) {
+    justify-content: flex-start;
+  }
+  :deep(.chat-main:has(.start-screen) > .chat-box) {
+    flex-grow: 0;
+    padding: 0;
+  }
+  :deep(.bottom.start-screen) {
+    flex-shrink: 0;
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+    width: min(1100px, 94%);
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 14px 0;
+  }
+  :deep(.chat-main) {
+    overflow-y: auto;
+  }
+  :deep(.chat-greeting-input) {
+    margin-bottom: 18px;
+    padding: 0;
+  }
+  :deep(.message-input-wrapper) {
+    max-width: none;
+  }
+  :deep(.input-container) {
+    border-radius: 22px;
+  }
+  @media (max-width: 760px) {
+    .consumer-topbar {
+      height: 66px;
+      padding: 0 12px;
+      gap: 8px;
+    }
+    .consumer-brand strong {
+      font-size: 15px;
+    }
+    .consumer-brand small {
+      display: none;
+    }
+    nav button {
+      padding: 9px 10px;
+      font-size: 12px;
+    }
+    .consumer-logo {
+      display: none;
+    }
+    .consumer-topbar > :last-child {
+      max-width: 90px;
+    }
+    .consumer-history {
+      top: 66px;
+      height: calc(100dvh - 66px);
+    }
+    .history-backdrop {
+      top: 66px;
+    }
+  }
+}
+
 // Less 变量定义
 @sidebar-width: 230px;
 @sidebar-collapsed-width: 56px;
@@ -939,5 +1153,14 @@ div.header,
       }
     }
   }
+}
+</style>
+
+<style>
+html.dark .app-layout.consumer-layout {
+  background: radial-gradient(ellipse at 0 90%, #173258, transparent 60%), #111b2c;
+}
+html.dark .app-layout.consumer-layout .consumer-history {
+  background: var(--gray-0);
 }
 </style>
