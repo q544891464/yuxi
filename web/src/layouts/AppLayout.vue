@@ -556,9 +556,11 @@ provide('settingsModal', {
   &.sidebar-collapsed {
     grid-template-columns: 56px minmax(0, 1fr);
   }
-  background:
+  --consumer-background:
     radial-gradient(ellipse at 0 90%, #d6e9ff 0, transparent 45%),
     linear-gradient(135deg, #f7fbff, #edf6ff);
+  background: var(--consumer-background);
+  background-attachment: fixed;
   .consumer-topbar {
     grid-column: 1 / -1;
     height: 76px;
@@ -662,17 +664,19 @@ provide('settingsModal', {
     left: auto;
     transform: none;
     width: 100%;
-    max-width: 1100px;
+    max-width: none;
     margin: 0 auto;
     padding: 12px 20px 16px;
-    background: transparent;
+    background: var(--consumer-background);
+    background-attachment: fixed;
   }
   :deep(.bottom.start-screen) {
     position: relative;
     bottom: auto;
+    background: transparent;
   }
   :deep(.message-input-wrapper) {
-    max-width: none;
+    max-width: 1060px;
   }
   :deep(.input-container) {
     border-radius: 22px;
@@ -1122,7 +1126,7 @@ div.header,
 
 <style>
 html.dark .app-layout.consumer-layout {
-  background: radial-gradient(ellipse at 0 90%, #173258, transparent 60%), #111b2c;
+  --consumer-background: radial-gradient(ellipse at 0 90%, #173258, transparent 60%), #111b2c;
 }
 html.dark .app-layout.consumer-layout .consumer-history {
   background: var(--gray-0);
