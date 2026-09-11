@@ -128,7 +128,6 @@ onUnmounted(() => {
 const route = useRoute()
 const router = useRouter()
 const consumerChat = computed(() => route.meta.consumerChat === true)
-const historyOpen = ref(false)
 const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
 
 const activeTaskCount = computed(() => activeCountRef.value || 0)
@@ -202,10 +201,6 @@ const setSidebarCollapsed = (collapsed) => {
 }
 
 const toggleSidebar = () => {
-  if (consumerChat.value) {
-    historyOpen.value = false
-    return
-  }
   setSidebarCollapsed(!sidebarCollapsed.value)
 }
 
@@ -235,7 +230,6 @@ const loadProjects = async () => {
 const handleSelectChat = (threadId) => {
   if (!threadId) return
   if (!chatThreadsStore.setCurrentThreadId(threadId)) return
-  historyOpen.value = false
   router.push({ name: `${entryRoute.value}WithThreadId`, params: { thread_id: threadId } })
 }
 
@@ -250,7 +244,6 @@ const handleSearchSelectThread = (thread) => {
 }
 
 const handleCreateConversationFromSearch = () => {
-  historyOpen.value = false
   if (!chatThreadsStore.setCurrentThreadId(null)) return
   router.push({ name: entryRoute.value })
 }
@@ -356,7 +349,7 @@ provide('settingsModal', {
   <div
     class="app-layout"
     :class="{
-      'sidebar-collapsed': !consumerChat && sidebarCollapsed,
+      'sidebar-collapsed': sidebarCollapsed,
       'consumer-layout': consumerChat
     }"
   >
@@ -365,33 +358,11 @@ provide('settingsModal', {
         <span class="consumer-logo" aria-hidden="true"></span>
         <span><strong>稽查数字员工</strong><small>税务稽查智能助手</small></span>
       </RouterLink>
-      <nav aria-label="聊天导航">
-        <button
-          type="button"
-          :disabled="threadCreationInFlight"
-          @click="handleCreateConversationFromSearch"
-        >
-          <MessageCirclePlus :size="18" />新对话
-        </button>
-        <button type="button" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen">
-          历史对话
-        </button>
-      </nav>
       <UserInfoComponent :show-role="false" />
     </header>
-    <button
-      v-if="consumerChat && historyOpen"
-      class="history-backdrop"
-      aria-label="关闭历史对话"
-      @click="historyOpen = false"
-    ></button>
-    <div
-      v-show="!consumerChat || historyOpen"
-      class="header"
-      :class="{ 'consumer-history': consumerChat }"
-    >
+    <div class="header" :class="{ 'consumer-history': consumerChat }">
       <div class="sidebar-brand" @click.stop>
-        <router-link v-if="consumerChat || !sidebarCollapsed" to="/" class="brand-link">
+        <router-link v-if="!sidebarCollapsed" to="/" class="brand-link">
           <img
             v-if="infoStore.organization.avatar"
             :src="infoStore.organization.avatar"
@@ -408,11 +379,7 @@ provide('settingsModal', {
         >
           <PanelLeftOpen class="brand-expand-icon" size="20" />
         </button>
-        <div
-          v-if="consumerChat || !sidebarCollapsed"
-          class="sidebar-header-actions"
-          aria-label="侧边栏操作"
-        >
+        <div v-if="!sidebarCollapsed" class="sidebar-header-actions" aria-label="侧边栏操作">
           <button
             type="button"
             class="sidebar-header-action"
@@ -432,6 +399,16 @@ provide('settingsModal', {
           </button>
         </div>
       </div>
+      <button
+        v-if="consumerChat"
+        class="consumer-new-chat"
+        type="button"
+        :disabled="threadCreationInFlight"
+        @click="handleCreateConversationFromSearch"
+        aria-label="新建对话"
+      >
+        <MessageCirclePlus :size="18" /><span v-if="!sidebarCollapsed">新建对话</span>
+      </button>
       <div v-if="!consumerChat" class="nav">
         <RouterLink
           v-if="primaryNavItem"
@@ -455,7 +432,7 @@ provide('settingsModal', {
         </RouterLink>
 
         <button
-          v-if="!consumerChat && sidebarCollapsed"
+          v-if="sidebarCollapsed"
           type="button"
           class="nav-item"
           :class="{ active: conversationSearchOpen }"
@@ -490,7 +467,7 @@ provide('settingsModal', {
       </div>
       <div class="fill">
         <ConversationNavSection
-          v-if="consumerChat || !sidebarCollapsed"
+          v-if="!sidebarCollapsed"
           class="sidebar-conversations"
           :current-chat-id="activeConversationThreadId"
           :chats-list="threads"
@@ -571,13 +548,19 @@ provide('settingsModal', {
 <style lang="less" scoped>
 .app-layout.consumer-layout {
   --main-color: #1765ff;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  grid-template-rows: 76px minmax(0, 1fr);
   min-width: 0;
   height: 100dvh;
+  &.sidebar-collapsed {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
   background:
     radial-gradient(ellipse at 0 90%, #d6e9ff 0, transparent 45%),
     linear-gradient(135deg, #f7fbff, #edf6ff);
   .consumer-topbar {
+    grid-column: 1 / -1;
     height: 76px;
     flex-shrink: 0;
     display: flex;
@@ -613,53 +596,39 @@ provide('settingsModal', {
     background: url('/cydx/logo-sheet.png') no-repeat -15px -96px / 355px 266.25px;
     mix-blend-mode: multiply;
   }
-  nav {
-    display: flex;
-    gap: 6px;
-    background: #e5efff;
-    border-radius: 30px;
-    padding: 5px;
+  .consumer-history {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    background: #f6faff;
+    border-right: 1px solid #dfe9f6;
   }
-  nav button {
+  .consumer-new-chat {
     display: flex;
     align-items: center;
-    gap: 8px;
-    border: 0;
-    border-radius: 26px;
-    padding: 10px 20px;
-    color: #25477d;
-    background: transparent;
+    justify-content: center;
+    gap: 9px;
+    width: 100%;
+    padding: 11px 6px;
+    margin: 4px 0 14px;
+    border: 1px solid #d2e2ff;
+    border-radius: 12px;
+    background: #eaf2ff;
+    color: #1765ff;
     cursor: pointer;
-    white-space: nowrap;
   }
-  nav button:first-child {
-    background: #1765ff;
-    color: white;
-  }
-  nav button:focus-visible {
+  .consumer-new-chat:focus-visible {
     outline: 2px solid #1765ff;
     outline-offset: 2px;
   }
-  .consumer-history {
-    position: absolute;
-    z-index: 310;
-    top: 76px;
-    left: 0;
-    height: calc(100dvh - 76px);
-    width: 300px;
-    background: #f6faff;
-    box-shadow: 10px 0 40px #1d467525;
-  }
-  .history-backdrop {
-    position: fixed;
-    inset: 76px 0 0;
-    background: #142c5325;
-    border: 0;
-    z-index: 300;
-  }
   #app-router-view {
-    height: 0;
+    grid-column: 2;
+    grid-row: 2;
+    height: 100%;
     min-height: 0;
+    min-width: 0;
   }
   :deep(.consumer-agent) {
     height: 100%;
@@ -672,30 +641,35 @@ provide('settingsModal', {
   :deep(.chat-header:not(.has-active-thread)) {
     display: none;
   }
-  :deep(.chat-main:has(.start-screen)) {
-    justify-content: flex-start;
-  }
   :deep(.chat-main:has(.start-screen) > .chat-box) {
     flex-grow: 0;
     padding: 0;
   }
+  :deep(.custom-chat-welcome) {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 22px 20px;
+  }
+  :deep(.custom-chat-welcome > *) {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  :deep(.bottom),
   :deep(.bottom.start-screen) {
     flex-shrink: 0;
-    position: relative;
     top: auto;
     left: auto;
     transform: none;
-    width: min(1100px, 94%);
+    width: 100%;
     max-width: 1100px;
     margin: 0 auto;
-    padding: 14px 0;
+    padding: 12px 20px 16px;
   }
-  :deep(.chat-main) {
-    overflow-y: auto;
-  }
-  :deep(.chat-greeting-input) {
-    margin-bottom: 18px;
-    padding: 0;
+  :deep(.bottom.start-screen) {
+    position: relative;
+    bottom: auto;
+    background: transparent;
   }
   :deep(.message-input-wrapper) {
     max-width: none;
@@ -704,6 +678,7 @@ provide('settingsModal', {
     border-radius: 22px;
   }
   @media (max-width: 760px) {
+    grid-template-rows: 66px minmax(0, 1fr);
     .consumer-topbar {
       height: 66px;
       padding: 0 12px;
@@ -715,22 +690,11 @@ provide('settingsModal', {
     .consumer-brand small {
       display: none;
     }
-    nav button {
-      padding: 9px 10px;
-      font-size: 12px;
-    }
     .consumer-logo {
       display: none;
     }
     .consumer-topbar > :last-child {
       max-width: 90px;
-    }
-    .consumer-history {
-      top: 66px;
-      height: calc(100dvh - 66px);
-    }
-    .history-backdrop {
-      top: 66px;
     }
   }
 }

@@ -152,6 +152,9 @@
               </div>
             </div>
           </div>
+          <div v-if="!conversations.length && $slots.welcome" class="custom-chat-welcome">
+            <slot name="welcome" :set-prompt="(text) => (userInput = text)"></slot>
+          </div>
           <div
             ref="messageInputDockRef"
             class="bottom"
@@ -165,10 +168,8 @@
               </div>
 
               <!-- 打招呼区域 - 在输入框上方 -->
-              <div v-if="!conversations.length" class="chat-greeting-input">
-                <slot name="welcome" :set-prompt="(text) => (userInput = text)">
-                  <h1>{{ randomGreeting }}</h1>
-                </slot>
+              <div v-if="!conversations.length && !$slots.welcome" class="chat-greeting-input">
+                <h1>{{ randomGreeting }}</h1>
               </div>
 
               <section
