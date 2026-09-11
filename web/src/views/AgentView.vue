@@ -9,8 +9,8 @@
           :initial-project-id="routeDraftProjectId"
           @thread-change="handleThreadChange"
         >
-          <template v-if="consumerChat" #welcome="{ setPrompt, skills }">
-            <ChatWelcome :skills="skills" @prompt="setPrompt" />
+          <template v-if="consumerChat" #welcome="{ setPrompt }">
+            <ChatWelcome @prompt="setPrompt" />
           </template>
           <template #input-actions-left="{ hasActiveThread, isCreatingThread }">
             <a-dropdown

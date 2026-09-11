@@ -153,11 +153,7 @@
             </div>
           </div>
           <div v-if="!conversations.length && $slots.welcome" class="custom-chat-welcome">
-            <slot
-              name="welcome"
-              :set-prompt="(text) => (userInput = text)"
-              :skills="mentionConfig.skills"
-            ></slot>
+            <slot name="welcome" :set-prompt="(text) => (userInput = text)"></slot>
           </div>
           <div
             ref="messageInputDockRef"
