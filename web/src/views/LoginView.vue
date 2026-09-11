@@ -20,7 +20,9 @@
         <div class="brand-container" @click="goHome" style="cursor: pointer">
           <img v-if="brandLogo" :src="brandLogo" alt="logo" class="brand-logo" />
           <h1 class="brand-text">
-            <span v-if="brandOrgName" class="brand-org">{{ brandOrgName }}</span>
+            <span v-if="brandOrgName && brandName !== brandOrgName" class="brand-org">{{
+              brandOrgName
+            }}</span>
             <span v-if="brandOrgName && brandName !== brandOrgName" class="brand-separator"></span>
             <span class="brand-main">{{ brandName }}</span>
           </h1>
@@ -31,12 +33,6 @@
     <!-- 主要内容区：居中卡片 -->
     <main class="login-main">
       <div class="login-card">
-        <!-- 左侧图片 -->
-        <div class="card-side is-image">
-          <img :src="loginBgImage" alt="登录背景" class="login-bg-image" />
-        </div>
-
-        <!-- 右侧表单 -->
         <div class="card-side is-form">
           <div class="form-wrapper">
             <header class="form-header">
@@ -303,9 +299,6 @@ const infoStore = useInfoStore()
 const agentStore = useAgentStore()
 
 // 品牌展示数据
-const loginBgImage = computed(() => {
-  return infoStore.organization?.login_bg || '/login-bg.jpg'
-})
 const brandLogo = computed(() => {
   return infoStore.organization?.logo || ''
 })
@@ -314,7 +307,7 @@ const brandOrgName = computed(() => {
 })
 const brandName = computed(() => {
   const orgName = brandOrgName.value
-  const brandNameRaw = infoStore.branding?.name?.trim() || 'Yuxi'
+  const brandNameRaw = infoStore.branding?.name?.trim() || '知识管理平台'
 
   if (orgName && brandNameRaw && orgName !== brandNameRaw) {
     return brandNameRaw
@@ -765,9 +758,9 @@ onUnmounted(() => {
 }
 
 .login-card {
-  width: 900px;
+  width: 440px;
   max-width: 95vw;
-  height: 560px;
+  min-height: 440px;
   background: var(--gray-0);
   border-radius: 16px;
   box-shadow: 0 0px 40px var(--shadow-1);
@@ -777,20 +770,6 @@ onUnmounted(() => {
 
 .card-side {
   position: relative;
-}
-
-/* Image Side */
-.card-side.is-image {
-  flex: 1.4;
-  background-color: var(--main-10);
-  overflow: hidden;
-
-  .login-bg-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-  }
 }
 
 /* Form Side */
@@ -1053,10 +1032,6 @@ onUnmounted(() => {
     max-height: none;
     width: 100%;
     margin-top: 20px;
-  }
-
-  .card-side.is-image {
-    display: none;
   }
 
   .card-side.is-form {

@@ -107,6 +107,7 @@
       <header class="site-header">
         <div class="logo">
           <img
+            v-if="infoStore.organization.logo"
             :src="infoStore.organization.logo"
             :alt="infoStore.organization.name"
             class="logo-img"
@@ -135,11 +136,8 @@
       <main class="hero-section">
         <span class="hero-vignette" aria-hidden="true"></span>
         <div class="hero-content">
-          <p class="hero-eyebrow reveal-up">
-            <span class="eyebrow-dot"></span>开源 · 知识库 × 智能体 Harness
-          </p>
           <h1 class="title reveal-up delay-1">{{ infoStore.branding.title }}</h1>
-          <div class="subtitle-wrap reveal-up delay-1">
+          <div v-if="currentSubtitle" class="subtitle-wrap reveal-up delay-1">
             <Transition name="subtitle-switch">
               <p v-if="currentSubtitle" class="subtitle" :key="currentSubtitle">
                 {{ currentSubtitle }}
