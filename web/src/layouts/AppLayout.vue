@@ -665,11 +665,11 @@ provide('settingsModal', {
     max-width: 1100px;
     margin: 0 auto;
     padding: 12px 20px 16px;
+    background: transparent;
   }
   :deep(.bottom.start-screen) {
     position: relative;
     bottom: auto;
-    background: transparent;
   }
   :deep(.message-input-wrapper) {
     max-width: none;
