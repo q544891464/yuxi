@@ -13,7 +13,7 @@
     <div class="welcome-role">
       <div class="role-symbol"><ShieldCheck :size="30" /></div>
       <div class="role-description">
-        <h2>税务审理辅助专员</h2>
+        <h2>辅助审理专员</h2>
         <p>协助政策检索、风险核查、案卷整理与流程问答</p>
       </div>
       <dl class="resource-stats" aria-label="当前可访问资源" :aria-busy="loading">
