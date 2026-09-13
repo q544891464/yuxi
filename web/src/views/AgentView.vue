@@ -430,7 +430,7 @@ useOutsidePointerdown(agentDropdownOpen, [agentDropdownTriggerRef, agentDropdown
   top: -96px;
   width: 100px;
   height: 110px;
-  background: url('/cydx/assistant-cutout.png') center bottom / contain no-repeat;
+  background: url('/cydx/assistant-front.png') center bottom / contain no-repeat;
   pointer-events: none;
 }
 </style>

@@ -24,8 +24,8 @@ Owner：web/src/components/ChatWelcome.vue
 
 - 隔离 Linux 容器 `python -m pytest test/unit -m "not slow" -q`：2015 passed；新增普通用户私有知识库隔离案例后，相关 `test_file_listing_scaling.py` 11 passed。使用真实权限解析，私有库的文件数与问题不进入可见摘要。
 - 服务器以真实 HTTP 调用修改后的知识库可访问列表及真实 PostgreSQL：未登录 401，管理员 200；返回文件数与文件表排除文件夹后的 count 一致。生产无普通用户账号，未创建或修改生产用户；普通用户隔离由上述 manager 测试证明，不声明普通用户完整 HTTP 验证通过。
-- 前端 `pnpm run lint:check`、`pnpm run test:unit`（334 passed）、`pnpm run build` 通过。新案例验证去重四问、排除主智能体、文件夹不计数、零资源、失败、统计字段缺失。
+- 前端 `pnpm run lint:check`、`pnpm run test:unit`（335 passed）、`pnpm run build` 通过。新案例验证去重四问、排除主智能体、文件夹不计数、零资源、失败、统计字段缺失。
 - Playwright 检查 1600×1000、1366×768 页面，问题点击只填入草稿；低高度下问题不被底部人物遮挡。模拟知识库请求 503 显示未知并可重试，空响应显示零和空问题提示。页面知识库响应来自上述真实 HTTP，其余资源复用现有 API。
-- 大小人物共用真正带 Alpha 的 PNG，不使用素材页的白底裁剪；原素材保留。图像由内置 imagegen 根据用户素材提取，目标为保留左侧主形象与文字、去除背景及其他人物。
+- 主图使用主形象的透明 PNG；输入框上方使用独立的标准正面透明 PNG。主形象由内置 imagegen 提取；标准正面按用户确认使用本地抠图，保留原人物像素并去除背景、标签与其他人物。原素材保留。
 - Linux `python -m unittest scripts.test_verify_engineering_contracts`：62 tests 通过。
 - 复审补充空 HTTP 响应体边界：null/undefined 不阻塞加载状态，5 项首页 utility 测试通过。
