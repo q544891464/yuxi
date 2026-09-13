@@ -9,10 +9,12 @@ Yuxi 把文档处理拆成两步：先把原文件保存到知识库，再根据
 知识库上传接口当前支持：
 
 - 文本：`.txt`、`.md`、`.html`、`.htm`、`.json`、`.csv`；
-- Office：`.docx`、`.pptx`、`.xls`、`.xlsx`；
+- Office：`.doc`、`.docx`、`.pptx`、`.xls`、`.xlsx`；
 - PDF：`.pdf`；
 - 图片：`.jpg`、`.jpeg`、`.png`、`.bmp`、`.tiff`、`.tif`；
 - ZIP：压缩包内必须包含 UTF-8 编码的 `.md` 文件。
+
+旧版 `.doc` 使用运行环境中的 LibreOffice 转为临时 `.docx`，再提取正文和表格，不覆盖原文件。损坏或加密文件可能转换失败；扫描图片中的文字仍需要 OCR。
 
 图片文件必须使用 OCR 引擎。PDF 可以选择 OCR；选择 `disable` 时，系统会尝试直接读取 PDF 文本层，扫描版 PDF 通常得不到内容。
 

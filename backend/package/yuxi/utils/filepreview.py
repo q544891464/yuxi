@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import mimetypes
 import os
 import shutil
 import subprocess
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -87,7 +89,7 @@ OFFICE_PREVIEW_TIMEOUT_SECONDS = _office_preview_timeout_seconds()
 
 
 class OfficePreviewConversionError(RuntimeError):
-    """Office 文件转换为 PDF 失败。"""
+    """Office 文件格式转换失败。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,65 +134,85 @@ def preview_too_large() -> PreviewResult:
 def _office_converter_executable() -> str:
     executable = shutil.which("soffice") or shutil.which("libreoffice")
     if not executable:
-        raise OfficePreviewConversionError("Office PDF 预览依赖 LibreOffice，请先安装 soffice/libreoffice")
+        raise OfficePreviewConversionError("Office 文件转换依赖 LibreOffice，请先安装 soffice/libreoffice")
     return executable
 
 
-def _convert_office_to_pdf_sync(filename: str, content: bytes) -> bytes:
+def _convert_office_sync(filename: str, content: bytes, output_format: str) -> bytes:
+    """在独立临时目录与 LibreOffice 配置中转换现有两类 Office 用途。"""
     suffix = PurePosixPath(filename).suffix.lower()
-    if suffix not in _OFFICE_PDF_PREVIEW_EXTENSIONS:
-        raise OfficePreviewConversionError("当前文件类型不支持转换为 PDF 预览")
+    allowed = _OFFICE_PDF_PREVIEW_EXTENSIONS if output_format == "pdf" else {".doc"}
+    if output_format not in {"pdf", "docx"} or suffix not in allowed:
+        raise OfficePreviewConversionError("当前文件类型不支持此 Office 转换")
+    format_label = output_format.upper()
 
-    executable = _office_converter_executable()
-    with tempfile.TemporaryDirectory(prefix="yuxi-office-preview-") as temp_dir:
-        temp_path = Path(temp_dir)
-        input_path = temp_path / f"source{suffix}"
-        output_path = temp_path / "source.pdf"
-        profile_path = temp_path / "lo-profile"
-        profile_path.mkdir(parents=True, exist_ok=True)
-        input_path.write_bytes(content)
+    try:
+        executable = _office_converter_executable()
+        with tempfile.TemporaryDirectory(prefix="yuxi-office-preview-") as temp_dir:
+            temp_path = Path(temp_dir)
+            input_path = temp_path / f"source{suffix}"
+            output_path = temp_path / f"source.{output_format}"
+            profile_path = temp_path / "lo-profile"
+            profile_path.mkdir(parents=True, exist_ok=True)
+            input_path.write_bytes(content)
 
-        command = [
-            executable,
-            "--headless",
-            "--nologo",
-            "--nofirststartwizard",
-            "--nodefault",
-            "--nolockcheck",
-            f"-env:UserInstallation={profile_path.resolve().as_uri()}",
-            "--convert-to",
-            "pdf",
-            "--outdir",
-            str(temp_path),
-            str(input_path),
-        ]
-        try:
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                timeout=OFFICE_PREVIEW_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise OfficePreviewConversionError(
-                f"Office 文件转换 PDF 超时（{OFFICE_PREVIEW_TIMEOUT_SECONDS} 秒）"
-            ) from exc
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).decode("utf-8", errors="ignore").strip()
-            raise OfficePreviewConversionError(f"Office 文件转换 PDF 失败: {detail or 'LibreOffice 执行失败'}")
-        if not output_path.exists():
-            detail = (result.stderr or result.stdout).decode("utf-8", errors="ignore").strip()
-            raise OfficePreviewConversionError(f"Office 文件转换 PDF 失败: 未生成 PDF 文件。{detail}")
+            command = [
+                executable,
+                "--headless",
+                "--nologo",
+                "--nofirststartwizard",
+                "--nodefault",
+                "--nolockcheck",
+                f"-env:UserInstallation={profile_path.resolve().as_uri()}",
+                "--convert-to",
+                "pdf" if output_format == "pdf" else "docx:Office Open XML Text",
+                "--outdir",
+                str(temp_path),
+                str(input_path),
+            ]
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    timeout=OFFICE_PREVIEW_TIMEOUT_SECONDS,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise OfficePreviewConversionError(
+                    f"Office 文件转换 {format_label} 超时（{OFFICE_PREVIEW_TIMEOUT_SECONDS} 秒）"
+                ) from exc
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout).decode("utf-8", errors="ignore").strip()
+                raise OfficePreviewConversionError(
+                    f"Office 文件转换 {format_label} 失败: {detail or 'LibreOffice 执行失败'}"
+                )
+            if not output_path.exists():
+                detail = (result.stderr or result.stdout).decode("utf-8", errors="ignore").strip()
+                raise OfficePreviewConversionError(f"Office 文件转换 {format_label} 失败: 未生成目标文件。{detail}")
 
-        pdf_content = output_path.read_bytes()
-        if not pdf_content.startswith(b"%PDF-"):
-            raise OfficePreviewConversionError("Office 文件转换 PDF 失败: 输出文件不是有效 PDF")
-        return pdf_content
+            converted = output_path.read_bytes()
+            if output_format == "pdf" and not converted.startswith(b"%PDF-"):
+                raise OfficePreviewConversionError("Office 文件转换 PDF 失败: 输出文件不是有效 PDF")
+            if output_format == "docx":
+                try:
+                    with zipfile.ZipFile(io.BytesIO(converted)) as document:
+                        if "word/document.xml" not in document.namelist():
+                            raise zipfile.BadZipFile("缺少 Word 正文")
+                except zipfile.BadZipFile as exc:
+                    raise OfficePreviewConversionError("Office 文件转换 DOCX 失败: 输出文件不是有效 DOCX") from exc
+            return converted
+    except OSError as exc:
+        raise OfficePreviewConversionError(f"Office 文件转换 {format_label} 失败: 无法执行转换或读写临时文件") from exc
 
 
 async def convert_office_to_pdf(filename: str, content: bytes) -> bytes:
     """把受支持的 Office 文件字节转换为 PDF。"""
-    return await asyncio.to_thread(_convert_office_to_pdf_sync, filename, content)
+    return await asyncio.to_thread(_convert_office_sync, filename, content, "pdf")
+
+
+async def convert_doc_to_docx(filename: str, content: bytes) -> bytes:
+    """把旧版 Word 转为 DOCX，供既有正文和表格解析器读取。"""
+    return await asyncio.to_thread(_convert_office_sync, filename, content, "docx")
 
 
 def detect_preview_type(path: str, raw_content: bytes) -> tuple[str, bool, str | None]:

@@ -165,6 +165,17 @@ async def parse_resolved_document(source: str, params: dict | None = None) -> st
                 content = await f.read()
             result = content
 
+        elif file_ext == ".doc":
+            from yuxi.utils.filepreview import convert_doc_to_docx
+
+            async with aiofiles.open(file_path_obj, "rb") as f:
+                converted = await convert_doc_to_docx(file_path_obj.name, await f.read())
+            with tempfile.TemporaryDirectory(prefix="yuxi-doc-parser-") as directory:
+                docx_path = Path(directory) / "converted.docx"
+                async with aiofiles.open(docx_path, "wb") as f:
+                    await f.write(converted)
+                result = await parse_resolved_document(str(docx_path), params=params)
+
         elif file_ext == ".docx":
             try:
                 result = await asyncio.to_thread(_convert_with_docling, file_path_obj, params=params)

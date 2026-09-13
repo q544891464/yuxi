@@ -371,7 +371,7 @@ watch(
   }
 )
 
-const DEFAULT_SUPPORTED_TYPES = ['.txt', '.pdf', '.jpg', '.jpeg', '.md', '.docx']
+const DEFAULT_SUPPORTED_TYPES = ['.txt', '.pdf', '.jpg', '.jpeg', '.md', '.doc', '.docx']
 
 const normalizeExtensions = (extensions) => {
   if (!Array.isArray(extensions)) {

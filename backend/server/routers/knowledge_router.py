@@ -99,6 +99,7 @@ class PendingIndexDocumentsRequest(BaseModel):
 
 
 media_types = {
+    ".doc": "application/msword",
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".txt": "text/plain",
