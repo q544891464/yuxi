@@ -81,7 +81,7 @@ const getPdfjs = async () => {
 
   const [pdfjs, workerUrlModule] = await Promise.all([
     import('pdfjs-dist'),
-    import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+    import('pdfjs-dist/build/pdf.worker.min.mjs?worker&url')
   ])
 
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrlModule.default || workerUrlModule
