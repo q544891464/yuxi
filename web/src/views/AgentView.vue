@@ -12,6 +12,9 @@
           <template v-if="consumerChat" #welcome="{ setPrompt }">
             <ChatWelcome @prompt="setPrompt" />
           </template>
+          <template v-if="consumerChat" #input-decoration>
+            <div class="composer-mascot" aria-hidden="true"></div>
+          </template>
           <template #input-actions-left="{ hasActiveThread, isCreatingThread }">
             <a-dropdown
               v-if="selectedAgentId"
@@ -420,5 +423,14 @@ useOutsidePointerdown(agentDropdownOpen, [agentDropdownTriggerRef, agentDropdown
   .config-dropdown-trigger {
     max-width: calc(100vw - 112px);
   }
+}
+.composer-mascot {
+  position: absolute;
+  left: 24px;
+  top: -96px;
+  width: 100px;
+  height: 110px;
+  background: url('/cydx/assistant-cutout.png') center bottom / contain no-repeat;
+  pointer-events: none;
 }
 </style>

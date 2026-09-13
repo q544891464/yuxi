@@ -161,6 +161,7 @@
             :class="{ 'start-screen': !conversations.length }"
           >
             <div class="message-input-wrapper">
+              <slot v-if="!conversations.length" name="input-decoration"></slot>
               <!-- 加载状态：加载消息 -->
               <div v-if="isLoadingMessages" class="chat-loading">
                 <div class="loading-spinner"></div>

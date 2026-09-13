@@ -38,7 +38,7 @@ class FakeKnowledgeBaseRepository:
             additional_params={"chunk_preset_id": "general"},
             share_config=None,
             mindmap=None,
-            sample_questions=[],
+            sample_questions=["申报流程？"],
             created_by="user_1",
             created_at=None,
         )
@@ -168,6 +168,7 @@ async def test_get_database_info_omits_files_by_default():
 
     assert result.kb_id == "kb_1"
     assert result.files is None
+    assert result.sample_questions == ("申报流程？",)
     assert result.file_count == 2
     assert result.total_size == 1024
 
@@ -187,6 +188,7 @@ async def test_get_databases_does_not_initialize_knowledge_backend(monkeypatch):
     assert database.name == "知识库"
     assert database.row_count == 3
     assert database.file_count == 2
+    assert database.sample_questions == ("申报流程？",)
     assert database.additional_params["chunk_preset_id"] == "general"
     assert "stats" not in database.additional_params
     assert database.created_by == "user_1"
@@ -216,6 +218,7 @@ async def test_get_databases_skips_rows_with_invalid_metadata(monkeypatch):
                 ),
                 SimpleNamespace(
                     kb_id="kb_good",
+                    sample_questions=[],
                     name="可用库",
                     description="",
                     kb_type="milvus",
@@ -406,3 +409,26 @@ async def test_list_document_file_ids_by_statuses_delegates_to_repository():
             "limit": 500,
         }
     ]
+
+
+async def test_welcome_summary_excludes_private_questions_and_counts(monkeypatch):
+    """普通用户首页摘要不能包含未共享知识库的数量和测试问题。"""
+
+    class ScopedRepository(FakeKnowledgeBaseRepository):
+        async def get_all(self):
+            """提供可读与私有知识库的独立预期。"""
+            shared = await self.get_by_kb_id("kb_1")
+            shared.sample_questions = ["公开问题？"]
+            shared.additional_params = {"stats": {"file_count": 2, "folder_count": 1}}
+            shared.share_config = {"version": 2, "read_scope": {"access_level": "global"}, "manage_scope": None}
+            private = await self.get_by_kb_id("kb_1")
+            private.kb_id = "private_kb"
+            private.sample_questions = ["私有问题？"]
+            private.additional_params = {"stats": {"file_count": 99}}
+            private.share_config = {"version": 2, "read_scope": None, "manage_scope": None}
+            return [shared, private]
+
+    monkeypatch.setattr("yuxi.repositories.knowledge_base_repository.KnowledgeBaseRepository", ScopedRepository)
+    manager = KnowledgeBaseManager("/tmp/yuxi-test")
+    visible = await manager.get_databases_by_user({"uid": "reader", "role": "user", "department_id": None})
+    assert [(kb.kb_id, kb.file_count, kb.sample_questions) for kb in visible] == [("kb_1", 2, ("公开问题？",))]

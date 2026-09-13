@@ -674,8 +674,10 @@ provide('settingsModal', {
     position: relative;
     bottom: auto;
     background: transparent;
+    padding-top: 94px;
   }
   :deep(.message-input-wrapper) {
+    position: relative;
     max-width: 1060px;
   }
   :deep(.input-container) {

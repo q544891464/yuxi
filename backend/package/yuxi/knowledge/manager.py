@@ -296,6 +296,7 @@ class KnowledgeBaseManager:
             "share_config": self._normalize_share_config(row.share_config),
             "created_by": row.created_by,
             "created_at": row.created_at,
+            "sample_questions": tuple(row.sample_questions or []),
             **normalized_stats,
         }
 
@@ -758,7 +759,6 @@ class KnowledgeBaseManager:
         return KnowledgeBaseDetail(
             **self._database_read_fields(kb, stats=file_stats),
             mindmap=kb.mindmap,
-            sample_questions=tuple(kb.sample_questions or []),
             files=files,
             files_truncated=files_truncated,
             files_page_size=files_page_size,

@@ -296,6 +296,8 @@ async def get_accessible_databases(current_user: User = Depends(get_required_use
                 "created_by": db.created_by,
                 "kb_type": db.kb_type,
                 "supports_documents": knowledge_base.database_type_supports_documents(db.kb_type),
+                "file_count": db.file_count,
+                "sample_questions": list(db.sample_questions),
             }
             for db in databases
         ]
