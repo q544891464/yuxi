@@ -358,7 +358,6 @@ provide('settingsModal', {
         <span class="consumer-logo" aria-hidden="true"></span>
         <span><strong>智能辅助审理数字人</strong><small>税务审理智能助手</small></span>
       </RouterLink>
-      <UserInfoComponent :show-role="false" />
     </header>
     <div class="header" :class="{ 'consumer-history': consumerChat }">
       <div class="sidebar-brand" @click.stop>
@@ -698,9 +697,6 @@ provide('settingsModal', {
     }
     .consumer-logo {
       display: none;
-    }
-    .consumer-topbar > :last-child {
-      max-width: 90px;
     }
   }
 }
