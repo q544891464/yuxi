@@ -652,7 +652,7 @@ provide('settingsModal', {
     width: 100%;
     max-width: none;
     margin: 0 auto;
-    padding: 128px 20px 16px;
+    padding: 108px 20px 16px;
     background: var(--consumer-background);
     background-attachment: fixed;
   }
@@ -660,7 +660,7 @@ provide('settingsModal', {
     position: relative;
     bottom: auto;
     background: transparent;
-    padding-top: 128px;
+    padding-top: 94px;
   }
   :deep(.message-input-wrapper) {
     position: relative;
