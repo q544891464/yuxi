@@ -427,10 +427,11 @@ useOutsidePointerdown(agentDropdownOpen, [agentDropdownTriggerRef, agentDropdown
 .composer-mascot {
   position: absolute;
   left: 24px;
-  top: -96px;
-  width: 100px;
-  height: 110px;
-  background: url('/cydx/assistant-front.png') center bottom / contain no-repeat;
+  top: -116px;
+  width: 132px;
+  max-width: calc(100% - 24px);
+  height: 116px;
+  background: url('/cydx/assistant-cutout.png') center bottom / contain no-repeat;
   pointer-events: none;
 }
 </style>

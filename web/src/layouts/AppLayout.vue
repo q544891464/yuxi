@@ -652,7 +652,7 @@ provide('settingsModal', {
     width: 100%;
     max-width: none;
     margin: 0 auto;
-    padding: 12px 20px 16px;
+    padding: 128px 20px 16px;
     background: var(--consumer-background);
     background-attachment: fixed;
   }
@@ -660,7 +660,7 @@ provide('settingsModal', {
     position: relative;
     bottom: auto;
     background: transparent;
-    padding-top: 94px;
+    padding-top: 128px;
   }
   :deep(.message-input-wrapper) {
     position: relative;
@@ -668,6 +668,14 @@ provide('settingsModal', {
   }
   :deep(.input-container) {
     border-radius: 22px;
+  }
+  :deep(.yk-markdown-preview table),
+  :deep(.yk-markdown-preview thead),
+  :deep(.yk-markdown-preview tbody),
+  :deep(.yk-markdown-preview tr),
+  :deep(.yk-markdown-preview th),
+  :deep(.yk-markdown-preview td) {
+    background: transparent;
   }
   @media (max-width: 760px) {
     grid-template-rows: 66px minmax(0, 1fr);
