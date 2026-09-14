@@ -2648,8 +2648,12 @@ const maybeInsertThreadConfigNotice = () => {
 }
 
 // ==================== SCROLL & RESIZE HANDLING ====================
-const scrollController = new ScrollController('.chat-main')
 const chatMainRef = ref(null)
+// 用户页正文独立滚动，输入区与人物不再覆盖滚动内容。
+const scrollController = new ScrollController(() => {
+  const main = chatMainRef.value
+  return main?.closest('.consumer-agent') ? main.querySelector('.chat-box') : main
+})
 const messageInputDockRef = ref(null)
 let chatMainResizeObserver = null
 // 初始化延迟标志，避免首次挂载时 ResizeObserver 立即触发导致侧边栏意外关闭
@@ -2743,7 +2747,7 @@ onMounted(() => {
   }
 
   nextTick(() => {
-    const chatMainContainer = document.querySelector('.chat-main')
+    const chatMainContainer = scrollController.getContainer()
     if (chatMainContainer) {
       chatMainContainer.addEventListener('scroll', scrollController.handleScroll, { passive: true })
     }

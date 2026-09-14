@@ -633,6 +633,14 @@ provide('settingsModal', {
     flex-grow: 0;
     padding: 0;
   }
+  :deep(.chat-main) {
+    overflow: hidden;
+  }
+  :deep(.chat-main > .chat-box) {
+    min-height: 0;
+    overflow-y: auto;
+    flex: 1 1 0;
+  }
   :deep(.custom-chat-welcome) {
     flex: 1 1 0;
     min-height: 0;
@@ -652,6 +660,8 @@ provide('settingsModal', {
     width: 100%;
     max-width: none;
     margin: 0 auto;
+    position: relative;
+    bottom: auto;
     padding: 108px 20px 16px;
     background: var(--consumer-background);
     background-attachment: fixed;

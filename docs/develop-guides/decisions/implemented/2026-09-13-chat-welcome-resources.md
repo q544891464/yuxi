@@ -14,6 +14,8 @@ Owner：web/src/components/ChatWelcome.vue
 
 ## 替代方案
 
+2026-09-14：用户要求已有对话也在输入框上沿显示人物。由 `AppLayout.vue` 为 `/chat` 的 `.chat-box` 分配独立滚动空间，输入区留在文档流中，人物在输入区预留高度内定位。`AgentChatComponent.vue` 的 ScrollController 与滚动监听使用同一正文容器；`/agent` 保持原滚动容器。仅增加 sticky 输入区上方留白会覆盖滚动正文，移动到输入框侧边不满足用户要求，因此选择正文与输入区分开占位。代价是正文可视高度扣除人物预留区；首页人物样式保持不变。
+
 把截图中的问题和数字写死无法随知识库内容及用户权限更新。新建聚合接口会重复已有访问权限及资源列表接口，因此仅补齐知识库可访问列表的两个摘要字段。
 
 ## 后果
@@ -21,6 +23,8 @@ Owner：web/src/components/ChatWelcome.vue
 统计为列表读取时的快照，重新进入首页刷新。文件夹不计入文件数；外部只读知识库不以检索条目冒充文件数。新增摘要不开放任何管理权限，也不返回知识库密钥或原文。
 
 ## 验证
+
+- 2026-09-14 布局修复：lint、Vite production build、scroll_controller/layout_startup/chatWelcome 共 8 项测试通过。Playwright 在本地构建页面注入模拟长表格，检查 1600/1100 像素宽度的顶部、中部、底部滚动，正文容器下沿不超过人物上沿，人物位于输入区内；截图已提供用户确认。此证据仅覆盖布局，未连接真实会话后端。工程契约检查通过；Windows 契约单测因 symlink 权限与路径分隔符有两项失败，本机无 Docker，后端单测未运行。
 
 - 隔离 Linux 容器 `python -m pytest test/unit -m "not slow" -q`：2015 passed；新增普通用户私有知识库隔离案例后，相关 `test_file_listing_scaling.py` 11 passed。使用真实权限解析，私有库的文件数与问题不进入可见摘要。
 - 服务器以真实 HTTP 调用修改后的知识库可访问列表及真实 PostgreSQL：未登录 401，管理员 200；返回文件数与文件表排除文件夹后的 count 一致。生产无普通用户账号，未创建或修改生产用户；普通用户隔离由上述 manager 测试证明，不声明普通用户完整 HTTP 验证通过。
