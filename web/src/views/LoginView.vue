@@ -383,7 +383,9 @@ const exchangeShareLogin = async () => {
     const session = await authApi.exchangeShareLoginKey(key)
     userStore.applySession(session)
     message.success('已进入分享账户')
-    await router.replace('/chat')
+    // 分享登录可能替换现有管理员会话。整页跳转可清空前一用户的 Pinia 内存状态，
+    // 避免旧会话的对话、项目或智能体数据继续参与新账户的页面初始化。
+    window.location.replace('/chat')
     return true
   } catch (error) {
     errorMessage.value = error.message || '分享登录链接无效或已撤销'
