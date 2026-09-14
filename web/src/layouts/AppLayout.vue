@@ -590,10 +590,9 @@ provide('settingsModal', {
   }
   .consumer-logo {
     width: 48px;
-    height: 56px;
+    height: 48px;
     flex-shrink: 0;
-    background: url('/cydx/logo-sheet.png') no-repeat -15px -96px / 355px 266.25px;
-    mix-blend-mode: multiply;
+    background: url('/cydx/ai-logo.png') center / contain no-repeat;
   }
   .consumer-history {
     grid-column: 1;
