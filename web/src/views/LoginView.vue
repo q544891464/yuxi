@@ -800,6 +800,14 @@ onUnmounted(() => {
 }
 
 .login-card {
+  --login-action-color: var(--consumer-brand-color);
+  --login-action-text-color: var(--gray-0);
+  --login-action-hover-color: color-mix(in srgb, var(--login-action-color) 86%, white);
+  --login-action-active-color: color-mix(in srgb, var(--login-action-color) 88%, black);
+  --ant-color-primary: var(--login-action-color);
+  --ant-color-primary-hover: var(--login-action-hover-color);
+  --ant-color-primary-active: var(--login-action-active-color);
+  --ant-color-primary-bg: color-mix(in srgb, var(--login-action-color) 10%, transparent);
   width: 480px;
   max-width: 95vw;
   min-height: 440px;
@@ -858,6 +866,11 @@ onUnmounted(() => {
 }
 
 .login-form {
+  :deep(.ant-form-item-label > label) {
+    color: var(--consumer-brand-color);
+    font-weight: 500;
+  }
+
   :deep(.ant-input-affix-wrapper) {
     padding: 10px 12px;
     border-radius: 8px;
@@ -866,6 +879,24 @@ onUnmounted(() => {
     height: 44px;
     font-size: 16px;
     border-radius: 8px;
+  }
+  :deep(.ant-btn-primary:not(:disabled)) {
+    color: var(--login-action-text-color);
+    background: var(--login-action-color);
+    border-color: var(--login-action-color);
+
+    &:hover,
+    &:focus {
+      color: var(--login-action-text-color);
+      background: var(--login-action-hover-color);
+      border-color: var(--login-action-hover-color);
+    }
+
+    &:active {
+      color: var(--login-action-text-color);
+      background: var(--login-action-active-color);
+      border-color: var(--login-action-active-color);
+    }
   }
   :deep(.ant-input-prefix) {
     margin-right: 8px;
@@ -945,7 +976,7 @@ onUnmounted(() => {
 
 .agreement-row {
   font-size: 13px;
-  color: var(--gray-600);
+  color: var(--consumer-brand-color);
   line-height: 1.6;
 
   :deep(.ant-checkbox-wrapper) {
@@ -959,7 +990,8 @@ onUnmounted(() => {
 }
 
 .agreement-link {
-  color: var(--main-color);
+  color: var(--consumer-brand-color);
+  font-weight: 500;
 
   &:hover {
     text-decoration: underline;
@@ -1065,5 +1097,15 @@ onUnmounted(() => {
   .card-side.is-form {
     padding: 40px 20px;
   }
+}
+</style>
+
+<style lang="less">
+/* 深色模式的变量必须落在卡片本身，才能覆盖卡片的默认品牌变量。 */
+.dark .login-card {
+  --login-action-color: var(--main-200);
+  --login-action-text-color: var(--gray-1000);
+  --login-action-hover-color: color-mix(in srgb, var(--login-action-color) 88%, black);
+  --login-action-active-color: color-mix(in srgb, var(--login-action-color) 76%, black);
 }
 </style>
