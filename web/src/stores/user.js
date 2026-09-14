@@ -230,6 +230,7 @@ export const useUserStore = defineStore('user', () => {
 
     // 方法
     login,
+    applySession,
     logout,
     initialize,
     checkFirstRun,

@@ -23,7 +23,7 @@ from yuxi.utils import logger
 from yuxi.utils.singleton import SingletonMeta
 
 AGENT_RUN_TERMINAL_STATUS_SQL = ", ".join(f"'{status}'" for status in AGENT_RUN_TERMINAL_STATUSES)
-BUSINESS_SCHEMA_VERSION = 7
+BUSINESS_SCHEMA_VERSION = 8
 KNOWLEDGE_SCHEMA_VERSION = 2
 SCHEMA_VERSION_TABLE = "yuxi_schema_migrations"
 AGENT_RUN_LEASE_SCHEMA_STATEMENTS = (
@@ -920,6 +920,22 @@ class PostgresManager(metaclass=SingletonMeta):
         """确保业务 schema 包含后续新增字段（运行时 schema 演进）。"""
         self._check_initialized()
         stmts = [
+            """
+            CREATE TABLE IF NOT EXISTS share_login_links (
+                id SERIAL PRIMARY KEY,
+                key_hash VARCHAR(64) NOT NULL UNIQUE,
+                name VARCHAR(100) NOT NULL,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+                revoked_at TIMESTAMP WITHOUT TIME ZONE,
+                last_used_at TIMESTAMP WITHOUT TIME ZONE
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_share_login_links_key_hash ON share_login_links(key_hash)",
+            "CREATE INDEX IF NOT EXISTS ix_share_login_links_user_id ON share_login_links(user_id)",
+            "CREATE INDEX IF NOT EXISTS ix_share_login_links_created_by ON share_login_links(created_by)",
+            "CREATE INDEX IF NOT EXISTS ix_share_login_links_revoked_at ON share_login_links(revoked_at)",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS tool_dependencies JSONB DEFAULT '[]'::jsonb",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS mcp_dependencies JSONB DEFAULT '[]'::jsonb",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS skill_dependencies JSONB DEFAULT '[]'::jsonb",

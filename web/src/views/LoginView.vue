@@ -366,6 +366,33 @@ const goHome = () => {
   router.push('/')
 }
 
+const readShareLoginKey = () => {
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
+  return new URLSearchParams(hash).get('key') || ''
+}
+
+const exchangeShareLogin = async () => {
+  const key = readShareLoginKey()
+  if (!key) return false
+
+  // 在请求前移除地址栏片段，避免密钥被截图、复制或留在浏览器历史中。
+  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const session = await authApi.exchangeShareLoginKey(key)
+    userStore.applySession(session)
+    message.success('已进入分享账户')
+    await router.replace('/chat')
+    return true
+  } catch (error) {
+    errorMessage.value = error.message || '分享登录链接无效或已撤销'
+    return false
+  } finally {
+    loading.value = false
+  }
+}
+
 // 清理倒计时器
 const clearLockCountdown = () => {
   if (lockCountdown.value) {
@@ -616,6 +643,8 @@ const checkServerHealth = async () => {
 
 // 组件挂载时
 onMounted(async () => {
+  if (await exchangeShareLogin()) return
+
   // 如果已登录，按 redirect 参数跳转（不固定跳首页）
   if (userStore.isLoggedIn) {
     router.push(sanitizeRedirect(route.query.redirect))

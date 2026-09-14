@@ -130,6 +130,22 @@ async function approveCLIAuthSession(userCode) {
   return apiPost(`/api/auth/cli/sessions/${encoded}/approve`, {})
 }
 
+async function createShareLoginLink(userId, name = '') {
+  return apiPost(`/api/auth/users/${encodeURIComponent(userId)}/share-login-links`, { name })
+}
+
+async function getShareLoginLinks(userId) {
+  return apiAdminGet(`/api/auth/users/${encodeURIComponent(userId)}/share-login-links`)
+}
+
+async function revokeShareLoginLink(userId, linkId) {
+  return apiDelete(`/api/auth/users/${encodeURIComponent(userId)}/share-login-links/${encodeURIComponent(linkId)}`)
+}
+
+async function exchangeShareLoginKey(key) {
+  return apiPost('/api/auth/share-login/exchange', { key }, {}, false)
+}
+
 export const authApi = {
   login,
   initialize,
@@ -150,5 +166,9 @@ export const authApi = {
   getUserAccessOptions,
   exchangeOIDCCode,
   getCLIAuthSession,
-  approveCLIAuthSession
+  approveCLIAuthSession,
+  createShareLoginLink,
+  getShareLoginLinks,
+  revokeShareLoginLink,
+  exchangeShareLoginKey
 }

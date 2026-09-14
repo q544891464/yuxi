@@ -87,6 +87,10 @@ test('已登录访问登录页默认进入智能体，同时保留合法的深�
   assert.equal(router.currentRoute.value.path, '/agent')
   await router.push('/login?redirect=/workspace')
   assert.equal(router.currentRoute.value.path, '/workspace')
+
+  await router.push('/login#key=yxshare_test')
+  assert.equal(router.currentRoute.value.path, '/login')
+  assert.equal(router.currentRoute.value.hash, '#key=yxshare_test')
 })
 
 // 通过真实路由执行直接访问与登录回跳，防止普通用户绕过入口分流。

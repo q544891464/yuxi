@@ -120,6 +120,17 @@
                         <SquarePen :size="14" />
                       </a-button>
                     </a-tooltip>
+                    <a-tooltip :title="record.role !== 'user' ? '只能为普通用户创建分享登录链接' : '管理分享登录链接'">
+                      <a-button
+                        type="text"
+                        size="small"
+                        :disabled="record.role !== 'user'"
+                        class="action-btn lucide-icon-btn"
+                        @click="openShareLoginLinks(record)"
+                      >
+                        <Link :size="14" />
+                      </a-button>
+                    </a-tooltip>
                     <a-tooltip
                       :title="
                         isUserDeleteDisabled(record) ? '不能删除当前用户或超级管理员' : '删除用户'
@@ -249,6 +260,35 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <a-modal
+      v-model:open="shareLogin.visible"
+      :title="`${shareLogin.user?.username || ''} 的分享登录链接`"
+      :footer="null"
+      width="560px"
+      @cancel="shareLogin.visible = false"
+    >
+      <a-alert
+        type="warning"
+        show-icon
+        message="持有链接的访问者将以该用户身份进入系统。撤销后不能再通过该链接新建会话。"
+        class="share-login-tip"
+      />
+      <a-button type="primary" :loading="shareLogin.loading" @click="createShareLoginLink">
+        生成长期分享链接
+      </a-button>
+      <a-list :data-source="shareLogin.links" :loading="shareLogin.loading" class="share-login-list">
+        <template #renderItem="{ item }">
+          <a-list-item>
+            <a-list-item-meta :title="item.name" :description="`创建于 ${formatTime(item.created_at)}；最近使用：${formatTime(item.last_used_at)}`" />
+            <template #actions>
+              <span v-if="item.revoked_at" class="revoked-label">已撤销</span>
+              <a-button v-else type="link" danger @click="revokeShareLoginLink(item)">撤销</a-button>
+            </template>
+          </a-list-item>
+        </template>
+      </a-list>
+    </a-modal>
   </div>
 </template>
 
@@ -257,7 +297,7 @@ import { reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { useUserStore } from '@/stores/user'
 import { authApi, departmentApi } from '@/apis'
-import { Plus, SquarePen, Trash2, User, UserLock, UserStar, RefreshCw, Search } from '@lucide/vue'
+import { Link, Plus, SquarePen, Trash2, User, UserLock, UserStar, RefreshCw, Search } from '@lucide/vue'
 import { formatDateTime } from '@/utils/time'
 import { isPasswordLongEnough, MIN_PASSWORD_LENGTH } from '@/utils/passwordValidation'
 import { generatePixelAvatar } from '@/utils/pixelAvatar'
@@ -316,6 +356,13 @@ const userManagement = reactive({
 // 部门列表（仅超级管理员使用）
 const departmentManagement = reactive({
   departments: []
+})
+
+const shareLogin = reactive({
+  visible: false,
+  loading: false,
+  user: null,
+  links: []
 })
 
 const hasActiveFilters = computed(
@@ -498,6 +545,65 @@ const handleRefresh = async () => {
   } finally {
     userManagement.refreshing = false
   }
+}
+
+const loadShareLoginLinks = async () => {
+  if (!shareLogin.user) return
+  shareLogin.loading = true
+  try {
+    shareLogin.links = await authApi.getShareLoginLinks(shareLogin.user.id)
+  } catch (error) {
+    message.error(error.message || '读取分享登录链接失败')
+  } finally {
+    shareLogin.loading = false
+  }
+}
+
+const openShareLoginLinks = async (user) => {
+  shareLogin.user = user
+  shareLogin.visible = true
+  await loadShareLoginLinks()
+}
+
+const createShareLoginLink = async () => {
+  if (!shareLogin.user) return
+  shareLogin.loading = true
+  try {
+    const created = await authApi.createShareLoginLink(shareLogin.user.id)
+    const url = `${window.location.origin}${created.login_path}`
+    try {
+      await navigator.clipboard?.writeText(url)
+      message.success('分享链接已复制；原始密钥只会显示这一次')
+    } catch {
+      message.warning('无法自动复制，请从弹窗复制；原始密钥只会显示这一次')
+    }
+    Modal.info({ title: '长期分享登录链接', content: url, okText: '关闭' })
+    await loadShareLoginLinks()
+  } catch (error) {
+    message.error(error.message || '生成分享登录链接失败')
+  } finally {
+    shareLogin.loading = false
+  }
+}
+
+const revokeShareLoginLink = (link) => {
+  Modal.confirm({
+    title: '撤销分享登录链接',
+    content: '撤销后该链接将不能再用于新登录。',
+    okText: '撤销',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      try {
+        shareLogin.loading = true
+        await authApi.revokeShareLoginLink(shareLogin.user.id, link.id)
+        message.success('分享登录链接已撤销')
+        await loadShareLoginLinks()
+      } finally {
+        shareLogin.loading = false
+      }
+    }
+  })
 }
 
 // 打开添加用户模态框
@@ -941,6 +1047,18 @@ onUnmounted(() => {
       justify-content: flex-end;
       margin-top: 16px;
     }
+  }
+
+  .share-login-tip {
+    margin-bottom: 16px;
+  }
+
+  .share-login-list {
+    margin-top: 16px;
+  }
+
+  .revoked-label {
+    color: var(--gray-500);
   }
 }
 

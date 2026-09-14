@@ -23,6 +23,13 @@ from yuxi.services.auth_service import (
     exchange_cli_auth_token,
     get_cli_auth_session_for_user,
 )
+from yuxi.services.share_login_service import (
+    ShareLoginError,
+    create_share_login_link,
+    exchange_share_login_key,
+    list_share_login_links,
+    revoke_share_login_link,
+)
 from yuxi.services.login_rate_limit_service import (
     check_login_rate_limit,
     clear_login_failures,
@@ -199,6 +206,29 @@ class CLIAuthTokenResponse(BaseModel):
     user: dict
 
 
+class ShareLoginLinkCreate(BaseModel):
+    name: str | None = Field(default=None, max_length=100)
+
+
+class ShareLoginExchangeRequest(BaseModel):
+    key: str = Field(min_length=16, max_length=512)
+
+
+class ShareLoginLinkResponse(BaseModel):
+    id: int
+    name: str
+    user_id: int
+    created_by: int
+    created_at: str
+    revoked_at: str | None = None
+    last_used_at: str | None = None
+
+
+class ShareLoginLinkCreateResponse(ShareLoginLinkResponse):
+    key: str
+    login_path: str
+
+
 # =============================================================================
 # === 工具函数 ===
 # =============================================================================
@@ -209,6 +239,10 @@ def _raise_cli_auth_error(exc: CLIAuthError) -> None:
         status_code=exc.status_code,
         detail={"error": exc.code, "message": exc.message},
     ) from exc
+
+
+def _raise_share_login_error(exc: ShareLoginError) -> None:
+    raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
 
 # 路由：登录获取令牌
@@ -378,6 +412,67 @@ async def exchange_cli_session_token(data: CLIAuthTokenRequest, db: AsyncSession
         return await exchange_cli_auth_token(db, data.device_code)
     except CLIAuthError as exc:
         _raise_cli_auth_error(exc)
+
+
+# =============================================================================
+# === 分享登录链接分组 ===
+# =============================================================================
+
+
+@auth.post("/share-login/exchange", response_model=Token)
+async def exchange_share_login(data: ShareLoginExchangeRequest, db: AsyncSession = Depends(get_db)):
+    """把 URL 片段中的分享密钥换成平台常规浏览器会话。"""
+
+    try:
+        return await exchange_share_login_key(db, data.key)
+    except ShareLoginError as exc:
+        _raise_share_login_error(exc)
+
+
+@auth.get("/users/{user_id}/share-login-links", response_model=list[ShareLoginLinkResponse])
+async def read_share_login_links(
+    user_id: int,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """列出指定用户的可撤销分享链接。"""
+
+    try:
+        links = await list_share_login_links(db, actor=current_user, target_user_id=user_id)
+    except ShareLoginError as exc:
+        _raise_share_login_error(exc)
+    return [link.to_dict() for link in links]
+
+
+@auth.post("/users/{user_id}/share-login-links", response_model=ShareLoginLinkCreateResponse)
+async def create_user_share_login_link(
+    user_id: int,
+    data: ShareLoginLinkCreate,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """为指定普通用户生成一次性可见的长期分享密钥。"""
+
+    try:
+        link, key = await create_share_login_link(db, actor=current_user, target_user_id=user_id, name=data.name)
+    except ShareLoginError as exc:
+        _raise_share_login_error(exc)
+    return {**link.to_dict(), "key": key, "login_path": f"/login#key={key}"}
+
+
+@auth.delete("/users/{user_id}/share-login-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_user_share_login_link(
+    user_id: int,
+    link_id: int,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """撤销指定用户的分享链接。"""
+
+    try:
+        await revoke_share_login_link(db, actor=current_user, target_user_id=user_id, link_id=link_id)
+    except ShareLoginError as exc:
+        _raise_share_login_error(exc)
 
 
 # 路由：校验是否需要初始化管理员

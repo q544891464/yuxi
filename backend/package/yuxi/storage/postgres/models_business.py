@@ -1093,6 +1093,34 @@ class APIKey(Base):
         return True
 
 
+class ShareLoginLink(Base):
+    """仅保存密钥哈希的长期分享登录链接。"""
+
+    __tablename__ = "share_login_links"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key_hash = Column(String(64), nullable=False, unique=True, index=True)
+    name = Column(String(100), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
+    revoked_at = Column(DateTime, nullable=True, index=True)
+    last_used_at = Column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict[str, Any]:
+        """返回不包含原始密钥的管理视图。"""
+
+        return {
+            "id": self.id,
+            "name": self.name,
+            "user_id": self.user_id,
+            "created_by": self.created_by,
+            "created_at": format_utc_datetime(self.created_at),
+            "revoked_at": format_utc_datetime(self.revoked_at),
+            "last_used_at": format_utc_datetime(self.last_used_at),
+        }
+
+
 class CLIAuthSession(Base):
     """CLI 浏览器授权会话。"""
 

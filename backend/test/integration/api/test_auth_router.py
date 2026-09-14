@@ -148,6 +148,61 @@ async def test_login_with_invalid_credentials(test_client):
     assert "detail" in response.json()
 
 
+async def test_share_login_link_exchanges_for_target_user_and_can_be_revoked(test_client, admin_headers):
+    """分享链接只换取目标用户的会话，撤销后不能再次使用。"""
+
+    target = await _create_user(test_client, admin_headers, "sharelink")
+    try:
+        created = await test_client.post(
+            f"/api/auth/users/{target['id']}/share-login-links",
+            json={"name": "pytest 分享链接"},
+            headers=admin_headers,
+        )
+        assert created.status_code == 200, created.text
+        payload = created.json()
+        assert payload["key"].startswith("yxshare_")
+        assert payload["login_path"] == f"/login#key={payload['key']}"
+
+        listed = await test_client.get(
+            f"/api/auth/users/{target['id']}/share-login-links", headers=admin_headers
+        )
+        assert listed.status_code == 200, listed.text
+        assert listed.json()[0]["id"] == payload["id"]
+        assert "key" not in listed.json()[0]
+
+        exchanged = await test_client.post("/api/auth/share-login/exchange", json={"key": payload["key"]})
+        assert exchanged.status_code == 200, exchanged.text
+        assert exchanged.json()["uid"] == target["uid"]
+
+        revoked = await test_client.delete(
+            f"/api/auth/users/{target['id']}/share-login-links/{payload['id']}", headers=admin_headers
+        )
+        assert revoked.status_code == 204, revoked.text
+
+        rejected = await test_client.post("/api/auth/share-login/exchange", json={"key": payload["key"]})
+        assert rejected.status_code == 401, rejected.text
+    finally:
+        await _cleanup_user(test_client, admin_headers, target["id"])
+
+
+async def test_share_login_exchange_rejects_unknown_key(test_client):
+    response = await test_client.post("/api/auth/share-login/exchange", json={"key": "yxshare_unknown_key_value"})
+    assert response.status_code == 401, response.text
+
+
+async def test_share_login_link_rejects_superadmin_target(test_client, admin_headers):
+    profile = await test_client.get("/api/auth/me", headers=admin_headers)
+    assert profile.status_code == 200, profile.text
+    if profile.json()["role"] != "superadmin":
+        pytest.skip("requires TEST_USERNAME to be a superadmin")
+    response = await test_client.post(
+        f"/api/auth/users/{profile.json()['id']}/share-login-links",
+        json={},
+        headers=admin_headers,
+    )
+    assert response.status_code == 403, response.text
+
+
 async def test_user_is_locked_after_repeated_failed_logins(test_client, standard_user):
     uid = standard_user["user"]["uid"]
 
@@ -388,6 +443,19 @@ async def test_department_admin_is_limited_to_own_department_users(test_client, 
 
         cross_read = await test_client.get(f"/api/auth/users/{user_b['id']}", headers=dept_a["admin_headers"])
         assert cross_read.status_code == 403, cross_read.text
+
+        cross_share_create = await test_client.post(
+            f"/api/auth/users/{user_b['id']}/share-login-links",
+            json={},
+            headers=dept_a["admin_headers"],
+        )
+        assert cross_share_create.status_code == 403, cross_share_create.text
+
+        cross_share_list = await test_client.get(
+            f"/api/auth/users/{user_b['id']}/share-login-links",
+            headers=dept_a["admin_headers"],
+        )
+        assert cross_share_list.status_code == 403, cross_share_list.text
 
         cross_update = await test_client.put(
             f"/api/auth/users/{user_b['id']}",

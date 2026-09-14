@@ -203,7 +203,8 @@ router.beforeEach(async (to) => {
   if (requiresSuperAdmin && !isSuperAdmin) return isAdmin ? '/agent' : '/chat'
 
   // 如果用户已登录但访问登录页，按 redirect 参数跳转
-  if (to.path === '/login' && isLoggedIn) {
+  const shareLoginHash = typeof to.hash === 'string' && new URLSearchParams(to.hash.slice(1)).has('key')
+  if (to.path === '/login' && isLoggedIn && !shareLoginHash) {
     return sanitizeRedirect(to.query.redirect)
   }
 
