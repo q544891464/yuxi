@@ -630,19 +630,20 @@ provide('settingsModal', {
     display: none;
   }
   :deep(.chat-main:has(.start-screen) > .chat-box) {
-    flex-grow: 0;
-    padding: 0;
+    display: none;
   }
   :deep(.chat-main) {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
     overflow: hidden;
   }
   :deep(.chat-main > .chat-box) {
+    grid-row: 1;
     min-height: 0;
     overflow-y: auto;
-    flex: 1 1 0;
   }
   :deep(.custom-chat-welcome) {
-    flex: 1 1 0;
+    grid-row: 1;
     min-height: 0;
     overflow-y: auto;
     padding: 22px 20px;
@@ -653,7 +654,7 @@ provide('settingsModal', {
   }
   :deep(.bottom),
   :deep(.bottom.start-screen) {
-    flex-shrink: 0;
+    grid-row: 2;
     top: auto;
     left: auto;
     transform: none;
@@ -662,7 +663,7 @@ provide('settingsModal', {
     margin: 0 auto;
     position: relative;
     bottom: auto;
-    padding: 108px 20px 16px;
+    padding: 165px 20px 16px;
     background: var(--consumer-background);
     background-attachment: fixed;
   }
@@ -670,7 +671,6 @@ provide('settingsModal', {
     position: relative;
     bottom: auto;
     background: transparent;
-    padding-top: 94px;
   }
   :deep(.message-input-wrapper) {
     position: relative;

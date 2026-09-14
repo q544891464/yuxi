@@ -13,7 +13,9 @@
             <ChatWelcome @prompt="setPrompt" />
           </template>
           <template v-if="consumerChat" #input-decoration="{ isStartScreen }">
-            <div class="composer-mascot" :class="{ 'is-start-screen': isStartScreen }" aria-hidden="true"></div>
+            <div class="composer-mascot" aria-hidden="true">
+              <img :src="isStartScreen ? '/cydx/assistant-front.png' : '/cydx/assistant-cutout.png'" alt="" draggable="false" />
+            </div>
           </template>
           <template #input-actions-left="{ hasActiveThread, isCreatingThread }">
             <a-dropdown
@@ -426,19 +428,18 @@ useOutsidePointerdown(agentDropdownOpen, [agentDropdownTriggerRef, agentDropdown
 }
 .composer-mascot {
   position: absolute;
-  left: 16px;
-  top: -96px;
-  width: 144px;
-  max-width: calc(100% - 24px);
-  height: 96px;
-  background: url('/cydx/assistant-cutout.png') center top / 144px auto no-repeat;
+  left: max(36px, calc((100% - 1060px) / 2 + 16px));
+  top: 8px;
+  width: 165px;
+  height: 165px;
   pointer-events: none;
-  &.is-start-screen {
-    left: 24px;
-    top: -96px;
-    width: 100px;
-    height: 110px;
-    background: url('/cydx/assistant-front.png') center bottom / contain no-repeat;
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: left bottom;
+    pointer-events: none;
   }
 }
 </style>

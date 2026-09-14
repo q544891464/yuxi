@@ -157,11 +157,11 @@
           </div>
           <div
             ref="messageInputDockRef"
-            class="bottom"
+            class="bottom composer-zone"
             :class="{ 'start-screen': !conversations.length }"
           >
+            <slot name="input-decoration" :is-start-screen="!conversations.length"></slot>
             <div class="message-input-wrapper">
-              <slot name="input-decoration" :is-start-screen="!conversations.length"></slot>
               <!-- 加载状态：加载消息 -->
               <div v-if="isLoadingMessages" class="chat-loading">
                 <div class="loading-spinner"></div>
