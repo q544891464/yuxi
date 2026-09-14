@@ -1,0 +1,4 @@
+services:
+  sandbox-provisioner:
+    environment:
+      SANDBOX_IMAGE: yuxi-sandbox:documents-20260914
