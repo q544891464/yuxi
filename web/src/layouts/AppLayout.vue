@@ -555,9 +555,7 @@ provide('settingsModal', {
   &.sidebar-collapsed {
     grid-template-columns: 56px minmax(0, 1fr);
   }
-  --consumer-background:
-    radial-gradient(ellipse at 0 90%, #d6e9ff 0, transparent 45%),
-    linear-gradient(135deg, #f7fbff, #edf6ff);
+  --consumer-background: var(--consumer-page-background);
   background: var(--consumer-background);
   background-attachment: fixed;
   .consumer-topbar {
@@ -569,7 +567,7 @@ provide('settingsModal', {
     justify-content: space-between;
     gap: 20px;
     padding: 0 36px;
-    background: #ffffffbd;
+    background: var(--consumer-header-background);
     border-bottom: 1px solid #fff;
   }
   .consumer-brand {
@@ -577,7 +575,7 @@ provide('settingsModal', {
     align-items: center;
     gap: 10px;
     text-decoration: none;
-    color: #122657;
+    color: var(--consumer-brand-color);
   }
   .consumer-brand strong {
     display: block;

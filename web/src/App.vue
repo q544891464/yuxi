@@ -1,22 +1,29 @@
 <script setup>
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
-import { useAgentStore } from '@/stores/agent'
-import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
-import { onMounted } from 'vue'
 
-const agentStore = useAgentStore()
-const userStore = useUserStore()
 const themeStore = useThemeStore()
-
-onMounted(async () => {
-  if (userStore.isLoggedIn) {
-    await agentStore.initialize()
-  }
-})
 </script>
 <template>
   <a-config-provider :theme="themeStore.currentTheme" :locale="zhCN">
-    <router-view />
+    <router-view v-slot="{ Component }">
+      <component :is="Component" v-if="Component" />
+      <div v-else class="entry-loading" role="status">
+        <a-spin />
+        <p>正在加载，请稍候…</p>
+      </div>
+    </router-view>
   </a-config-provider>
 </template>
+
+<style scoped>
+.entry-loading {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 16px;
+  color: var(--gray-600);
+  background: var(--consumer-page-background);
+}
+</style>

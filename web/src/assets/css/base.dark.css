@@ -1,5 +1,9 @@
 /* 深色模式 */
 :root.dark {
+  --consumer-page-background: radial-gradient(ellipse at 0 90%, #173258, transparent 60%), #111b2c;
+  --consumer-header-background: #172236;
+  --consumer-brand-color: #dce8ff;
+  --consumer-muted-color: #9bb4d6;
   --main-1000: #e1f6fb;
   --main-900: #c4eaf5;
   --main-800: #a3d8e8;

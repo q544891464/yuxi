@@ -195,8 +195,7 @@ router.beforeEach(async (to) => {
   // 如果路由需要认证但用户未登录
   if (requiresAuth && !isLoggedIn) {
     // 保存尝试访问的路径，登录后跳转
-    sessionStorage.setItem('redirect', to.fullPath)
-    return '/login'
+    return { path: '/login', query: { redirect: to.fullPath } }
   }
 
   // 页面入口按已加载的身份分流，资源授权仍由后端执行。

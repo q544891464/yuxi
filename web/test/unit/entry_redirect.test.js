@@ -125,3 +125,72 @@ test('管理员可选择用户界面并保留工作台深链接', async () => {
   await router.push('/chat')
   assert.equal(router.currentRoute.value.name, 'ChatComp')
 })
+
+test('未登录直达聊天及深链接不依赖会话存储，跳转登录并保留目标', async () => {
+  const previousStorage = globalThis.sessionStorage
+  globalThis.sessionStorage = {
+    setItem() {
+      throw new Error('SecurityError: storage blocked')
+    }
+  }
+  try {
+    for (const path of ['/chat', '/chat/thread-1?view=files']) {
+      const router = createTestRouter({ token: '', isLoggedIn: false })
+      await router.push(path)
+      assert.equal(router.currentRoute.value.path, '/login')
+      assert.equal(router.currentRoute.value.query.redirect, path)
+    }
+  } finally {
+    if (previousStorage === undefined) delete globalThis.sessionStorage
+    else globalThis.sessionStorage = previousStorage
+  }
+})
+
+test('密码登录成功后不依赖会话存储，按角色或合法深链接进入工作区', async () => {
+  const loginSource = readFileSync(
+    new URL('../../src/views/LoginView.vue', import.meta.url),
+    'utf8'
+  )
+  const handler = loginSource.slice(
+    loginSource.indexOf('const handleLogin ='),
+    loginSource.indexOf('const handleOIDCLogin =')
+  )
+  for (const scenario of [
+    { isAdmin: true, redirect: undefined, expected: '/agent' },
+    { isAdmin: false, redirect: undefined, expected: '/chat' },
+    { isAdmin: false, redirect: '/chat/thread-1', expected: '/chat/thread-1' },
+    { isAdmin: false, redirect: '//outside.example', expected: '/chat' }
+  ]) {
+    const destinations = []
+    const errorMessage = { value: '' }
+    const loading = { value: false }
+    const dependencies = {
+      isLocked: { value: false },
+      ensureAgreementAccepted: () => true,
+      clearLockCountdown() {},
+      loading,
+      errorMessage,
+      loginForm: { loginId: 'test', password: 'test-only' },
+      userStore: { isAdmin: scenario.isAdmin, async login() {} },
+      route: { query: { redirect: scenario.redirect } },
+      router: { push: (path) => destinations.push(path) },
+      message: { success() {} },
+      sanitizeRedirect,
+      sessionStorage: new Proxy(
+        {},
+        {
+          get() {
+            throw new Error('SecurityError: storage blocked')
+          }
+        }
+      )
+    }
+    const login = new Function(...Object.keys(dependencies), `${handler}; return handleLogin`)(
+      ...Object.values(dependencies)
+    )
+    await login()
+    assert.deepEqual(destinations, [scenario.expected])
+    assert.equal(errorMessage.value, '')
+    assert.equal(loading.value, false)
+  }
+})

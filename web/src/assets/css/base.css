@@ -1,6 +1,13 @@
 /* color palette from <https://github.com/vuejs/theme> */
 /* https://material-foundation.github.io/material-theme-builder/ */
 :root {
+  /* 用户入口与聊天页共享品牌配色。 */
+  --consumer-page-background:
+    radial-gradient(ellipse at 0 90%, #d6e9ff 0, transparent 45%),
+    linear-gradient(135deg, #f7fbff, #edf6ff);
+  --consumer-header-background: #ffffffbd;
+  --consumer-brand-color: #122657;
+  --consumer-muted-color: #6b86af;
   --main-1000: #01151f;
   --main-900: #023944;
   --main-800: #035065;

@@ -19,13 +19,20 @@
       <div class="navbar-content">
         <div class="brand-container" @click="goHome" style="cursor: pointer">
           <img v-if="brandLogo" :src="brandLogo" alt="logo" class="brand-logo" />
-          <h1 class="brand-text">
-            <span v-if="brandOrgName && brandName !== brandOrgName" class="brand-org">{{
-              brandOrgName
-            }}</span>
-            <span v-if="brandOrgName && brandName !== brandOrgName" class="brand-separator"></span>
-            <span class="brand-main">{{ brandName }}</span>
-          </h1>
+          <span v-else class="brand-shield" aria-hidden="true"></span>
+          <div>
+            <h1 class="brand-text">
+              <span v-if="brandOrgName && brandName !== brandOrgName" class="brand-org">{{
+                brandOrgName
+              }}</span>
+              <span
+                v-if="brandOrgName && brandName !== brandOrgName"
+                class="brand-separator"
+              ></span>
+              <span class="brand-main">{{ brandName }}</span>
+            </h1>
+            <small class="brand-subtitle">税务审理智能助手</small>
+          </div>
         </div>
       </div>
     </nav>
@@ -38,7 +45,10 @@
             <header class="form-header">
               <!-- 如果是在初始化，显示特定标题 -->
               <h2 v-if="isFirstRun" class="init-title">系统初始化，请创建超级管理员</h2>
-              <p v-else class="welcome-text">欢迎登录</p>
+              <template v-else>
+                <h2 class="welcome-text">欢迎登录</h2>
+                <p class="welcome-description">登录后开启您的智能辅助审理工作</p>
+              </template>
             </header>
 
             <div class="login-content" :class="{ 'is-initializing': isFirstRun }">
@@ -279,7 +289,6 @@ import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
-import { useAgentStore } from '@/stores/agent'
 import { message } from 'ant-design-vue'
 import { healthApi } from '@/apis/system_api'
 import { authApi } from '@/apis/auth_api'
@@ -296,7 +305,6 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const infoStore = useInfoStore()
-const agentStore = useAgentStore()
 
 // 品牌展示数据
 const brandLogo = computed(() => {
@@ -451,19 +459,11 @@ const handleLogin = async () => {
     message.success('登录成功')
 
     // 获取重定向路径
-    const redirectPath = sessionStorage.getItem('redirect') || '/'
-    sessionStorage.removeItem('redirect') // 清除重定向信息
+    const redirectPath = sanitizeRedirect(route.query.redirect)
 
     // 根据用户角色决定重定向目标
     if (redirectPath === '/') {
-      // 统一跳转到聊天页面（管理员与普通用户共享同一聊天界面）
-      try {
-        await agentStore.initialize()
-        router.push('/agent')
-      } catch (error) {
-        console.error('获取智能体信息失败:', error)
-        router.push('/agent')
-      }
+      router.push(userStore.isAdmin ? '/agent' : '/chat')
     } else {
       // 跳转到其他预设的路径
       router.push(redirectPath)
@@ -665,9 +665,7 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   flex-direction: column;
-  background-color: var(--gray-10);
-  background-image: radial-gradient(var(--gray-200) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background: var(--consumer-page-background);
 
   &.has-alert {
     padding-top: 60px;
@@ -680,13 +678,15 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   width: 100%;
-  padding: 32px 0;
+  padding: 10px 0;
+  min-height: 76px;
+  background: var(--consumer-header-background);
+  border-bottom: 1px solid var(--gray-0);
   z-index: 10;
 
   .navbar-content {
-    max-width: 1500px; /* Constraint the width */
     margin: 0 auto;
-    padding: 0 40px;
+    padding: 0 36px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -721,7 +721,7 @@ onUnmounted(() => {
   }
 
   .brand-main {
-    color: var(--main-color);
+    color: var(--consumer-brand-color);
     font-weight: 600;
   }
 }
@@ -730,6 +730,21 @@ onUnmounted(() => {
   height: 32px;
   width: auto;
   object-fit: contain;
+}
+
+.brand-shield {
+  width: 48px;
+  height: 56px;
+  flex-shrink: 0;
+  background: url('/cydx/logo-sheet.png') no-repeat -15px -96px / 355px 266.25px;
+  mix-blend-mode: multiply;
+}
+
+.brand-subtitle {
+  display: block;
+  color: var(--consumer-muted-color);
+  margin-top: 6px;
+  font-size: 12px;
 }
 
 .top-logo {
@@ -754,16 +769,18 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  padding-top: 80px; /* Add space for navbar */
+  padding-top: 112px;
+  padding-bottom: 40px;
 }
 
 .login-card {
-  width: 440px;
+  width: 480px;
   max-width: 95vw;
   min-height: 440px;
   background: var(--gray-0);
-  border-radius: 16px;
-  box-shadow: 0 0px 40px var(--shadow-1);
+  border: 1px solid var(--gray-0);
+  border-radius: 24px;
+  box-shadow: 0 16px 48px var(--shadow-1);
   display: flex;
   overflow: hidden;
 }
@@ -783,7 +800,7 @@ onUnmounted(() => {
 
 .form-wrapper {
   width: 100%;
-  max-width: 320px;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -792,9 +809,9 @@ onUnmounted(() => {
 .form-header {
   text-align: left;
   .welcome-text {
-    font-size: 14px;
+    font-size: 28px;
     font-weight: 600;
-    color: var(--gray-500);
+    color: var(--consumer-brand-color);
     margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -806,6 +823,12 @@ onUnmounted(() => {
     margin: 0;
     line-height: 1.4;
   }
+}
+
+.welcome-description {
+  margin: 12px 0 0;
+  color: var(--consumer-muted-color);
+  font-size: 14px;
 }
 
 .login-form {
