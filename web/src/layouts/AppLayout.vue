@@ -361,14 +361,17 @@ provide('settingsModal', {
     </header>
     <div class="header" :class="{ 'consumer-history': consumerChat }">
       <div class="sidebar-brand" @click.stop>
-        <router-link v-if="!sidebarCollapsed" to="/" class="brand-link">
-          <img
-            v-if="infoStore.organization.avatar"
-            :src="infoStore.organization.avatar"
-            class="brand-avatar"
-          />
-          <span class="brand-name">{{ organizationName }}</span>
-        </router-link>
+        <button
+          v-if="!sidebarCollapsed"
+          type="button"
+          class="sidebar-search-trigger"
+          :class="{ active: conversationSearchOpen }"
+          aria-label="搜索对话或文件"
+          @click="openConversationSearch"
+        >
+          <Search size="18" />
+          <span>搜索</span>
+        </button>
         <button
           v-else
           type="button"
@@ -379,15 +382,6 @@ provide('settingsModal', {
           <PanelLeftOpen class="brand-expand-icon" size="20" />
         </button>
         <div v-if="!sidebarCollapsed" class="sidebar-header-actions" aria-label="侧边栏操作">
-          <button
-            type="button"
-            class="sidebar-header-action"
-            :class="{ active: conversationSearchOpen }"
-            aria-label="搜索"
-            @click="openConversationSearch"
-          >
-            <Search size="17" />
-          </button>
           <button
             type="button"
             class="sidebar-header-action"
@@ -814,6 +808,36 @@ div.header,
     background: transparent;
     padding: 0 4px;
     cursor: pointer;
+  }
+
+  .sidebar-search-trigger {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    height: @sidebar-item-height;
+    padding: 0 10px;
+    border: 1px solid var(--gray-200);
+    border-radius: 9px;
+    background: var(--gray-0);
+    color: var(--gray-500);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      color 0.2s ease;
+
+    &:hover,
+    &:focus-visible,
+    &.active {
+      border-color: var(--main-300);
+      box-shadow: 0 0 0 2px var(--main-10);
+      color: var(--main-color);
+      outline: none;
+    }
   }
 
   .brand-avatar {
