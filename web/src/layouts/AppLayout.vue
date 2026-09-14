@@ -134,10 +134,6 @@ const activeTaskCount = computed(() => activeCountRef.value || 0)
 const activeConversationThreadId = computed(() => {
   return consumerChat.value || route.path.startsWith('/agent') ? currentThreadId.value : null
 })
-const organizationName = computed(() => {
-  return infoStore.organization.name || infoStore.branding.name || '智能辅助审理数字人'
-})
-
 // 下面是导航菜单部分，添加智能体项
 const mainList = computed(() => {
   const items = [
