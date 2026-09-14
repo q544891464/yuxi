@@ -800,8 +800,8 @@ onUnmounted(() => {
 }
 
 .login-card {
-  --login-action-color: var(--consumer-brand-color);
-  --login-action-text-color: var(--gray-0);
+  --login-action-color: var(--main-200);
+  --login-action-text-color: var(--consumer-brand-color);
   --login-action-hover-color: color-mix(in srgb, var(--login-action-color) 86%, white);
   --login-action-active-color: color-mix(in srgb, var(--login-action-color) 88%, black);
   --ant-color-primary: var(--login-action-color);
