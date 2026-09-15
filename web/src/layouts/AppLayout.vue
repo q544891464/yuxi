@@ -620,6 +620,7 @@ provide('settingsModal', {
   }
   :deep(.consumer-agent) {
     height: 100%;
+    min-height: 0;
   }
   :deep(.chat),
   :deep(.chat-main),
@@ -634,19 +635,31 @@ provide('settingsModal', {
   }
   :deep(.chat-main) {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     overflow: hidden;
+    min-height: 0;
   }
   :deep(.chat-main > .chat-box) {
+    max-width: 760px;
+    grid-column: 1;
     grid-row: 1;
     min-height: 0;
     overflow-y: auto;
+    padding-bottom: 8px;
+    @media (max-width: 1360px) {
+      max-width: 680px;
+    }
   }
   :deep(.custom-chat-welcome) {
+    grid-column: 1;
     grid-row: 1;
     min-height: 0;
     overflow-y: auto;
     padding: 22px 20px;
+  }
+  :deep(.chat-main > .chat-box > :first-child) {
+    margin-top: auto;
   }
   :deep(.custom-chat-welcome > *) {
     max-width: 1100px;
@@ -663,9 +676,10 @@ provide('settingsModal', {
     margin: 0 auto;
     position: relative;
     bottom: auto;
-    padding: 165px 20px 16px;
+    padding: 0;
     background: var(--consumer-background);
     background-attachment: fixed;
+    overflow: visible;
   }
   :deep(.bottom.start-screen) {
     position: relative;
@@ -673,8 +687,9 @@ provide('settingsModal', {
     background: transparent;
   }
   :deep(.message-input-wrapper) {
-    position: relative;
-    max-width: 1060px;
+    width: min(1060px, calc(100% - 48px));
+    max-width: none;
+    margin: 0 auto;
   }
   :deep(.input-container) {
     border-radius: 22px;

@@ -13,8 +13,8 @@
             <ChatWelcome @prompt="setPrompt" />
           </template>
           <template v-if="consumerChat" #input-decoration="{ isStartScreen }">
-            <div class="composer-mascot" aria-hidden="true">
-              <img :src="isStartScreen ? '/cydx/assistant-front.png' : '/cydx/assistant-cutout.png'" alt="" draggable="false" />
+            <div v-if="!isStartScreen" class="composer-mascot" aria-hidden="true">
+              <img src="/cydx/assistant-cutout.png" alt="" draggable="false" />
             </div>
           </template>
           <template #input-actions-left="{ hasActiveThread, isCreatingThread }">
@@ -428,11 +428,12 @@ useOutsidePointerdown(agentDropdownOpen, [agentDropdownTriggerRef, agentDropdown
 }
 .composer-mascot {
   position: absolute;
-  left: max(36px, calc((100% - 1060px) / 2 + 16px));
-  top: 8px;
-  width: 165px;
-  height: 165px;
+  left: 18px;
+  bottom: 100%;
+  width: 150px;
+  height: 157px;
   pointer-events: none;
+  z-index: 20;
   img {
     display: block;
     width: 100%;

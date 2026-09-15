@@ -160,7 +160,6 @@
             class="bottom composer-zone"
             :class="{ 'start-screen': !conversations.length }"
           >
-            <slot name="input-decoration" :is-start-screen="!conversations.length"></slot>
             <div class="message-input-wrapper">
               <!-- 加载状态：加载消息 -->
               <div v-if="isLoadingMessages" class="chat-loading">
@@ -238,87 +237,91 @@
                 </div>
               </section>
 
-              <div
-                class="message-input-stage"
-                :class="{ 'has-tool-approval': currentToolApprovalVisible }"
-              >
-                <HumanApprovalModal
-                  :visible="currentApprovalModalVisible"
-                  :questions="currentApprovalQuestions"
-                  :kind="approvalState.kind"
-                  :action-requests="approvalState.actionRequests"
-                  @submit="handleQuestionSubmit"
-                  @cancel="handleQuestionCancel"
+              <div v-if="!currentChatId" class="composer-project-selection">
+                <ProjectSelectionSection
+                  v-model="selectedProjectId"
+                  :disabled="threadCreationInFlight"
                 />
+              </div>
 
-                <div
-                  class="message-input-surface"
-                  :inert="currentToolApprovalVisible"
-                  :aria-hidden="currentToolApprovalVisible ? 'true' : undefined"
-                >
-                  <AgentInputArea
-                    ref="agentInputAreaRef"
-                    v-model="userInput"
-                    :is-loading="shouldShowStopButton"
-                    :disabled="!currentAgent || currentToolApprovalVisible"
-                    :send-button-disabled="isSendButtonDisabled"
-                    :mention="mentionConfig"
-                    :thread-id="currentChatId"
-                    :show-extra="!currentChatId"
-                    :supports-file-upload="supportsFileUpload"
-                    :attachments="currentPendingThreadAttachments"
-                    @send="handleSendOrStop"
-                    @upload-attachment="handleAttachmentUpload"
-                    @remove-attachment="handleAttachmentRemove"
+              <div class="composer-shell">
+                <slot name="input-decoration" :is-start-screen="!conversations.length"></slot>
+                <div class="input-container">
+                  <div
+                    class="message-input-stage"
+                    :class="{ 'has-tool-approval': currentToolApprovalVisible }"
                   >
-                    <template #extra>
-                      <ProjectSelectionSection
-                        v-if="!currentChatId"
-                        v-model="selectedProjectId"
-                        :disabled="threadCreationInFlight"
-                      />
-                    </template>
-                    <template #actions-left-extra>
-                      <ToolApprovalModeSelector
-                        :model-value="currentToolApprovalMode"
-                        @update:model-value="handleToolApprovalModeSelect"
-                      />
-                      <slot
-                        name="input-actions-left"
-                        :has-active-thread="!!currentChatId"
-                        :is-creating-thread="threadCreationInFlight"
-                      ></slot>
-                    </template>
-                    <template #actions-right-extra>
-                      <button
-                        v-if="canSubmitSteer"
-                        type="button"
-                        class="direct-steer-button"
-                        title="当前步骤结束后优先执行这条消息"
-                        @click="handleDirectSteer"
+                    <HumanApprovalModal
+                      :visible="currentApprovalModalVisible"
+                      :questions="currentApprovalQuestions"
+                      :kind="approvalState.kind"
+                      :action-requests="approvalState.actionRequests"
+                      @submit="handleQuestionSubmit"
+                      @cancel="handleQuestionCancel"
+                    />
+
+                    <div
+                      class="message-input-surface"
+                      :inert="currentToolApprovalVisible"
+                      :aria-hidden="currentToolApprovalVisible ? 'true' : undefined"
+                    >
+                      <AgentInputArea
+                        ref="agentInputAreaRef"
+                        v-model="userInput"
+                        :is-loading="shouldShowStopButton"
+                        :disabled="!currentAgent || currentToolApprovalVisible"
+                        :send-button-disabled="isSendButtonDisabled"
+                        :mention="mentionConfig"
+                        :thread-id="currentChatId"
+                        :supports-file-upload="supportsFileUpload"
+                        :attachments="currentPendingThreadAttachments"
+                        @send="handleSendOrStop"
+                        @upload-attachment="handleAttachmentUpload"
+                        @remove-attachment="handleAttachmentRemove"
                       >
-                        <CornerDownRight :size="14" aria-hidden="true" />
-                        引导
-                      </button>
-                      <ContextUsageRing
-                        v-if="showStateEntry"
-                        :used-tokens="tokenUsagePressureTotal"
-                        :limit-tokens="tokenUsageStackLimit"
-                        :ratio="tokenUsageContextRatio"
-                        @click="toggleStatePanel"
-                      />
-                      <div class="input-model-selector">
-                        <ModelSelectorComponent
-                          :model_spec="currentModelSpec"
-                          size="nano"
-                          display-name="mini"
-                          placeholder="选择模型"
-                          @select-model="handleModelSelect"
-                        />
-                      </div>
-                      <slot name="input-actions-right" :has-active-thread="!!currentChatId"></slot>
-                    </template>
-                  </AgentInputArea>
+                        <template #actions-left-extra>
+                          <ToolApprovalModeSelector
+                            :model-value="currentToolApprovalMode"
+                            @update:model-value="handleToolApprovalModeSelect"
+                          />
+                          <slot
+                            name="input-actions-left"
+                            :has-active-thread="!!currentChatId"
+                            :is-creating-thread="threadCreationInFlight"
+                          ></slot>
+                        </template>
+                        <template #actions-right-extra>
+                          <button
+                            v-if="canSubmitSteer"
+                            type="button"
+                            class="direct-steer-button"
+                            title="当前步骤结束后优先执行这条消息"
+                            @click="handleDirectSteer"
+                          >
+                            <CornerDownRight :size="14" aria-hidden="true" />
+                            引导
+                          </button>
+                          <ContextUsageRing
+                            v-if="showStateEntry"
+                            :used-tokens="tokenUsagePressureTotal"
+                            :limit-tokens="tokenUsageStackLimit"
+                            :ratio="tokenUsageContextRatio"
+                            @click="toggleStatePanel"
+                          />
+                          <div class="input-model-selector">
+                            <ModelSelectorComponent
+                              :model_spec="currentModelSpec"
+                              size="nano"
+                              display-name="mini"
+                              placeholder="选择模型"
+                              @select-model="handleModelSelect"
+                            />
+                          </div>
+                          <slot name="input-actions-right" :has-active-thread="!!currentChatId"></slot>
+                        </template>
+                      </AgentInputArea>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -4345,6 +4348,25 @@ watch(currentChatId, (threadId, oldThreadId) => {
     width: 100%;
     max-width: 800px;
     margin: 0 auto;
+
+    .composer-project-selection {
+      .composer-top-attachment();
+      display: flex;
+      min-height: 36px;
+      align-items: flex-start;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 4px 14px 2px;
+    }
+
+    .composer-shell {
+      position: relative;
+      overflow: visible;
+    }
+
+    .input-container {
+      min-width: 0;
+    }
 
     .message-input-stage {
       position: relative;
