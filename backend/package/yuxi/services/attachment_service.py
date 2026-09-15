@@ -21,10 +21,11 @@ from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.storage.minio import StorageError, get_minio_client
 from yuxi.utils.datetime_utils import utc_isoformat
 from yuxi.utils.logging_config import logger
-from yuxi.utils.upload_utils import read_upload_with_limit
+from yuxi.utils.upload_utils import write_upload_to_path
+from yuxi.workspace.archives import MAX_EXPANDED_BYTES, MAX_ZIP_BYTES, MAX_ZIP_ENTRIES, unpack_zip
 
 ATTACHMENT_ALLOWED_EXTENSIONS: tuple[str, ...] = ()
-MAX_ATTACHMENT_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 MAX_ATTACHMENT_MARKDOWN_CHARS = 32_000  # TODO: 转 MARKDOWN的时候，不应该裁剪
 TMP_ATTACHMENT_PREFIX = "tmp/chat_attachments"
 TMP_ATTACHMENT_PARSE_EXTENSIONS = (*PDF_FILE_EXTENSIONS, *IMAGE_FILE_EXTENSIONS)
@@ -179,20 +180,20 @@ async def _store_attachment(
     file_id: str,
     file_name: str,
     file_type: str | None,
-    file_content: bytes,
+    source_path: str,
     parsed_markdown: str | None = None,
 ) -> dict:
     """将正式附件直接写入实时 Project Workdir。"""
     file_name = _safe_file_name(file_name)
     storage_name = f"{file_id}_{file_name}"
     original_scope = f"/uploads/{storage_name}"
-    await _write_workdir_file(workdir, original_scope, file_content)
+    await asyncio.to_thread(workdir.copy_file_from_path, original_scope, source_path)
     original_path = runtime_path_for_workdir_scope(workdir.relative_path, original_scope)
     record = {
         "file_id": file_id,
         "file_name": file_name,
         "file_type": file_type,
-        "file_size": len(file_content),
+        "file_size": Path(source_path).stat().st_size,
         "status": "uploaded",
         "uploaded_at": utc_isoformat(),
         "path": original_path,
@@ -275,26 +276,27 @@ async def upload_tmp_attachment_view(*, file: UploadFile, current_uid: str) -> d
         raise HTTPException(status_code=400, detail="无法识别的文件名")
 
     file_name = _safe_file_name(file.filename)
-    try:
-        file_content = await read_upload_with_limit(
-            file,
-            max_size_bytes=MAX_ATTACHMENT_SIZE_BYTES,
-            too_large_message="附件过大，当前仅支持 5 MB 以内的文件",
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    file_size = len(file_content)
+    is_zip = Path(file_name).suffix.lower() == ".zip"
+    limit = MAX_ZIP_BYTES if is_zip else MAX_ATTACHMENT_SIZE_BYTES
     tmp_file_id, object_name = _make_tmp_attachment_object(str(current_uid), file_name)
     minio_client = get_minio_client()
     bucket_name = minio_client.KB_BUCKETS["documents"]
     try:
-        upload_result = await minio_client.aupload_file(
-            bucket_name=bucket_name,
-            object_name=object_name,
-            data=file_content,
-            content_type=file.content_type,
-        )
+        with tempfile.TemporaryDirectory(prefix="yuxi-upload-") as temporary:
+            source = Path(temporary) / "upload"
+            file_size = await write_upload_to_path(
+                file,
+                source,
+                max_size_bytes=limit,
+                too_large_message=f"附件过大，当前仅支持 {limit // (1024 * 1024)} MB 以内的文件",
+            )
+            if is_zip:
+                await asyncio.to_thread(unpack_zip, str(source))
+            upload_result = await asyncio.to_thread(
+                minio_client.upload_file_from_path, bucket_name, object_name, str(source), file.content_type
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except StorageError as exc:
         raise HTTPException(status_code=500, detail=f"临时附件上传失败: {exc}") from exc
     await _cleanup_expired_tmp_attachments(minio_client, bucket_name, str(current_uid))
@@ -385,18 +387,22 @@ async def confirm_tmp_thread_attachments_view(
     bucket_name = minio_client.KB_BUCKETS["documents"]
     added_records: list[dict] = []
     confirmed_tmp_ids: list[str] = []
+    temporary = tempfile.TemporaryDirectory(prefix="yuxi-confirm-")
+    source_path = str(Path(temporary.name) / "original")
     try:
         for item in attachments:
             object_name = str(item.get("object_name") or "")
             tmp_file_id, file_name = _require_tmp_object_section(object_name, str(current_uid), "original")
             try:
-                file_content = await minio_client.adownload_file(bucket_name, object_name)
+                response = await minio_client.adownload_response(bucket_name, object_name)
+                limit = MAX_ZIP_BYTES if Path(file_name).suffix.lower() == ".zip" else MAX_ATTACHMENT_SIZE_BYTES
+                await asyncio.to_thread(_download_attachment_stream, response, source_path, limit)
+                if Path(file_name).suffix.lower() == ".zip":
+                    await asyncio.to_thread(unpack_zip, source_path)
             except StorageError as exc:
                 raise HTTPException(status_code=400, detail=f"读取临时附件失败: {exc}") from exc
-
-            if len(file_content) > MAX_ATTACHMENT_SIZE_BYTES:
-                max_size_mb = MAX_ATTACHMENT_SIZE_BYTES // (1024 * 1024)
-                raise HTTPException(status_code=400, detail=f"附件过大，当前仅支持 {max_size_mb} MB 以内的文件")
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
             parsed_markdown = None
             parsed_object_name = str(item.get("parsed_object_name") or "")
@@ -419,7 +425,7 @@ async def confirm_tmp_thread_attachments_view(
                 file_id=file_id,
                 file_name=file_name,
                 file_type=item.get("file_type"),
-                file_content=file_content,
+                source_path=source_path,
                 parsed_markdown=parsed_markdown,
             )
             added_records.append(attachment_record)
@@ -427,6 +433,8 @@ async def confirm_tmp_thread_attachments_view(
     except Exception:
         await _rollback_stored_attachments(workdir, added_records)
         raise
+    finally:
+        temporary.cleanup()
 
     try:
         await conv_repo.add_attachments(conversation.id, added_records)
@@ -453,6 +461,21 @@ async def confirm_tmp_thread_attachments_view(
     return {"attachments": [serialize_attachment(item, thread_id=thread_id) for item in added_records]}
 
 
+def _download_attachment_stream(response, destination: str, limit: int) -> None:
+    """有界复制对象响应到磁盘，任何失败均释放连接。"""
+    try:
+        size = 0
+        with open(destination, "wb") as output:
+            while chunk := response.read(1024 * 1024):
+                size += len(chunk)
+                if size > limit:
+                    raise ValueError(f"附件过大，当前仅支持 {limit // (1024 * 1024)} MB 以内的文件")
+                output.write(chunk)
+    finally:
+        response.close()
+        response.release_conn()
+
+
 async def list_thread_attachments_view(
     *,
     thread_id: str,
@@ -468,6 +491,9 @@ async def list_thread_attachments_view(
         "limits": {
             "allowed_extensions": sorted(ATTACHMENT_ALLOWED_EXTENSIONS),
             "max_size_bytes": MAX_ATTACHMENT_SIZE_BYTES,
+            "max_zip_size_bytes": MAX_ZIP_BYTES,
+            "max_zip_expanded_bytes": MAX_EXPANDED_BYTES,
+            "max_zip_entries": MAX_ZIP_ENTRIES,
         },
     }
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import os
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -49,6 +50,12 @@ class FakeMinioClient:
         self.deleted: list[tuple[str, str]] = []
         self.deleted_prefixes: list[tuple[str, str]] = []
         self.object_metadata: list[dict] = []
+
+    def upload_file_from_path(self, bucket_name, object_name, file_path, content_type=None):
+        data = Path(file_path).read_bytes()
+        self.objects[(bucket_name, object_name)] = data
+        self.uploads.append({"bucket_name": bucket_name, "object_name": object_name, "data": data})
+        return SimpleNamespace(bucket_name=bucket_name, object_name=object_name)
 
     async def aupload_file(self, bucket_name: str, object_name: str, data: bytes, content_type: str | None = None):
         self.objects[(bucket_name, object_name)] = data
@@ -231,6 +238,59 @@ class ActiveAgentRunRepository(EmptyAgentRunRepository):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("size", [6 * 1024 * 1024, 10 * 1024 * 1024])
+async def test_upload_tmp_attachment_accepts_up_to_ten_mb(monkeypatch, size):
+    """超过旧上限和恰好新上限的附件均完整保存。"""
+    fake_minio = FakeMinioClient()
+    monkeypatch.setattr(service, "get_minio_client", lambda: fake_minio)
+    content = b"x" * size
+    response = await service.upload_tmp_attachment_view(
+        file=FakeUpload("report.txt", content, "text/plain"), current_uid="user-1"
+    )
+    assert response["file_size"] == size
+    assert fake_minio.objects[("knowledgebases", response["object_name"])] == content
+
+
+@pytest.mark.asyncio
+async def test_upload_tmp_attachment_rejects_over_ten_mb_without_storage(monkeypatch):
+    """超限一字节即拒绝，且不写入对象存储。"""
+    fake_minio = FakeMinioClient()
+    monkeypatch.setattr(service, "get_minio_client", lambda: fake_minio)
+    with pytest.raises(service.HTTPException) as exc:
+        await service.upload_tmp_attachment_view(
+            file=FakeUpload("report.txt", b"x" * (10 * 1024 * 1024 + 1), "text/plain"),
+            current_uid="user-1",
+        )
+    assert exc.value.status_code == 400
+    assert "10 MB" in exc.value.detail
+    assert not fake_minio.uploads
+
+
+@pytest.mark.asyncio
+async def test_upload_zip_over_normal_limit_streams_valid_archive(monkeypatch):
+    """真实 ZIP 大于普通文件限额仍可上传。"""
+    fake_minio = FakeMinioClient()
+    monkeypatch.setattr(service, "get_minio_client", lambda: fake_minio)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("report.txt", b"x" * (11 * 1024 * 1024))
+    response = await service.upload_tmp_attachment_view(
+        file=FakeUpload("case.ZIP", buffer.getvalue(), "application/zip"), current_uid="user-1"
+    )
+    assert response["file_size"] == len(buffer.getvalue())
+
+
+@pytest.mark.asyncio
+async def test_upload_fake_zip_is_rejected_before_storage(monkeypatch):
+    fake_minio = FakeMinioClient()
+    monkeypatch.setattr(service, "get_minio_client", lambda: fake_minio)
+    with pytest.raises(service.HTTPException) as exc:
+        await service.upload_tmp_attachment_view(file=FakeUpload("fake.zip", b"not a zip"), current_uid="user-1")
+    assert exc.value.status_code == 400
+    assert not fake_minio.uploads
+
+
+@pytest.mark.asyncio
 async def test_upload_tmp_attachment_writes_user_scoped_minio_object(monkeypatch):
     fake_minio = FakeMinioClient()
     monkeypatch.setattr(service, "get_minio_client", lambda: fake_minio)
@@ -331,6 +391,26 @@ def confirm_attachment_env(monkeypatch: pytest.MonkeyPatch):
     fake_repo.workdir_backend = backend
 
     return fake_minio, fake_repo
+
+
+@pytest.mark.asyncio
+async def test_confirm_zip_over_ten_mb_and_report_limits(confirm_attachment_env):
+    """ZIP 确认阶段也使用200MB额度，并返回分类型限制。"""
+    fake_minio, fake_repo = confirm_attachment_env
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("report.txt", b"x" * (11 * 1024 * 1024))
+    original = "tmp/chat_attachments/user-1/tmp-zip/original/case.zip"
+    fake_minio.objects[("knowledgebases", original)] = buffer.getvalue()
+    result = await service.confirm_tmp_thread_attachments_view(
+        thread_id="thread-1", attachments=[{"object_name": original}], db=FakeDB(), current_uid="user-1"
+    )
+    stored = result["attachments"][0]
+    assert fake_repo.workdir_backend.files[_scope_path(stored["original_path"])] == buffer.getvalue()
+    listed = await service.list_thread_attachments_view(thread_id="thread-1", db=FakeDB(), current_uid="user-1")
+    assert listed["limits"]["max_zip_size_bytes"] == 200 * 1024**2
+    assert listed["limits"]["max_zip_expanded_bytes"] == 1024**3
+    assert listed["limits"]["max_zip_entries"] == 1000
 
 
 @pytest.mark.asyncio
@@ -519,16 +599,17 @@ async def test_confirm_tmp_thread_attachments_keeps_duplicate_names_separate(con
 
 
 @pytest.mark.asyncio
-async def test_store_attachment_normalizes_persisted_file_name(monkeypatch):
-    del monkeypatch
+async def test_store_attachment_normalizes_persisted_file_name(tmp_path):
     backend = FakeWorkdirStorage()
+    source = tmp_path / "source"
+    source.write_bytes(b"content")
 
     record = await service._store_attachment(
         workdir=FakeWorkdir(backend),
         file_id="file-1",
         file_name=" report.txt",
         file_type="text/plain",
-        file_content=b"content",
+        source_path=str(source),
     )
 
     assert record["file_name"] == "report.txt"

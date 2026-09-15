@@ -73,6 +73,7 @@ def _with_attachment_context(message: HumanMessage, attachments: list[dict]) -> 
         [
             "<attachment_context>",
             "以下是本线程当前可用的历史附件。需要内容时，请使用 read_file 读取对应路径：",
+            "ZIP 附件请先调用 extract_zip 安全解压，再读取返回目录中的文件；不要使用 shell 直接解压。",
             *attachment_lines,
             "</attachment_context>",
         ]

@@ -96,10 +96,11 @@ def get_tool_instances_by_category(category: str) -> list[Any]:
 
 async def resolve_configured_runtime_tools(context) -> list[Any]:
     from yuxi.agents.mcp.service import get_enabled_mcp_tools
+    from yuxi.agents.toolkits.buildin.tools import extract_zip
 
-    selected_tools = []
-    selected_tool_names: set[str] = set()
-    selected_tool_sources: dict[str, str] = {}
+    selected_tools = [extract_zip]
+    selected_tool_names: set[str] = {extract_zip.name}
+    selected_tool_sources: dict[str, str] = {extract_zip.name: "local"}
     buildin_tools = {tool.name: tool for tool in get_tool_instances_by_category("buildin")}
 
     for tool_name in getattr(context, "tools", None) or []:

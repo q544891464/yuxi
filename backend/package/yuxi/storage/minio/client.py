@@ -164,13 +164,24 @@ class MinIOClient:
         )
         return result
 
-    def upload_file_from_path(self, bucket_name: str, object_name: str, file_path: str) -> UploadResult:
+    def upload_file_from_path(
+        self, bucket_name: str, object_name: str, file_path: str, content_type: str | None = None
+    ) -> UploadResult:
         """从文件路径上传文件"""
         try:
-            with open(file_path, "rb") as file_data:
-                data = file_data.read()
-
-            return self.upload_file(bucket_name, object_name, data)
+            self.ensure_bucket_exists(bucket_name=bucket_name)
+            self.client.fput_object(
+                bucket_name,
+                object_name,
+                file_path,
+                content_type=content_type or self._guess_content_type(object_name),
+            )
+            url = (
+                f"{self.public_base_url}/{bucket_name}/{quote(object_name, safe='/')}"
+                if bucket_name in self.PUBLIC_READ_BUCKETS
+                else f"http://{self.public_endpoint}/{bucket_name}/{object_name}"
+            )
+            return UploadResult(url, bucket_name, object_name)
 
         except FileNotFoundError:
             raise StorageError(f"文件 '{file_path}' 不存在")

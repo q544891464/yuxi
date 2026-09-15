@@ -407,6 +407,24 @@ def _resolve_runtime_sandbox_scope(runtime: ToolRuntime) -> tuple[str, str, str]
     return runtime_thread_id, uid, workdir_path
 
 
+@tool(category="buildin", tags=["文件"], display_name="解压 ZIP")
+async def extract_zip(file_path: str, runtime: ToolRuntime) -> dict:
+    """解压当前项目的 ZIP 到独立目录，最多 200MB 压缩包、1GB 解压量和 1000 个条目；不递归解压。"""
+    from yuxi.agents.backends.paths import runtime_path_for_workdir_scope, workdir_scope_from_runtime_path
+    from yuxi.workspace.archives import extract_workdir_zip
+    from yuxi.workspace.workdir import Workdir
+
+    _, uid, relative_path = _resolve_runtime_sandbox_scope(runtime)
+    try:
+        scope = workdir_scope_from_runtime_path(relative_path, file_path)
+        workdir = await asyncio.to_thread(Workdir.open_existing, uid, relative_path)
+        result = await asyncio.to_thread(extract_workdir_zip, workdir, scope)
+        result["directory"] = runtime_path_for_workdir_scope(relative_path, result["directory"])
+        return result
+    except (ValueError, OSError) as exc:
+        return {"status": "error", "error": str(exc)}
+
+
 def _runtime_scope_value(runtime: ToolRuntime, key: str) -> str | None:
     """Look up a runtime scope value from LangGraph config, context, or state."""
     config = getattr(runtime, "config", None)
