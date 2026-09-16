@@ -1069,7 +1069,7 @@ const isDraggingFiles = ref(false)
 const hasTransferFiles = (dataTransfer) =>
   Array.from(dataTransfer?.types || []).some((type) => type === 'Files')
 
-const canAcceptUploadFiles = () => props.fileUploadEnabled && !props.disabled && !props.isLoading
+const canAcceptUploadFiles = () => props.fileUploadEnabled && !props.disabled
 
 const getImageFileFromClipboard = (clipboardData) => {
   const items = Array.from(clipboardData?.items || [])
