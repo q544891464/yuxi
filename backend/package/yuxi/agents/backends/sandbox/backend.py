@@ -41,7 +41,7 @@ _USER_DATA_ROOT = "/" + VIRTUAL_PATH_PREFIX.strip("/")
 _SKILLS_ROOT = "/" + VIRTUAL_SKILLS_PATH.strip("/")
 _BINARY_PREVIEW_TOO_LARGE_ERROR = f"Binary file exceeds maximum preview size of {MAX_BINARY_BYTES} bytes"
 _IMAGE_EXTENSIONS = frozenset({".gif", ".heic", ".heif", ".jpeg", ".jpg", ".png", ".webp"})
-_DOCUMENT_EXTENSIONS = frozenset({".doc", ".docx", ".pdf", ".ppt", ".pptx", ".xls", ".xlsx"})
+_DOCUMENT_EXTENSIONS = frozenset({".doc", ".docx", ".wps", ".pdf", ".ppt", ".pptx", ".xls", ".xlsx"})
 _DOCUMENT_READ_ERROR = (
     "read_file does not support PDF or Office documents. Use ocr_parse_file to convert the file to Markdown first."
 )

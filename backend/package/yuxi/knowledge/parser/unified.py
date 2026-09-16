@@ -165,7 +165,7 @@ async def parse_resolved_document(source: str, params: dict | None = None) -> st
                 content = await f.read()
             result = content
 
-        elif file_ext == ".doc":
+        elif file_ext in {".doc", ".wps"}:
             from yuxi.utils.filepreview import convert_doc_to_docx
 
             async with aiofiles.open(file_path_obj, "rb") as f:

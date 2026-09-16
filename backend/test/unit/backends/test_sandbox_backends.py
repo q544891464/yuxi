@@ -1079,7 +1079,7 @@ def test_provisioner_read_rejects_unknown_file_on_sandbox_utf8_decode_failure(mo
     assert result.error == "read_file only supports UTF-8 text and image files. This file type is not supported."
 
 
-@pytest.mark.parametrize("extension", ["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"])
+@pytest.mark.parametrize("extension", ["pdf", "doc", "docx", "wps", "WPS", "ppt", "pptx", "xls", "xlsx"])
 def test_provisioner_read_routes_documents_to_ocr(monkeypatch, extension: str) -> None:
     monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
     backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")

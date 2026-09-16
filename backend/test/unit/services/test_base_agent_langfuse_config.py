@@ -84,7 +84,7 @@ async def test_base_agent_passes_callbacks_metadata_and_tags(mode):
     graph = await agent.get_graph()
     assert getattr(graph, config_attr) == {
         "configurable": {"thread_id": "thread-1", "uid": "user-1"},
-        "recursion_limit": 300,
+        "recursion_limit": 600,
         "callbacks": ["handler-1"],
         "metadata": {"langfuse_user_id": "user-1"},
         "tags": ["yuxi"],

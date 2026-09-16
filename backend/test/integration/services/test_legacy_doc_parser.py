@@ -17,7 +17,8 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_binary_doc_preserves_text_table_and_original(tmp_path, monkeypatch):
+@pytest.mark.parametrize("extension", ["doc", "wps"])
+async def test_binary_doc_preserves_text_table_and_original(tmp_path, monkeypatch, extension):
     """生成真正 Word 97 二进制文件，再通过公开解析入口提取独立已知内容。"""
     executable = shutil.which("soffice") or shutil.which("libreoffice")
     if not executable:
@@ -46,7 +47,8 @@ async def test_binary_doc_preserves_text_table_and_original(tmp_path, monkeypatc
         timeout=90,
         capture_output=True,
     )
-    legacy = tmp_path / "案件.DOC"
+    # WPS 可保存 Word 兼容内容；此用例不冒充历史 WPS 专有格式夹具。
+    legacy = tmp_path / f"案件.{extension.upper()}"
     (tmp_path / "report.doc").rename(legacy)
     original = legacy.read_bytes()
     assert original.startswith(bytes.fromhex("D0CF11E0A1B11AE1")), "夹具必须是旧版二进制 Word"
@@ -60,7 +62,7 @@ async def test_binary_doc_preserves_text_table_and_original(tmp_path, monkeypatc
     from yuxi.agents.toolkits.buildin import tools
 
     workdir = "/home/gem/user-data/projects/doc-check"
-    virtual_source = f"{workdir}/report.doc"
+    virtual_source = f"{workdir}/report.{extension}"
     output = tmp_path / "parsed.md"
 
     def download(path, target, max_bytes):

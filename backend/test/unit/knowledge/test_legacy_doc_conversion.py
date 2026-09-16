@@ -13,10 +13,11 @@ from yuxi.utils import filepreview
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("extension", ["doc", "wps"])
 @pytest.mark.parametrize(
     "failure", ["timeout", "exit", "missing", "invalid", "not_word", "process_missing", "permission"]
 )
-async def test_doc_conversion_rejects_failed_or_invalid_output(monkeypatch, failure):
+async def test_doc_conversion_rejects_failed_or_invalid_output(monkeypatch, failure, extension):
     """转换失败不伪装为成功，临时文件在所有失败路径清理。"""
     paths = []
     monkeypatch.setattr(filepreview, "_office_converter_executable", lambda: "soffice")
@@ -25,7 +26,7 @@ async def test_doc_conversion_rejects_failed_or_invalid_output(monkeypatch, fail
         """构造明确的转换器失败，不借助模型判断。"""
         directory = Path(command[command.index("--outdir") + 1])
         paths.append(directory)
-        assert command[-1] == str(directory / "source.doc")
+        assert command[-1] == str(directory / f"source.{extension}")
         assert kwargs["timeout"] > 0
         if failure == "timeout":
             raise subprocess.TimeoutExpired(command, kwargs["timeout"])
@@ -42,7 +43,7 @@ async def test_doc_conversion_rejects_failed_or_invalid_output(monkeypatch, fail
 
     monkeypatch.setattr(filepreview.subprocess, "run", convert)
     with pytest.raises(filepreview.OfficePreviewConversionError):
-        await filepreview.convert_doc_to_docx("案件.DOC", b"source")
+        await filepreview.convert_doc_to_docx(f"案件.{extension.upper()}", b"source")
     assert paths and all(not p.exists() for p in paths)
 
 

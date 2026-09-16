@@ -141,7 +141,7 @@ def _office_converter_executable() -> str:
 def _convert_office_sync(filename: str, content: bytes, output_format: str) -> bytes:
     """在独立临时目录与 LibreOffice 配置中转换现有两类 Office 用途。"""
     suffix = PurePosixPath(filename).suffix.lower()
-    allowed = _OFFICE_PDF_PREVIEW_EXTENSIONS if output_format == "pdf" else {".doc"}
+    allowed = _OFFICE_PDF_PREVIEW_EXTENSIONS if output_format == "pdf" else {".doc", ".wps"}
     if output_format not in {"pdf", "docx"} or suffix not in allowed:
         raise OfficePreviewConversionError("当前文件类型不支持此 Office 转换")
     format_label = output_format.upper()
@@ -211,7 +211,7 @@ async def convert_office_to_pdf(filename: str, content: bytes) -> bytes:
 
 
 async def convert_doc_to_docx(filename: str, content: bytes) -> bytes:
-    """把旧版 Word 转为 DOCX，供既有正文和表格解析器读取。"""
+    """把旧版 Word 或 WPS 转为 DOCX，供既有正文和表格解析器读取。"""
     return await asyncio.to_thread(_convert_office_sync, filename, content, "docx")
 
 
