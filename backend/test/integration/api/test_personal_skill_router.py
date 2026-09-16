@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import uuid
+import io
+import zipfile
 
 import pytest
 
@@ -10,6 +12,7 @@ import pytest
 async def test_personal_skill_install_list_preview_and_delete_without_database_record(
     test_client,
     standard_user,
+    admin_headers,
 ):
     """个人 Skill 应完成真实 API 生命周期，同时不改变共享 Skill 数据。"""
     headers = standard_user["headers"]
@@ -68,6 +71,20 @@ async def test_personal_skill_install_list_preview_and_delete_without_database_r
         )
         assert preview_response.status_code == 200, preview_response.text
         assert preview_response.json()["data"]["content"] == skill_md
+
+        export_url = f"/api/skills/personal/{slug}/export"
+        exported = await test_client.get(export_url, headers=headers)
+        assert exported.status_code == 200, exported.text
+        assert exported.headers["content-type"] == "application/zip"
+        with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+            assert archive.read(f"{slug}/SKILL.md").decode() == skill_md
+        anonymous = await test_client.get(export_url)
+        assert anonymous.status_code == 401
+        # 管理员也不能通过 uid 参数导出其他用户的个人目录。
+        other_user = await test_client.get(
+            export_url, headers=admin_headers, params={"uid": standard_user["user"]["uid"]}
+        )
+        assert other_user.status_code == 404
 
         shared_after = await test_client.get("/api/system/skills", headers=headers)
         assert shared_after.status_code == 200, shared_after.text

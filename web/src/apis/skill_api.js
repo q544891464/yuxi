@@ -111,6 +111,10 @@ export const exportSkill = async (slug) => {
   return apiGet(`${BASE_URL}/${encodeURIComponent(slug)}/export`, {}, true, 'blob')
 }
 
+export const exportPersonalSkill = async (slug) => {
+  return apiGet(`${USER_BASE_URL}/personal/${encodeURIComponent(slug)}/export`, {}, true, 'blob')
+}
+
 export const deleteSkill = async (slug) => {
   return apiDelete(`${BASE_URL}/${encodeURIComponent(slug)}`)
 }
@@ -147,6 +151,7 @@ export const skillApi = {
   updateSkillEnabled,
   deleteSkillFile,
   exportSkill,
+  exportPersonalSkill,
   deleteSkill,
   deletePersonalSkill,
   deleteSkillsBatch

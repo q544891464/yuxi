@@ -211,6 +211,12 @@
             </a-button>
           </div>
           <div class="skill-preview-footer-right">
+            <a-button
+              v-if="previewSkill.sourceScope === 'personal'"
+              :loading="exportingPersonalSkill"
+              @click="handleExportPersonalSkill"
+              >导出 ZIP</a-button
+            >
             <a-button @click="closeSkillPreview">关闭</a-button>
             <a-button
               v-if="previewSkill.sourceScope !== 'personal'"
@@ -604,6 +610,7 @@ const skillPreviewMarkdown = ref('')
 const skillPreviewLoading = ref(false)
 const skillPreviewError = ref('')
 const deletingPreviewSkill = ref(false)
+const exportingPersonalSkill = ref(false)
 let previewRequestSeq = 0
 const installFlowOpen = ref(false)
 const installFlow = ref(null)
@@ -836,6 +843,26 @@ const navigateToDetail = (skill) => {
 
 const closeSkillPreview = () => {
   skillPreviewVisible.value = false
+}
+
+const handleExportPersonalSkill = async () => {
+  const target = previewSkill.value
+  if (target?.sourceScope !== 'personal' || exportingPersonalSkill.value) return
+  exportingPersonalSkill.value = true
+  let url
+  try {
+    const response = await skillApi.exportPersonalSkill(target.slug)
+    url = URL.createObjectURL(await response.blob())
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${target.slug}.zip`
+    link.click()
+  } catch (error) {
+    message.error(error?.response?.data?.detail || error.message || '导出个人技能失败')
+  } finally {
+    if (url) URL.revokeObjectURL(url)
+    exportingPersonalSkill.value = false
+  }
 }
 
 const openSkillPreview = async (skill) => {

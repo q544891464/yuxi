@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import fcntl
 import hashlib
 import json
@@ -965,6 +966,69 @@ async def delete_personal_skill(uid: str, slug: str) -> None:
     if not skill_dir.is_dir():
         raise ValueError("个人 Skill 不存在")
     await asyncio.to_thread(shutil.rmtree, skill_dir)
+
+
+async def export_personal_skill_zip(uid: str, slug: str) -> tuple[str, str]:
+    """导出认证用户自己的个人技能，归档读取不跟随链接。"""
+    if not is_valid_skill_slug(slug):
+        raise ValueError("无效 skill slug")
+    return await asyncio.to_thread(_export_personal_skill_zip_sync, uid, slug)
+
+
+def _export_personal_skill_zip_sync(uid: str, slug: str) -> tuple[str, str]:
+    """通过固定目录句柄打包技能，失败时关闭并清理临时归档。"""
+    skill_dir = Path(os.path.abspath(get_personal_skills_root_dir(uid) / slug))
+    try:
+        directory_fd = open_directory_fd(Path(skill_dir.anchor), skill_dir.parts[1:])
+    except FileNotFoundError as exc:
+        raise ValueError("个人 Skill 不存在") from exc
+    except OSError as exc:
+        if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise ValueError("个人 Skill 路径非法") from exc
+        raise
+
+    export_path = None
+    try:
+        try:
+            manifest_mode = os.stat("SKILL.md", dir_fd=directory_fd, follow_symlinks=False).st_mode
+        except FileNotFoundError as exc:
+            raise ValueError("个人 Skill 缺少 SKILL.md") from exc
+        if not stat.S_ISREG(manifest_mode):
+            raise ValueError("个人 Skill 的 SKILL.md 必须是普通文件")
+        fd, export_path = tempfile.mkstemp(prefix=f"personal-skill-{slug}-", suffix=".zip")
+        with os.fdopen(fd, "w+b") as output, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+
+            def visit(parent_fd: int, prefix: str) -> None:
+                """逐级打开目录和文件，保留归档内相对路径与执行位。"""
+                for name in sorted(os.listdir(parent_fd)):
+                    mode = os.stat(name, dir_fd=parent_fd, follow_symlinks=False).st_mode
+                    if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                        raise ValueError("个人 Skill 包含符号链接或特殊文件")
+                    archive_name = f"{prefix}/{name}"
+                    if stat.S_ISDIR(mode):
+                        child_fd = open_directory_fd(parent_fd, (name,))
+                        try:
+                            archive.writestr(archive_name + "/", b"")
+                            visit(child_fd, archive_name)
+                        finally:
+                            os.close(child_fd)
+                    else:
+                        with open_regular_file_fd(parent_fd, (name,)) as (file_fd, file_stat):
+                            info = zipfile.ZipInfo(archive_name)
+                            info.compress_type = zipfile.ZIP_DEFLATED
+                            info.external_attr = file_stat.st_mode << 16
+                            with archive.open(info, "w") as target:
+                                while chunk := os.read(file_fd, 1024 * 1024):
+                                    target.write(chunk)
+
+            visit(directory_fd, slug)
+        return export_path, f"{slug}.zip"
+    except Exception:
+        if export_path:
+            Path(export_path).unlink(missing_ok=True)
+        raise
+    finally:
+        os.close(directory_fd)
 
 
 async def enable_personal_skills_for_agent_config(

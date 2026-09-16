@@ -20,6 +20,7 @@ from yuxi.agents.skills.service import (
     delete_personal_skill,
     discard_skill_install_draft,
     export_skill_zip,
+    export_personal_skill_zip,
     get_allowed_skill_access_levels,
     get_manageable_skill_or_raise,
     get_skill_dependency_options,
@@ -271,6 +272,24 @@ async def confirm_personal_skill_install_draft_route(
     except Exception as e:
         logger.error(f"Failed to confirm personal Skill draft '{draft_id}': {e}")
         raise HTTPException(status_code=500, detail="确认安装个人 Skill 失败")
+
+
+@user_skills.get("/personal/{slug}/export")
+async def export_personal_skill_route(
+    slug: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_required_user),
+):
+    """下载当前用户的个人技能归档。"""
+    try:
+        export_path, download_name = await export_personal_skill_zip(str(current_user.uid), slug)
+        background_tasks.add_task(_cleanup_export_file, export_path)
+        return FileResponse(path=export_path, media_type="application/zip", filename=download_name)
+    except ValueError as e:
+        _raise_from_value_error(e)
+    except OSError:
+        logger.exception("Failed to export personal skill archive")
+        raise HTTPException(status_code=500, detail="导出个人技能失败") from None
 
 
 @user_skills.get("/personal/{slug}/file")
