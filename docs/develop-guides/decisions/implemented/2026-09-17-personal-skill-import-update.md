@@ -20,6 +20,8 @@ Owner：backend/package/yuxi/agents/skills/service.py
 
 更新只作用于当前认证用户拥有的个人技能，仍通过现有草稿所有权和 slug、工作区路径校验执行。预览阶段不创建用户工作区，并拒绝符号链接路径；个人 Skill 的运行期预加载和 artifact 读取也复用同一用户锁。确认页显示“将更新”，结果显示“已更新”；旧目录替换过程不改变共享 Skill 数据。
 
+导入接口的 400 仍遵循前端统一错误脱敏策略；Skill 导入页将这类通用提示转换为不含内部路径或服务端细节的结构要求，直接提示 ZIP 只能包含一个 `SKILL.md`，方便用户修正归档。
+
 ## 验证
 
 - Linux 隔离容器运行 `test/unit/services/test_personal_skill_export.py test/unit/services/test_skill_service.py test/unit/routers/test_skill_router.py -q`：中间修订版 102 项通过；最后一次源码安全修订因远程 SSH 暂时不可达未重跑。

@@ -352,7 +352,7 @@ provide('settingsModal', {
     <header v-if="consumerChat" class="consumer-topbar">
       <RouterLink to="/chat" class="consumer-brand">
         <span class="consumer-logo" aria-hidden="true"></span>
-        <span><strong>智能辅助审理数字人</strong><small>税务审理智能助手</small></span>
+        <span><strong>智能辅助稽查数字人</strong><small>税务稽查智能助手</small></span>
       </RouterLink>
     </header>
     <div class="header" :class="{ 'consumer-history': consumerChat }">

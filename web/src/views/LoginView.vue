@@ -31,7 +31,7 @@
               ></span>
               <span class="brand-main">{{ brandName }}</span>
             </h1>
-            <small class="brand-subtitle">税务审理智能助手</small>
+            <small class="brand-subtitle">税务稽查智能助手</small>
           </div>
         </div>
       </div>
@@ -47,7 +47,7 @@
               <h2 v-if="isFirstRun" class="init-title">系统初始化，请创建超级管理员</h2>
               <template v-else>
                 <h2 class="welcome-text">欢迎登录</h2>
-                <p class="welcome-description">登录后开启您的智能辅助审理工作</p>
+                <p class="welcome-description">登录后开启您的智能辅助稽查工作</p>
               </template>
             </header>
 
@@ -310,7 +310,7 @@ const brandOrgName = computed(() => {
 })
 const brandName = computed(() => {
   const orgName = brandOrgName.value
-  const brandNameRaw = infoStore.branding?.name?.trim() || '智能辅助审理数字人'
+  const brandNameRaw = infoStore.branding?.name?.trim() || '智能辅助稽查数字人'
 
   if (orgName && brandNameRaw && orgName !== brandNameRaw) {
     return brandNameRaw

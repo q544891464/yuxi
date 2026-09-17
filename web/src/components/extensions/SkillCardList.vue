@@ -1067,6 +1067,13 @@ const beforeSkillUpload = (file) => {
   return true
 }
 
+const getSkillImportErrorMessage = (error) => {
+  if (error?.status === 400 && error?.response?.data?.detail === '请求参数错误') {
+    return 'Skill 导入失败：请检查文件格式、ZIP 内是否只有一个 SKILL.md，以及 SKILL.md 的 frontmatter 是否完整'
+  }
+  return error?.response?.data?.detail || error?.message || '解析 Skill 失败'
+}
+
 const openInstallFlow = (flow) => {
   installFlow.value = flow
   installFlowOpen.value = true
@@ -1114,7 +1121,7 @@ const handleImportUpload = async ({ file, onSuccess, onError }) => {
     })
     onSuccess?.(result)
   } catch (e) {
-    message.error(e?.response?.data?.detail || e.message || '解析 Skill 失败')
+    message.error(getSkillImportErrorMessage(e))
     onError?.(e)
   } finally {
     importing.value = false

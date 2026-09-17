@@ -92,3 +92,23 @@ test('个人技能导入更新在确认页和结果列表显示更新语义', ()
   assert.match(source, /item\.updated/)
   assert.match(source, /已更新/)
 })
+
+test('个人技能导入的通用 400 提示给出安全的归档结构指引', () => {
+  const node = scriptSetupAst.find(
+    (n) =>
+      n.type === 'VariableDeclaration' &&
+      n.declarations[0].id.name === 'getSkillImportErrorMessage'
+  )
+  assert.ok(node)
+  const code = descriptor.scriptSetup.content.slice(node.start, node.end)
+  const context = vm.createContext({})
+  vm.runInContext(code, context)
+  const message = vm.runInContext(
+    `getSkillImportErrorMessage({ status: 400, response: { data: { detail: '请求参数错误' } } })`,
+    context
+  )
+  assert.equal(
+    message,
+    'Skill 导入失败：请检查文件格式、ZIP 内是否只有一个 SKILL.md，以及 SKILL.md 的 frontmatter 是否完整'
+  )
+})

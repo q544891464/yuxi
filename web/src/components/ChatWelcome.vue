@@ -1,19 +1,19 @@
 <template>
-  <section class="chat-welcome" aria-label="智能辅助审理数字人欢迎页">
+  <section class="chat-welcome" aria-label="智能辅助稽查数字人欢迎页">
     <div class="welcome-hero">
-      <div class="assistant-portrait" role="img" aria-label="智能辅助审理数字人形象"></div>
+      <div class="assistant-portrait" role="img" aria-label="智能辅助稽查数字人形象"></div>
       <div class="welcome-copy">
         <span class="welcome-eyebrow">专业 · 规范 · 智能 · 高效</span>
         <h1>您好！</h1>
         <div class="welcome-rule"></div>
-        <p>我是您的智能辅助审理数字人，<br />请问需要协助什么？</p>
+        <p>我是您的智能辅助稽查数字人，<br />请问需要协助什么？</p>
       </div>
       <span class="welcome-motto">以数治税<br />以智助查</span>
     </div>
     <div class="welcome-role">
       <div class="role-symbol"><ShieldCheck :size="30" /></div>
       <div class="role-description">
-        <h2>辅助审理专员</h2>
+        <h2>辅助稽查专员</h2>
         <p>协助政策检索、风险核查、案卷整理与流程问答</p>
       </div>
       <dl class="resource-stats" aria-label="当前可访问资源" :aria-busy="loading">
