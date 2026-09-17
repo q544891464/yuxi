@@ -148,6 +148,16 @@ def _user_skills_file_lock(uid: str):
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
+@contextmanager
+def _personal_skill_storage_lock(uid: str):
+    """串行化个人 Skill 的读写，跨进程复用用户文件锁。"""
+    with _get_user_skills_lock(uid), _user_skills_file_lock(uid):
+        yield
+
+
+personal_skill_storage_lock = _personal_skill_storage_lock
+
+
 def normalize_string_list(values: list[str] | None) -> list[str]:
     if not values:
         return []
@@ -925,6 +935,27 @@ def _resolve_personal_skill_dir(root: Path, slug: str) -> Path:
     return target
 
 
+def _personal_skill_exists_for_update(uid: str, slug: str) -> bool:
+    """检查用户已有个人 Skill，预览阶段不创建工作区目录。"""
+    with _personal_skill_storage_lock(uid):
+        root = get_personal_skills_root_dir(uid)
+        if any(part.is_symlink() for part in _path_components(root)):
+            return False
+        target = _resolve_personal_skill_dir(root, slug)
+        return target.is_dir() and not target.is_symlink()
+
+
+def _path_components(path: Path) -> list[Path]:
+    """返回路径的每一级组件，用于 no-follow 检查。"""
+    current = Path(path.anchor)
+    components = [current]
+    parts = path.parts[1:] if path.anchor else path.parts
+    for part in parts:
+        current /= part
+        components.append(current)
+    return components
+
+
 async def list_personal_skills(uid: str) -> list[ResolvedSkill]:
     """直接扫描个人 Skill 持久目录。"""
     return await asyncio.to_thread(_scan_personal_skills, uid)
@@ -935,37 +966,49 @@ async def install_personal_skill_dir(
     source_dir: Path | str,
     *,
     expected_slug: str | None = None,
+    replace_existing: bool = False,
 ) -> ResolvedSkill:
-    """将一个 Skill 原子安装到当前用户个人持久源。"""
+    """将一个 Skill 原子安装到当前用户个人持久源，可选择更新同名目录。"""
     return await asyncio.to_thread(
         _install_personal_skill_dir_sync,
         uid,
         Path(source_dir),
         expected_slug=expected_slug,
+        replace_existing=replace_existing,
     )
 
 
 async def read_personal_skill_file(uid: str, slug: str, relative_path: str) -> dict[str, Any]:
     """读取个人 Skill 中的文本文件。"""
-    skill_dir = _resolve_personal_skill_dir(_personal_skills_root(uid), slug)
-    target, normalized_path = _resolve_relative_path(skill_dir, relative_path)
-    if not target.is_file():
-        raise ValueError("文件不存在")
-    if not _is_text_path(target):
-        raise ValueError("仅支持读取文本文件")
-    try:
-        content = target.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        raise ValueError("文件编码不支持（仅支持 UTF-8）") from exc
-    return {"path": normalized_path, "content": content}
+    with _personal_skill_storage_lock(uid):
+        skill_dir = _resolve_personal_skill_dir(_personal_skills_root(uid), slug)
+        _recover_pending_personal_install(skill_dir.parent)
+        target, normalized_path = _resolve_relative_path(skill_dir, relative_path)
+        if not target.is_file():
+            raise ValueError("文件不存在")
+        if not _is_text_path(target):
+            raise ValueError("仅支持读取文本文件")
+        try:
+            content = target.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("文件编码不支持（仅支持 UTF-8）") from exc
+        return {"path": normalized_path, "content": content}
 
 
 async def delete_personal_skill(uid: str, slug: str) -> None:
     """删除当前用户个人 Skill。"""
-    skill_dir = _resolve_personal_skill_dir(_personal_skills_root(uid), slug)
-    if not skill_dir.is_dir():
-        raise ValueError("个人 Skill 不存在")
-    await asyncio.to_thread(shutil.rmtree, skill_dir)
+    await asyncio.to_thread(_delete_personal_skill_sync, uid, slug)
+
+
+def _delete_personal_skill_sync(uid: str, slug: str) -> None:
+    """在用户锁内删除个人 Skill。"""
+    with _personal_skill_storage_lock(uid):
+        root = _personal_skills_root(uid)
+        _recover_pending_personal_install(root)
+        skill_dir = _resolve_personal_skill_dir(root, slug)
+        if not skill_dir.is_dir():
+            raise ValueError("个人 Skill 不存在")
+        shutil.rmtree(skill_dir)
 
 
 async def export_personal_skill_zip(uid: str, slug: str) -> tuple[str, str]:
@@ -977,6 +1020,13 @@ async def export_personal_skill_zip(uid: str, slug: str) -> tuple[str, str]:
 
 def _export_personal_skill_zip_sync(uid: str, slug: str) -> tuple[str, str]:
     """通过固定目录句柄打包技能，失败时关闭并清理临时归档。"""
+    with _personal_skill_storage_lock(uid):
+        _recover_pending_personal_install(get_personal_skills_root_dir(uid))
+        return _export_personal_skill_zip_locked(uid, slug)
+
+
+def _export_personal_skill_zip_locked(uid: str, slug: str) -> tuple[str, str]:
+    """在用户锁内通过固定目录句柄打包技能。"""
     skill_dir = Path(os.path.abspath(get_personal_skills_root_dir(uid) / slug))
     try:
         directory_fd = open_directory_fd(Path(skill_dir.anchor), skill_dir.parts[1:])
@@ -1118,22 +1168,60 @@ def _resolved_personal_skill(uid: str, root: Path, metadata: dict[str, Any]) -> 
 def _scan_personal_skills(uid: str) -> list[ResolvedSkill]:
     """扫描并校验当前用户个人 Skill 的直接子目录。"""
     items: list[ResolvedSkill] = []
-    root = _personal_skills_root(uid)
-    for entry in sorted(root.iterdir(), key=lambda path: path.name):
-        if entry.is_symlink() or not entry.is_dir() or not is_valid_skill_slug(entry.name):
-            logger.warning(f"跳过非法个人 Skill 目录: uid={uid}, name={entry.name}")
-            continue
-        if _dir_contains_symlink(entry):
-            logger.warning(f"跳过包含符号链接的个人 Skill: uid={uid}, slug={entry.name}")
-            continue
-        try:
-            metadata = parse_skill_dir_metadata(entry)
-            if metadata["slug"] != entry.name:
-                raise ValueError("目录名必须与 SKILL.md slug 一致")
-            items.append(_resolved_personal_skill(uid, root, metadata))
-        except Exception as exc:
-            logger.warning(f"跳过无法解析的个人 Skill: uid={uid}, slug={entry.name}, error={exc}")
+    with _personal_skill_storage_lock(uid):
+        root = _personal_skills_root(uid)
+        _recover_pending_personal_install(root)
+        for entry in sorted(root.iterdir(), key=lambda path: path.name):
+            if entry.is_symlink() or not entry.is_dir() or not is_valid_skill_slug(entry.name):
+                logger.warning(f"跳过非法个人 Skill 目录: uid={uid}, name={entry.name}")
+                continue
+            if _dir_contains_symlink(entry):
+                logger.warning(f"跳过包含符号链接的个人 Skill: uid={uid}, slug={entry.name}")
+                continue
+            try:
+                metadata = parse_skill_dir_metadata(entry)
+                if metadata["slug"] != entry.name:
+                    raise ValueError("目录名必须与 SKILL.md slug 一致")
+                items.append(_resolved_personal_skill(uid, root, metadata))
+            except Exception as exc:
+                logger.warning(f"跳过无法解析的个人 Skill: uid={uid}, slug={entry.name}, error={exc}")
     return items
+
+
+def _recover_pending_personal_install(root: Path) -> None:
+    """根据安装标记恢复目录替换中断留下的旧目录。"""
+    marker = root / ".install.pending.json"
+    if marker.is_symlink():
+        marker.unlink(missing_ok=True)
+        return
+    if not marker.is_file():
+        return
+    recovered = False
+    try:
+        state = json.loads(marker.read_text(encoding="utf-8"))
+        target = _resolve_personal_skill_dir(root, str(state.get("slug") or ""))
+        backup_name = str(state.get("backup") or "")
+        temp_name = str(state.get("temp") or "")
+        if backup_name and (Path(backup_name).name != backup_name or not backup_name.startswith(".install.backup-")):
+            return
+        if temp_name and (Path(temp_name).name != temp_name or not temp_name.startswith(".install.tmp-")):
+            return
+        backup = root / backup_name if backup_name else None
+        temp = root / temp_name if temp_name else None
+        if backup and backup.exists() and (backup.is_symlink() or not backup.is_dir()):
+            return
+        if temp and temp.exists() and (temp.is_symlink() or not temp.is_dir()):
+            return
+        if target.exists() and backup and backup.is_dir() and not backup.is_symlink():
+            shutil.rmtree(backup, ignore_errors=True)
+        elif not target.exists() and backup and backup.is_dir() and not backup.is_symlink():
+            backup.rename(target)
+        if temp and temp.is_dir() and not temp.is_symlink():
+            shutil.rmtree(temp, ignore_errors=True)
+        recovered = True
+    finally:
+        if recovered:
+            marker.unlink(missing_ok=True)
 
 
 def _install_personal_skill_dir_sync(
@@ -1141,27 +1229,77 @@ def _install_personal_skill_dir_sync(
     source_dir: Path,
     *,
     expected_slug: str | None = None,
+    replace_existing: bool = False,
 ) -> ResolvedSkill:
+    """同步安装个人 Skill，并保留旧接口的返回形状。"""
+    item, _updated = _install_personal_skill_dir_with_status_sync(
+        uid,
+        source_dir,
+        expected_slug=expected_slug,
+        replace_existing=replace_existing,
+    )
+    return item
+
+
+def _install_personal_skill_dir_with_status_sync(
+    uid: str,
+    source_dir: Path,
+    *,
+    expected_slug: str | None = None,
+    replace_existing: bool = False,
+) -> tuple[ResolvedSkill, bool]:
     """将一个 Skill 原子复制到个人目录。"""
-    source_dir = source_dir.resolve()
-    root = _personal_skills_root(uid)
-    temp_target = root / f".install.tmp-{uuid.uuid4().hex[:8]}"
-    target_dir: Path | None = None
-    try:
-        metadata = _copy_skill_snapshot(source_dir, temp_target, expected_slug=expected_slug)
-        slug = metadata["slug"]
-        target_dir = root / slug
-        if target_dir.exists() or target_dir.is_symlink():
-            raise ValueError(f"个人 Skill 源已存在同名 Skill: {slug}")
-        temp_target.rename(target_dir)
-    except (FileExistsError, OSError) as exc:
-        if target_dir is None or not target_dir.exists():
+    with _personal_skill_storage_lock(uid):
+        source_dir = source_dir.resolve()
+        root = _personal_skills_root(uid)
+        _recover_pending_personal_install(root)
+        temp_target = root / f".install.tmp-{uuid.uuid4().hex[:8]}"
+        target_dir: Path | None = None
+        backup_dir: Path | None = None
+        marker = root / ".install.pending.json"
+        slug = expected_slug or ""
+        published = False
+        updated = False
+        try:
+            metadata = _copy_skill_snapshot(source_dir, temp_target, expected_slug=expected_slug)
+            slug = metadata["slug"]
+            target_dir = root / slug
+            if target_dir.is_symlink() or (target_dir.exists() and not replace_existing):
+                raise ValueError(f"个人 Skill 源已存在同名 Skill: {slug}")
+            updated = target_dir.exists()
+            backup_name = ""
+            if target_dir.exists():
+                backup_dir = root / f".install.backup-{uuid.uuid4().hex[:8]}"
+                backup_name = backup_dir.name
+            marker.write_text(
+                json.dumps({"slug": slug, "backup": backup_name, "temp": temp_target.name}),
+                encoding="utf-8",
+            )
+            if backup_dir:
+                target_dir.rename(backup_dir)
+            temp_target.rename(target_dir)
+            if backup_dir:
+                shutil.rmtree(backup_dir)
+                backup_dir = None
+            published = True
+            marker.unlink(missing_ok=True)
+        except (FileExistsError, OSError) as exc:
+            if backup_dir and backup_dir.exists() and target_dir and not target_dir.exists():
+                backup_dir.rename(target_dir)
+                backup_dir = None
+            if isinstance(exc, FileExistsError) and not replace_existing:
+                raise ValueError(f"个人 Skill 源已存在同名 Skill: {slug}") from exc
             raise
-        raise ValueError(f"个人 Skill 源已存在同名 Skill: {slug}") from exc
-    finally:
-        if temp_target.exists():
-            shutil.rmtree(temp_target, ignore_errors=True)
-    return _resolved_personal_skill(uid, root, metadata)
+        finally:
+            if temp_target.exists():
+                shutil.rmtree(temp_target, ignore_errors=True)
+            if backup_dir:
+                if target_dir and target_dir.exists():
+                    shutil.rmtree(target_dir, ignore_errors=True)
+                backup_dir.rename(target_dir)
+            if published:
+                marker.unlink(missing_ok=True)
+        return _resolved_personal_skill(uid, root, metadata), updated
 
 
 async def _stage_skill_draft_item(
@@ -1293,6 +1431,7 @@ async def prepare_skill_upload(
                 (source_skill_dir / "SKILL.md").write_bytes(file_bytes)
 
             item = await _stage_skill_draft_item(repo, source_skill_dir=source_skill_dir, draft_items_dir=items_dir)
+            item["personal_update"] = _personal_skill_exists_for_update(str(operator.uid), item["original_name"])
 
         data = {
             "draft_id": draft_dir.name,
@@ -1343,6 +1482,7 @@ async def prepare_remote_skill_install(
                     source_skill_dir=Path(result["source_dir"]),
                     draft_items_dir=items_dir,
                 )
+                item["personal_update"] = _personal_skill_exists_for_update(str(operator.uid), item["original_name"])
             except Exception as e:
                 item = {"slug": slug, "success": False, "error": str(e)}
                 items.append(item)
@@ -1491,16 +1631,19 @@ async def confirm_personal_skill_install_draft(
         source_dir = (draft_dir / str(draft_item.get("source_dir", ""))).resolve()
         try:
             source_dir.relative_to(draft_dir.resolve())
-            item = await install_personal_skill_dir(
+            item, updating = await asyncio.to_thread(
+                _install_personal_skill_dir_with_status_sync,
                 str(operator.uid),
                 source_dir,
                 expected_slug=personal_slug,
+                replace_existing=True,
             )
             results.append(
                 {
                     "slug": item.slug,
                     "requested_slug": requested_slug,
                     "success": True,
+                    "updated": updating,
                     "skill": item.to_dict(),
                 }
             )

@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, TypedDict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.agents.backends.paths import VIRTUAL_PERSONAL_SKILLS_PATH, VIRTUAL_SKILLS_PATH
-from yuxi.agents.skills.service import list_accessible_skills, normalize_string_list
+from yuxi.agents.skills.service import (
+    list_accessible_skills,
+    normalize_string_list,
+    personal_skill_storage_lock,
+)
 from yuxi.agents.toolkits import get_all_tool_instances
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.logging_config import logger
@@ -123,15 +128,20 @@ def _read_preloaded_skill_contents(slugs: list[str], skill_items: dict[str, Any]
     contents: dict[str, str] = {}
     for slug in slugs:
         try:
-            source_dir = Path(skill_items[slug].source_dir)
-            if not source_dir.is_absolute() or ".." in source_dir.parts:
-                raise OSError("Skill 来源目录必须是规范化绝对路径")
-            with open_regular_file_fd(
-                Path(source_dir.anchor),
-                (*source_dir.parts[1:], "SKILL.md"),
-            ) as (file_fd, _file_stat):
-                with os.fdopen(os.dup(file_fd), encoding="utf-8") as skill_file:
-                    contents[slug] = skill_file.read()
+            skill = skill_items[slug]
+            skill_scope = getattr(skill, "source_scope", None)
+            skill_uid = getattr(skill, "created_by", None)
+            lock = personal_skill_storage_lock(skill_uid) if skill_scope == "personal" and skill_uid else nullcontext()
+            with lock:
+                source_dir = Path(skill.source_dir)
+                if not source_dir.is_absolute() or ".." in source_dir.parts:
+                    raise OSError("Skill 来源目录必须是规范化绝对路径")
+                with open_regular_file_fd(
+                    Path(source_dir.anchor),
+                    (*source_dir.parts[1:], "SKILL.md"),
+                ) as (file_fd, _file_stat):
+                    with os.fdopen(os.dup(file_fd), encoding="utf-8") as skill_file:
+                        contents[slug] = skill_file.read()
         except (OSError, UnicodeError) as exc:
             raise RuntimeError(f"预加载 Skill '{slug}' 失败：根级 SKILL.md 不可读") from exc
     return contents

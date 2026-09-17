@@ -78,6 +78,27 @@ async def test_personal_skill_install_list_preview_and_delete_without_database_r
         assert exported.headers["content-type"] == "application/zip"
         with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
             assert archive.read(f"{slug}/SKILL.md").decode() == skill_md
+        updated_skill_md = skill_md.replace("# Personal", "# Updated personal skill")
+        update_prepare = await test_client.post(
+            "/api/skills/import/prepare",
+            headers=headers,
+            files={"file": ("SKILL.md", updated_skill_md.encode(), "text/markdown")},
+        )
+        assert update_prepare.status_code == 200, update_prepare.text
+        update_draft = update_prepare.json()["data"]
+        assert update_draft["items"][0]["personal_update"] is True
+        update_confirm = await test_client.post(
+            f"/api/skills/personal/install-drafts/{update_draft['draft_id']}/confirm",
+            headers=headers,
+            json={"slugs": [update_draft["items"][0]["slug"]]},
+        )
+        assert update_confirm.status_code == 200, update_confirm.text
+        assert update_confirm.json()["data"][0]["updated"] is True
+        assert update_confirm.json()["data"][0]["slug"] == slug
+        updated_preview = await test_client.get(
+            f"/api/skills/personal/{slug}/file", headers=headers, params={"path": "SKILL.md"}
+        )
+        assert updated_preview.json()["data"]["content"] == updated_skill_md
         anonymous = await test_client.get(export_url)
         assert anonymous.status_code == 401
         # 管理员也不能通过 uid 参数导出其他用户的个人目录。

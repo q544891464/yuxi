@@ -13,12 +13,13 @@ from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
 from yuxi.agents.backends.paths import (
     VIRTUAL_PATH_PREFIX,
+    VIRTUAL_PERSONAL_SKILLS_PATH,
     VIRTUAL_SKILLS_PATH,
     is_runtime_path,
     runtime_user_data_path,
     workspace_scope_from_runtime_path,
 )
-from yuxi.agents.skills.service import ResolvedSkill, list_accessible_skills
+from yuxi.agents.skills.service import ResolvedSkill, list_accessible_skills, personal_skill_storage_lock
 from yuxi.repositories.user_repository import UserRepository
 from yuxi.services.file_preview import render_file_preview
 from yuxi.services.workdir_service import resolve_authorized_workdir
@@ -43,6 +44,7 @@ def _normalize_artifact_path(workdir_path: str, path: str) -> str:
         raise HTTPException(status_code=403, detail="access denied")
     allowed = normalized.startswith(f"{workdir_path}/") or normalized.startswith(f"{VIRTUAL_PATH_PREFIX.rstrip('/')}/")
     allowed = allowed or normalized.startswith(f"{VIRTUAL_SKILLS_PATH}/")
+    allowed = allowed or normalized.startswith(f"{VIRTUAL_PERSONAL_SKILLS_PATH}/")
     if not allowed:
         raise HTTPException(status_code=403, detail="artifact is outside the current user's visible roots")
     return normalized
@@ -51,8 +53,9 @@ def _normalize_artifact_path(workdir_path: str, path: str) -> str:
 async def _require_skill_artifact_access(
     *, normalized_path: str, current_uid: str, db
 ) -> tuple[ResolvedSkill, str] | None:
-    skills_prefix = f"{VIRTUAL_SKILLS_PATH}/"
-    if not normalized_path.startswith(skills_prefix):
+    skill_prefixes = (f"{VIRTUAL_SKILLS_PATH}/", f"{VIRTUAL_PERSONAL_SKILLS_PATH}/")
+    skills_prefix = next((prefix for prefix in skill_prefixes if normalized_path.startswith(prefix)), None)
+    if skills_prefix is None:
         return None
     slug = normalized_path[len(skills_prefix) :].split("/", 1)[0]
     user = await UserRepository(db).get_by_uid(str(current_uid))
@@ -73,24 +76,30 @@ def _copy_skill_file_to_path(skill: ResolvedSkill, relative_path: str, target_pa
     parts = tuple(PurePosixPath(relative_path).parts)
     if not parts or ".." in parts:
         raise ValueError("invalid skill artifact path")
-    target_fd = None
-    with open_regular_file_fd(skill.source_dir, parts) as (source_fd, source_stat):
-        if source_stat.st_size > max_bytes:
-            raise FileTransferLimitError("file exceeds transfer limit")
-        try:
-            target_fd = os.open(target_path, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW)
-            total = 0
-            while chunk := os.read(source_fd, 1024 * 1024):
-                total += len(chunk)
-                if total > max_bytes:
-                    raise FileTransferLimitError("file exceeds transfer limit")
-                offset = 0
-                while offset < len(chunk):
-                    offset += os.write(target_fd, chunk[offset:])
-            return total
-        finally:
-            if target_fd is not None:
-                os.close(target_fd)
+    skill_scope = getattr(skill, "source_scope", None)
+    skill_uid = getattr(skill, "created_by", None)
+    lock = (
+        personal_skill_storage_lock(skill_uid) if skill_scope == "personal" and skill_uid else contextlib.nullcontext()
+    )
+    with lock:
+        target_fd = None
+        with open_regular_file_fd(skill.source_dir, parts) as (source_fd, source_stat):
+            if source_stat.st_size > max_bytes:
+                raise FileTransferLimitError("file exceeds transfer limit")
+            try:
+                target_fd = os.open(target_path, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW)
+                total = 0
+                while chunk := os.read(source_fd, 1024 * 1024):
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise FileTransferLimitError("file exceeds transfer limit")
+                    offset = 0
+                    while offset < len(chunk):
+                        offset += os.write(target_fd, chunk[offset:])
+                return total
+            finally:
+                if target_fd is not None:
+                    os.close(target_fd)
 
 
 async def _copy_artifact_to_path(

@@ -52,6 +52,72 @@ async def test_export_preserves_tree_bytes_and_executable_mode(personal_root):
 
 
 @pytest.mark.asyncio
+async def test_install_personal_skill_replaces_existing_directory_atomically(personal_root, tmp_path, monkeypatch):
+    """同名个人 Skill 更新后只保留新目录，失败前的旧目录仍可恢复。"""
+    monkeypatch.setattr(svc, "_personal_skills_root", lambda uid: personal_root.parent)
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "SKILL.md").write_text("---\nname: demo\ndescription: updated\n---\n# Updated\n")
+    old = personal_root / "legacy.txt"
+    old.write_text("old")
+    updated = await svc.install_personal_skill_dir("alice", source, expected_slug="demo", replace_existing=True)
+    assert updated.slug == "demo"
+    assert (personal_root / "SKILL.md").read_text().endswith("# Updated\n")
+    assert not old.exists()
+
+
+@pytest.mark.asyncio
+async def test_install_personal_skill_restores_old_directory_when_publish_fails(personal_root, tmp_path, monkeypatch):
+    """发布暂存目录失败时，旧个人 Skill 必须恢复。"""
+    monkeypatch.setattr(svc, "_personal_skills_root", lambda uid: personal_root.parent)
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "SKILL.md").write_text("---\nname: demo\ndescription: updated\n---\n# Updated\n")
+
+    original_rename = Path.rename
+
+    def fail_publish(path, target):
+        if path.name.startswith(".install.tmp-"):
+            raise OSError("publish failed")
+        return original_rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", fail_publish)
+    with pytest.raises(OSError, match="publish failed"):
+        await svc.install_personal_skill_dir("alice", source, expected_slug="demo", replace_existing=True)
+    assert (personal_root / "SKILL.md").read_bytes() == b"# personal skill\n"
+
+
+def test_personal_update_probe_rejects_symlinked_workspace_component(tmp_path, monkeypatch):
+    """预览检查遇到工作区符号链接时必须 fail-closed。"""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    linked = tmp_path / "linked"
+    linked.symlink_to(outside, target_is_directory=True)
+    (outside / "demo").mkdir()
+    monkeypatch.setattr(svc, "get_personal_skills_root_dir", lambda uid: linked)
+    assert svc._personal_skill_exists_for_update("alice", "demo") is False
+
+
+def test_recover_pending_personal_install_restores_backup(tmp_path):
+    """进程中断后再次访问个人 Skill 时恢复旧目录并清理暂存目录。"""
+    root = tmp_path / "skills"
+    root.mkdir()
+    backup = root / ".install.backup-test"
+    backup.mkdir()
+    (backup / "SKILL.md").write_text("old")
+    temp = root / ".install.tmp-test"
+    temp.mkdir()
+    (root / ".install.pending.json").write_text(
+        '{"slug":"demo","backup":".install.backup-test","temp":".install.tmp-test"}'
+    )
+    svc._recover_pending_personal_install(root)
+    assert (root / "demo" / "SKILL.md").read_text() == "old"
+    assert not backup.exists()
+    assert not temp.exists()
+    assert not (root / ".install.pending.json").exists()
+
+
+@pytest.mark.asyncio
 async def test_export_does_not_fallback_to_another_user(personal_root):
     """同名技能不存在时，不能从其他用户目录返回内容。"""
     with pytest.raises(ValueError, match="不存在"):

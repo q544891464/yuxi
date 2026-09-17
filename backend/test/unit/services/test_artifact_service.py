@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 from pathlib import Path
 
@@ -115,6 +116,34 @@ async def test_artifact_allows_project_user_data_and_authorized_skills(live_file
         )
         assert Path(response.path).read_bytes() == live_files.expected_bytes(path)
         await response.background()
+
+
+@pytest.mark.asyncio
+async def test_artifact_allows_authorized_personal_skill_source(live_files, monkeypatch, tmp_path):
+    personal_dir = tmp_path / "personal-reporter"
+    personal_dir.mkdir()
+    (personal_dir / "SKILL.md").write_bytes(b"personal skill")
+    personal_skill = type(
+        "PersonalSkill",
+        (),
+        {
+            "slug": "personal-reporter",
+            "source_dir": personal_dir,
+            "source_scope": "personal",
+            "created_by": "user-1",
+        },
+    )()
+    monkeypatch.setattr(svc, "list_accessible_skills", lambda _db, _user: _async_value([personal_skill]))
+    monkeypatch.setattr(svc, "personal_skill_storage_lock", lambda _uid: contextlib.nullcontext())
+
+    response = await svc.resolve_thread_artifact_view(
+        thread_id="thread-1",
+        current_uid="user-1",
+        db=object(),
+        path="/home/gem/user-data/agents/skills/personal-reporter/SKILL.md",
+    )
+    assert Path(response.path).read_bytes() == b"personal skill"
+    await response.background()
 
 
 @pytest.mark.asyncio

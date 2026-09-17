@@ -81,3 +81,14 @@ test('共享技能不能走个人导出接口', async () => {
   await state.run()
   assert.equal(state.downloads.length, 0)
 })
+
+test('个人技能导入更新在确认页和结果列表显示更新语义', () => {
+  const source = readFileSync(
+    new URL('../../src/components/extensions/SkillInstallFlowModal.vue', import.meta.url),
+    'utf8'
+  )
+  assert.match(source, /item\.personal_update/)
+  assert.match(source, /确认安装\/更新/)
+  assert.match(source, /item\.updated/)
+  assert.match(source, /已更新/)
+})

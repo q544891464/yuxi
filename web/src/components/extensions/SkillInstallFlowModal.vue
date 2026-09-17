@@ -107,6 +107,12 @@
                 <small>{{ item.description || item.error || '暂无描述' }}</small>
               </span>
               <span v-if="item.success === false" class="status-badge error">解析失败</span>
+              <span
+                v-else-if="installTarget === 'personal' && item.personal_update"
+                class="status-badge neutral"
+              >
+                将更新
+              </span>
               <button
                 type="button"
                 class="review-remove-button"
@@ -204,7 +210,7 @@
             <template v-else-if="phase === 'reviewing'">
               <a-button @click="handleClose">取消</a-button>
               <a-button type="primary" :disabled="readyItems.length === 0" @click="installDrafts">
-                确认安装 {{ readyItems.length }} 个 Skill · {{ installTargetLabel }}
+                {{ installActionLabel }} {{ readyItems.length }} 个 Skill · {{ installTargetLabel }}
               </a-button>
             </template>
             <template v-else-if="phase === 'installing'">
@@ -264,8 +270,10 @@ const StatusItemList = defineComponent({
       if (status === 'active') return LoaderCircle
       return Circle
     }
-    const labelFor = (status) =>
-      ({ waiting: '等待', active: '处理中', success: '完成', failed: '失败' })[status] || status
+    const labelFor = (status, item) => {
+      if (status === 'success' && item.updated) return '已更新'
+      return ({ waiting: '等待', active: '处理中', success: '完成', failed: '失败' })[status] || status
+    }
     return () =>
       h(
         'div',
@@ -280,7 +288,7 @@ const StatusItemList = defineComponent({
                 h('strong', item.name || item.slug),
                 h('small', item.error || item.description || item.slug)
               ]),
-              h('span', { class: ['status-badge', item.status] }, labelFor(item.status))
+              h('span', { class: ['status-badge', item.status] }, labelFor(item.status, item))
             ]
           )
         )
@@ -310,6 +318,12 @@ const shareScopeLabel = computed(() => {
 })
 const installTargetLabel = computed(() =>
   installTarget.value === 'personal' ? '个人 Skill' : shareScopeLabel.value
+)
+const personalUpdateCount = computed(
+  () => readyItems.value.filter((item) => item.personal_update).length
+)
+const installActionLabel = computed(() =>
+  installTarget.value === 'personal' && personalUpdateCount.value ? '确认安装/更新' : '确认安装'
 )
 const failedInstallItems = computed(() =>
   installItems.value.filter((item) => item.status === 'failed')
@@ -506,7 +520,8 @@ const applyInstallResults = (results, source) => {
     if (!item) return
     Object.assign(item, {
       status: result.success ? 'success' : 'failed',
-      error: result.error || ''
+      error: result.error || '',
+      updated: Boolean(result.updated)
     })
   })
 }
