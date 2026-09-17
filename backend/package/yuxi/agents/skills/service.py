@@ -1422,10 +1422,19 @@ async def prepare_skill_upload(
                 with zipfile.ZipFile(zip_path, "r") as zf:
                     _validate_zip_paths(zf)
                     zf.extractall(extract_dir)
-                skill_md_files = list(extract_dir.rglob("SKILL.md"))
+                skill_md_files = [
+                    path
+                    for path in extract_dir.rglob("*")
+                    if path.is_file() and not path.is_symlink() and path.name.lower() == "skill.md"
+                ]
                 if len(skill_md_files) != 1:
-                    raise ValueError("ZIP 必须且只能包含一个技能（检测到一个 SKILL.md）")
-                source_skill_dir = skill_md_files[0].parent
+                    raise ValueError(f"ZIP 必须且只能包含一个技能（检测到 {len(skill_md_files)} 个 SKILL.md）")
+                skill_md_path = skill_md_files[0]
+                if skill_md_path.name != "SKILL.md":
+                    canonical_path = skill_md_path.with_name("SKILL.md")
+                    skill_md_path.rename(canonical_path)
+                    skill_md_path = canonical_path
+                source_skill_dir = skill_md_path.parent
             else:
                 source_skill_dir = extract_dir
                 (source_skill_dir / "SKILL.md").write_bytes(file_bytes)

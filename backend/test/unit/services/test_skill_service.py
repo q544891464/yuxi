@@ -1200,6 +1200,34 @@ async def test_skill_zip_import_uses_skill_md_name_not_zip_or_root_dir(tmp_path:
 
 
 @pytest.mark.asyncio
+async def test_skill_zip_import_accepts_case_insensitive_skill_md_filename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def exists_slug(self, _slug: str) -> bool:
+            return False
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+    zip_bytes = _build_zip(
+        {
+            "demo/skill.md": "---\nname: demo\ndescription: demo skill\n---\n# Demo\n",
+        }
+    )
+
+    draft = await svc.prepare_skill_upload(
+        None,
+        filename="demo.zip",
+        file_bytes=zip_bytes,
+        operator=_user("root"),
+    )
+
+    assert draft["items"][0]["original_name"] == "demo"
+
+
+@pytest.mark.asyncio
 async def test_skill_zip_import_validates_skill_md_name_not_zip_filename(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
