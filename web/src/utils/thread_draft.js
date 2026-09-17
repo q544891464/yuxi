@@ -2,7 +2,7 @@
  * 对话输入框草稿的本地存储与线程切换管理。
  *
  * 草稿按线程 ID 保存在 localStorage 中，刷新页面后仍可还原；
- * 新建但尚未创建线程的对话使用 DRAFT_THREAD_ID 作为临时标识，
+ * 新建对话由调用方提供用户、智能体和项目范围内的临时标识，
  * 线程创建成功后由调用方清理临时草稿（内容已随消息发送）。
  */
 
@@ -58,8 +58,13 @@ export const createThreadDraftStore = (storage = globalThis.localStorage) => {
  * @param {ReturnType<typeof createThreadDraftStore>} store 草稿存储
  * @param {string} initialThreadId 初始化时所在的线程 ID，可为空
  */
-export const createThreadDraftSession = (store, initialThreadId = '') => {
-  let draftKey = initialThreadId || DRAFT_THREAD_ID
+export const createThreadDraftSession = (
+  store,
+  initialThreadId = '',
+  initialDraftId = DRAFT_THREAD_ID
+) => {
+  let temporaryKey = initialDraftId
+  let draftKey = initialThreadId || temporaryKey
 
   return {
     // 输入变化时实时保存当前线程的草稿
@@ -69,12 +74,19 @@ export const createThreadDraftSession = (store, initialThreadId = '') => {
     // 切换线程：先保存旧线程草稿，再返回新线程（或新建对话）的草稿
     switchThread(threadId, currentText) {
       store.write(draftKey, currentText)
-      draftKey = threadId || DRAFT_THREAD_ID
+      draftKey = threadId || temporaryKey
       return store.read(draftKey)
     },
     // 由草稿发送创建新线程后，清理新建对话的临时草稿，避免已发送文本被再次还原
     clearDraftThread() {
-      store.remove(DRAFT_THREAD_ID)
+      store.remove(temporaryKey)
+    },
+    // 仅在尚未创建线程时切换项目草稿，已上传文件不随之迁移。
+    switchDraftContext(nextKey, currentText) {
+      store.write(draftKey, currentText)
+      temporaryKey = nextKey
+      draftKey = nextKey
+      return store.read(draftKey)
     }
   }
 }

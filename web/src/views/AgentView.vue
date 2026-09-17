@@ -8,9 +8,23 @@
           :single-mode="false"
           :initial-project-id="routeDraftProjectId"
           @thread-change="handleThreadChange"
+          @skill-entry-cleared="handleSkillEntryCleared"
         >
-          <template v-if="consumerChat" #welcome="{ setPrompt }">
-            <ChatWelcome @prompt="setPrompt" />
+          <template
+            v-if="consumerChat"
+            #welcome="{ skillEntry, skillAvailable, upload, projectName, uploadDisabled }"
+          >
+            <ChatWelcome :skill-selected="!!skillEntry">
+              <template #skill-description>
+                <SkillStartPanel
+                  :entry="skillEntry"
+                  :available="skillAvailable"
+                  :disabled="uploadDisabled"
+                  :project-name="projectName"
+                  @upload="upload"
+                />
+              </template>
+            </ChatWelcome>
           </template>
           <template v-if="consumerChat" #input-decoration="{ isStartScreen }">
             <div v-if="!isStartScreen" class="composer-mascot" aria-hidden="true">
@@ -130,6 +144,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { agentApi } from '@/apis/agent_api'
 import { useOutsidePointerdown } from '@/composables/useOutsidePointerdown'
 import ChatWelcome from '@/components/ChatWelcome.vue'
+import SkillStartPanel from '@/components/SkillStartPanel.vue'
 import AgentChatComponent from '@/components/AgentChatComponent.vue'
 import AgentEditModal from '@/components/model-management/AgentEditModal.vue'
 import { isBuiltinAgent, useAgentStore } from '@/stores/agent'
@@ -155,6 +170,7 @@ const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'
 const { agents, selectedAgentId, isLoadingConfig } = storeToRefs(agentStore)
 
 const syncingRouteThread = ref(false)
+let routeSyncVersion = 0
 
 const getRouteThreadId = () => {
   const value = route.params.thread_id
@@ -177,21 +193,36 @@ const syncSelectedThreadFromRoute = async () => {
   if (!chatComponent?.selectThreadFromRoute) return
 
   const threadId = getRouteThreadId()
+  const version = ++routeSyncVersion
+  const requestedSkill = route.query.skill
   syncingRouteThread.value = true
   try {
     if (!threadId && !agentStore.isInitialized) {
       await agentStore.initialize()
     }
 
+    if (version !== routeSyncVersion || !agentStore.isInitialized) return
+
     const ok = await chatComponent.selectThreadFromRoute(threadId)
-    if (ok === null) return
+    if (ok === null || version !== routeSyncVersion) return
+    if (!threadId && requestedSkill) {
+      const selection = await chatComponent.prepareSkillEntry(String(requestedSkill))
+      if (selection?.accepted === false && version === routeSyncVersion) {
+        await router.replace({
+          name: entryRoute.value,
+          query: { ...route.query, skill: selection.activeId || undefined }
+        })
+      }
+    } else if (!threadId) {
+      chatComponent.clearSkillEntry()
+    }
     if (threadId && !ok) {
       await router.replace({ name: entryRoute.value })
     }
   } catch (error) {
     handleChatError(error, 'load')
   } finally {
-    syncingRouteThread.value = false
+    if (version === routeSyncVersion) syncingRouteThread.value = false
   }
 }
 
@@ -218,7 +249,12 @@ const consumeRouteAgentSelection = async () => {
 }
 
 watch(
-  () => route.params.thread_id,
+  () => [
+    route.params.thread_id,
+    route.query.skill,
+    route.query.project_id,
+    agentStore.isInitialized
+  ],
   () => {
     syncSelectedThreadFromRoute()
   },
@@ -249,6 +285,11 @@ const handleThreadChange = (threadId) => {
   } else {
     router.replace({ name: entryRoute.value })
   }
+}
+
+const handleSkillEntryCleared = () => {
+  if (getRouteThreadId() || !route.query.skill) return
+  router.replace({ name: entryRoute.value, query: { ...route.query, skill: undefined } })
 }
 
 const agentQuickSwitchOptions = computed(() =>

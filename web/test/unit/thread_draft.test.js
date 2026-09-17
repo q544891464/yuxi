@@ -18,6 +18,27 @@ const createMemoryStorage = () => {
   }
 }
 
+test('项目新草稿相互隔离，上传提升线程后只清除原项目临时草稿', () => {
+  const store = createThreadDraftStore(createMemoryStorage())
+  const session = createThreadDraftSession(store, '', '__draft__:user:agent:project-a')
+  session.saveInput('项目 A 的技能材料')
+  assert.equal(
+    session.switchDraftContext('__draft__:user:agent:project-b', '项目 A 的技能材料'),
+    ''
+  )
+  session.saveInput('项目 B 的文本')
+  assert.equal(
+    session.switchDraftContext('__draft__:user:agent:project-a', '项目 B 的文本'),
+    '项目 A 的技能材料'
+  )
+  session.switchThread('created-a', '项目 A 的技能材料')
+  session.clearDraftThread()
+  session.saveInput('上传后保留 A')
+  assert.equal(store.read('__draft__:user:agent:project-a'), '')
+  assert.equal(store.read('__draft__:user:agent:project-b'), '项目 B 的文本')
+  assert.equal(store.read('created-a'), '上传后保留 A')
+})
+
 test('切换线程时保存旧线程草稿并还原新线程草稿', () => {
   const store = createThreadDraftStore(createMemoryStorage())
   const session = createThreadDraftSession(store)

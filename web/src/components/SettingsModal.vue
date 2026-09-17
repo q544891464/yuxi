@@ -47,6 +47,14 @@
             <span>基本设置</span>
           </div>
           <div
+            v-if="userStore.isAdmin"
+            class="sider-item"
+            :class="{ activesec: activeTab === 'skillNavigation' }"
+            @click="activeTab = 'skillNavigation'"
+          >
+            <Settings class="icon" :size="18" /><span>侧栏技能</span>
+          </div>
+          <div
             class="sider-item"
             :class="{ activesec: activeTab === 'ocr' }"
             @click="activeTab = 'ocr'"
@@ -83,11 +91,18 @@
             <span>环境变量</span>
           </div>
         </div>
-
       </div>
 
       <!-- 顶部导航 (Mobile) -->
       <div class="settings-mobile-nav">
+        <div
+          v-if="userStore.isAdmin"
+          class="nav-item"
+          :class="{ active: activeTab === 'skillNavigation' }"
+          @click="activeTab = 'skillNavigation'"
+        >
+          侧栏技能
+        </div>
         <div
           class="nav-item"
           :class="{ active: activeTab === 'account' }"
@@ -174,6 +189,12 @@
             <BasicSettingsSection />
           </div>
 
+          <div
+            v-if="userStore.isAdmin && loadedTabs.has('skillNavigation')"
+            v-show="activeTab === 'skillNavigation'"
+          >
+            <SkillNavigationSettings />
+          </div>
           <div v-show="activeTab === 'ocr'" v-if="userStore.isAdmin && loadedTabs.has('ocr')">
             <OCRSettingsSection />
           </div>
@@ -197,16 +218,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
-import {
-  CircleUser,
-  Settings,
-  Key,
-  ScanText,
-  SquareTerminal,
-  User,
-  Users,
-  X
-} from '@lucide/vue'
+import { CircleUser, Settings, Key, ScanText, SquareTerminal, User, Users, X } from '@lucide/vue'
 import { createAsyncPanel } from '@/utils/asyncPanel'
 
 const AccountSettingsComponent = createAsyncPanel(
@@ -214,6 +226,9 @@ const AccountSettingsComponent = createAsyncPanel(
 )
 const AgentEnvSettingsCard = createAsyncPanel(() => import('@/components/AgentEnvSettingsCard.vue'))
 const BasicSettingsSection = createAsyncPanel(() => import('@/components/BasicSettingsSection.vue'))
+const SkillNavigationSettings = createAsyncPanel(
+  () => import('@/components/SkillNavigationSettings.vue')
+)
 const OCRSettingsSection = createAsyncPanel(() => import('@/components/OCRSettingsSection.vue'))
 const ApiKeyManagementComponent = createAsyncPanel(
   () => import('@/components/ApiKeyManagementComponent.vue')
@@ -249,7 +264,7 @@ const visible = computed({
 const availableTabs = computed(() => {
   const tabs = []
   if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
-  if (userStore.isAdmin) tabs.push('base', 'ocr', 'user')
+  if (userStore.isAdmin) tabs.push('base', 'ocr', 'user', 'skillNavigation')
   if (userStore.isSuperAdmin) tabs.push('department')
   return tabs
 })
@@ -386,7 +401,6 @@ watch(
       color: var(--main-700);
     }
   }
-
 }
 
 /* Content Area */

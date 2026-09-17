@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.utils.auth_middleware import get_db, get_superadmin_user
+from server.utils.auth_middleware import get_db, get_admin_user
 from yuxi.services.dashboard_service import DashboardService
 from yuxi.storage.postgres.models_business import User
 
@@ -199,36 +199,36 @@ class ThreadAnalyticsResponse(BaseModel):
 @dashboard.get("/stats")
 async def get_dashboard_stats(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取基础统计指标（超级管理员权限）。"""
+    """获取基础统计指标（管理员权限）。"""
     return await DashboardService(db).get_basic_stats()
 
 
 @dashboard.get("/stats/users", response_model=UserActivityStats)
 async def get_user_activity_stats(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取用户活动统计（超级管理员权限）。"""
+    """获取用户活动统计（管理员权限）。"""
     return UserActivityStats(**await DashboardService(db).get_user_activity_stats())
 
 
 @dashboard.get("/stats/tools", response_model=ToolCallStats)
 async def get_tool_call_stats(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取工具调用统计（超级管理员权限）。"""
+    """获取工具调用统计（管理员权限）。"""
     return ToolCallStats(**await DashboardService(db).get_tool_call_stats())
 
 
 @dashboard.get("/stats/agents", response_model=AgentAnalytics)
 async def get_agent_analytics(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取智能体分析（超级管理员权限）。"""
+    """获取智能体分析（管理员权限）。"""
     return AgentAnalytics(**await DashboardService(db).get_agent_analytics())
 
 
@@ -237,9 +237,9 @@ async def get_call_timeseries_stats(
     type: Literal["models", "agents", "tokens", "tools"] = "models",
     time_range: Literal["14hours", "14days", "14weeks"] = "14days",
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取调用分析时间序列统计（超级管理员权限）。"""
+    """获取调用分析时间序列统计（管理员权限）。"""
     data = await DashboardService(db).get_call_timeseries(
         metric_type=type,
         time_range=time_range,
@@ -253,9 +253,9 @@ async def get_thread_analytics_stats(
     agent_id: str | None = None,
     include_subagents: bool = Query(False, description="是否将子智能体会话纳入统计"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取会话多维分析统计（超级管理员权限）。"""
+    """获取会话多维分析统计（管理员权限）。"""
     data = await DashboardService(db).get_thread_analytics(
         time_range=time_range,
         agent_id=agent_id,
@@ -269,18 +269,18 @@ async def get_all_feedbacks(
     rating: str | None = None,
     agent_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取所有反馈记录（超级管理员权限）。"""
+    """获取所有反馈记录（管理员权限）。"""
     return await DashboardService(db).get_feedbacks(rating=rating, agent_id=agent_id)
 
 
 @dashboard.get("/conversations/options", response_model=ConversationFilterOptionsResponse)
 async def get_conversation_filter_options(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取会话审计用户与 Agent 筛选项（超级管理员权限）。"""
+    """获取会话审计用户与 Agent 筛选项（管理员权限）。"""
     return await DashboardService(db).get_conversation_filter_options()
 
 
@@ -293,9 +293,9 @@ async def get_all_conversations(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取所有对话（超级管理员权限）。"""
+    """获取所有对话（管理员权限）。"""
     return await DashboardService(db).list_conversations(
         uid=uid,
         agent_id=agent_id,
@@ -310,9 +310,9 @@ async def get_all_conversations(
 async def get_conversation_detail(
     thread_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取指定对话详情（超级管理员权限）。"""
+    """获取指定对话详情（管理员权限）。"""
     data = await DashboardService(db).get_conversation_detail(thread_id)
     if not data:
         raise HTTPException(status_code=404, detail="Conversation not found")

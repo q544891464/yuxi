@@ -74,7 +74,9 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 - `composables` 封装请求排队、Run SSE、流式消息、审批、线程状态、提及和其他可组合逻辑。
 - `utils` 放轻量转换和展示辅助；全局样式集中在 `assets/css`，颜色和基础规范优先复用 `base.css`。
 
-`/` 是公开首页；登录后的核心工作区是 `/agent`。`/extensions` 对所有登录用户开放，其中 Skills 对普通用户可见，知识库、工具和 MCP 管理能力仅管理员可见；Dashboard 仅超级管理员可访问。后端权限检查始终是最终边界，前端守卫只负责页面体验。
+业务技能导航由 `yuxi.services.skill_navigation_service` 校验，`yuxi.repositories.skill_navigation_repository` 使用 PostgreSQL 配置记录与版本锁持久化。管理员通过设置维护入口，前端 `skillNavigation` Store 为侧栏和项目新会话提供同一份树；导航绑定不改变运行时 Skill 权限。
+
+`/` 是公开首页；登录后的核心工作区是 `/agent`，业务入口为 `/chat`。`/extensions` 对所有登录用户开放，其中 Skills 对普通用户可见；知识库详情允许拥有资源读取权限的登录用户只读访问，知识库写入、工具和 MCP 管理能力仅管理员可见；Dashboard 对管理员和超级管理员开放。后端权限检查始终是最终边界，前端守卫只负责页面体验。
 
 ## 智能体运行链路
 

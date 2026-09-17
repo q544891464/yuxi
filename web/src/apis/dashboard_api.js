@@ -2,7 +2,7 @@ import { apiAdminGet } from './base'
 
 /**
  * Dashboard API模块
- * 用于超级管理员查看系统概览、调用监控与会话深度分析
+ * 用于管理员查看系统概览、调用监控与会话深度分析
  */
 
 export const dashboardApi = {

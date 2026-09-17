@@ -1,5 +1,6 @@
 import {
   apiGet,
+  apiPost,
   apiAdminGet,
   apiAdminPost,
   apiAdminPut,
@@ -41,7 +42,7 @@ export const databaseApi = {
    * @returns {Promise} - 知识库信息
    */
   getDatabaseInfo: async (kbId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}`)
+    return apiGet(`/api/knowledge/databases/${kbId}`)
   },
 
   /**
@@ -54,7 +55,7 @@ export const databaseApi = {
   },
 
   detectVirtualFolders: async (kbId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/virtual-folders/detect`)
+    return apiGet(`/api/knowledge/databases/${kbId}/virtual-folders/detect`)
   },
 
   startVirtualFolderMigration: async (kbId) => {
@@ -125,14 +126,12 @@ export const documentApi = {
    */
   listDocuments: async (kbId, params = {}) => {
     const query = buildQuery(params)
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/documents${query ? `?${query}` : ''}`)
+    return apiGet(`/api/knowledge/databases/${kbId}/documents${query ? `?${query}` : ''}`)
   },
 
   searchDocuments: async (kbId, params = {}) => {
     const query = buildQuery(params)
-    return apiAdminGet(
-      `/api/knowledge/databases/${kbId}/documents/search${query ? `?${query}` : ''}`
-    )
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/search${query ? `?${query}` : ''}`)
   },
 
   /**
@@ -143,7 +142,7 @@ export const documentApi = {
    */
   documentExists: async (kbId, filename) => {
     const query = buildQuery({ filename })
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/documents/exists?${query}`)
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/exists?${query}`)
   },
 
   /**
@@ -207,7 +206,7 @@ export const documentApi = {
    * @returns {Promise} - 文档信息
    */
   getDocumentInfo: async (kbId, docId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/documents/${docId}`)
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${docId}`)
   },
 
   /**
@@ -217,7 +216,7 @@ export const documentApi = {
    * @returns {Promise} - 文档基本信息
    */
   getDocumentBasicInfo: async (kbId, docId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/documents/${docId}/basic`)
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${docId}/basic`)
   },
 
   /**
@@ -227,7 +226,7 @@ export const documentApi = {
    * @returns {Promise} - 文档内容信息
    */
   getDocumentContent: async (kbId, docId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/documents/${docId}/content`)
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${docId}/content`)
   },
 
   /**
@@ -268,7 +267,7 @@ export const documentApi = {
    * @returns {Promise} - Response对象
    */
   downloadDocument: async (kbId, docId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/documents/${docId}/download`, {}, 'blob')
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${docId}/download`, {}, true, 'blob')
   },
 
   /**
@@ -334,11 +333,11 @@ function graphBuildUrl(kbId, action) {
 
 export const graphBuildApi = {
   getStatus: async (kbId) => {
-    return apiAdminGet(graphBuildUrl(kbId, 'status'))
+    return apiGet(graphBuildUrl(kbId, 'status'))
   },
 
   getFailedChunks: async (kbId, limit = 10) => {
-    return apiAdminGet(`${graphBuildUrl(kbId, 'failed-chunks')}?limit=${limit}`)
+    return apiGet(`${graphBuildUrl(kbId, 'failed-chunks')}?limit=${limit}`)
   },
 
   configure: async (kbId, data) => {
@@ -368,7 +367,7 @@ export const mindmapApi = {
   },
 
   getDatabaseFiles: async (kbId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/mindmap/files`)
+    return apiGet(`/api/knowledge/databases/${kbId}/mindmap/files`)
   },
 
   generateMindmap: async (kbId, fileIds = [], userPrompt = '', incremental = false) => {
@@ -380,11 +379,11 @@ export const mindmapApi = {
   },
 
   getByDatabase: async (kbId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/mindmap`)
+    return apiGet(`/api/knowledge/databases/${kbId}/mindmap`)
   },
 
   getDiff: async (kbId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/mindmap/diff`)
+    return apiGet(`/api/knowledge/databases/${kbId}/mindmap/diff`)
   }
 }
 
@@ -401,7 +400,7 @@ export const queryApi = {
    * @returns {Promise} - 查询结果
    */
   queryKnowledgeBase: async (kbId, query, meta = {}) => {
-    return apiAdminPost(`/api/knowledge/databases/${kbId}/query`, {
+    return apiPost(`/api/knowledge/databases/${kbId}/query`, {
       query,
       meta
     })
@@ -415,7 +414,7 @@ export const queryApi = {
    * @returns {Promise} - 测试结果
    */
   queryTest: async (kbId, query, meta = {}) => {
-    return apiAdminPost(`/api/knowledge/databases/${kbId}/query-test`, {
+    return apiPost(`/api/knowledge/databases/${kbId}/query-test`, {
       query,
       meta
     })
@@ -427,7 +426,7 @@ export const queryApi = {
    * @returns {Promise} - 查询参数
    */
   getKnowledgeBaseQueryParams: async (kbId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/query-params`)
+    return apiGet(`/api/knowledge/databases/${kbId}/query-params`)
   },
 
   /**
@@ -458,7 +457,7 @@ export const queryApi = {
    * @returns {Promise} - 问题列表
    */
   getSampleQuestions: async (kbId) => {
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/sample-questions`)
+    return apiGet(`/api/knowledge/databases/${kbId}/sample-questions`)
   }
 }
 

@@ -153,7 +153,15 @@
             </div>
           </div>
           <div v-if="!conversations.length && $slots.welcome" class="custom-chat-welcome">
-            <slot name="welcome" :set-prompt="(text) => (userInput = text)"></slot>
+            <slot
+              name="welcome"
+              :set-prompt="(text) => (userInput = text)"
+              :skill-entry="activeSkillEntry"
+              :skill-available="!!activeEntrySkill"
+              :upload="handleAttachmentUpload"
+              :upload-disabled="threadCreationInFlight || !supportsFileUpload"
+              :project-name="starterProjectName"
+            ></slot>
           </div>
           <div
             ref="messageInputDockRef"
@@ -317,7 +325,10 @@
                               @select-model="handleModelSelect"
                             />
                           </div>
-                          <slot name="input-actions-right" :has-active-thread="!!currentChatId"></slot>
+                          <slot
+                            name="input-actions-right"
+                            :has-active-thread="!!currentChatId"
+                          ></slot>
                         </template>
                       </AgentInputArea>
                     </div>
@@ -846,7 +857,11 @@ import {
   onActivated,
   onDeactivated
 } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
+import { useSkillNavigationStore } from '@/stores/skillNavigation'
+import { findSkillEntry, resolveEntrySkill, buildSkillEntryPrompt } from '@/utils/skillEntries'
+import { formatMentionToken } from '@/utils/mention_token'
+import { useProjectsStore } from '@/stores/projects'
 import {
   Bug,
   ChevronDown,
@@ -865,7 +880,10 @@ import ContextUsageRing from '@/components/ContextUsageRing.vue'
 import ToolApprovalModeSelector from '@/components/ToolApprovalModeSelector.vue'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import AgentMessageComponent from '@/components/AgentMessageComponent.vue'
-import { formatEmptyRunStatus, isConversationSettled as isRunConversationSettled } from '@/utils/conversationProcessGrouping'
+import {
+  formatEmptyRunStatus,
+  isConversationSettled as isRunConversationSettled
+} from '@/utils/conversationProcessGrouping'
 import RefsComponent from '@/components/RefsComponent.vue'
 import ToolCallsGroupComponent from '@/components/ToolCallsGroupComponent.vue'
 import ConversationProcessGroupComponent from '@/components/ConversationProcessGroupComponent.vue'
@@ -944,7 +962,7 @@ const props = defineProps({
   singleMode: { type: Boolean, default: true },
   sendDisabled: { type: Boolean, default: false }
 })
-const emit = defineEmits(['thread-change'])
+const emit = defineEmits(['thread-change', 'skill-entry-cleared'])
 
 // ==================== STORE MANAGEMENT ====================
 const agentStore = useAgentStore()
@@ -953,6 +971,7 @@ const chatUIStore = useChatUIStore()
 const configStore = useConfigStore()
 const infoStore = useInfoStore()
 const userStore = useUserStore()
+const projectsStore = useProjectsStore()
 const messageDebugEnabled = computed(() => infoStore.debugMode && userStore.isSuperAdmin)
 const { agents, selectedAgentId, agentConfig, configurableItems, availableKnowledgeBases } =
   storeToRefs(agentStore)
@@ -961,9 +980,16 @@ const { threads, currentThreadId, currentThread, threadCreationInFlight } =
 
 // ==================== LOCAL CHAT & UI STATE ====================
 // 输入草稿按线程保存：初始按当前线程还原，后续输入实时写入对应线程
+const draftContextKey = (projectId, agentId) =>
+  `${DRAFT_THREAD_ID}:${userStore.uid}:${agentId || ''}:${projectId || AUTO_PROJECT_ID}`
+const initialDraftKey = draftContextKey(props.initialProjectId, selectedAgentId.value)
 const threadDraftStore = createThreadDraftStore()
-const threadDraftSession = createThreadDraftSession(threadDraftStore, currentThreadId.value)
-const userInput = ref(threadDraftStore.read(currentThreadId.value || DRAFT_THREAD_ID))
+const threadDraftSession = createThreadDraftSession(
+  threadDraftStore,
+  currentThreadId.value,
+  initialDraftKey
+)
+const userInput = ref(threadDraftStore.read(currentThreadId.value || initialDraftKey))
 watch(userInput, (text) => threadDraftSession.saveInput(text))
 const agentInputAreaRef = ref(null)
 const sendCooldownActive = ref(false)
@@ -1922,8 +1948,104 @@ const { mentionConfig } = useAgentMentionConfig({
 })
 
 const currentThreadMessages = computed(() => threadMessages.value[currentChatId.value] || [])
+const activeSkillEntry = ref(null)
+const skillNavigation = useSkillNavigationStore()
+const activeEntrySkill = computed(() =>
+  resolveEntrySkill(activeSkillEntry.value, mentionConfig.value.skills)
+)
+const starterProjectName = computed(
+  () =>
+    projectsStore.projects.find(
+      (p) => p.id === (currentThread.value?.project_id || selectedProjectId.value)
+    )?.name || ''
+)
+let starterVersion = 0
+let generatedStarterText = ''
+let generatedSkillToken = ''
+
+/** 替换预设前保护人工编辑；异步确认不能写入另一个草稿。 */
+const prepareSkillEntry = async (id) => {
+  try {
+    await skillNavigation.load()
+  } catch {
+    message.error('技能菜单加载失败，请重试')
+    return { accepted: false }
+  }
+  const entry = findSkillEntry(id, skillNavigation.nodes)
+  if (!entry) {
+    message.warning('该技能入口已删除，请重新选择')
+    return { accepted: false }
+  }
+  if (conversations.value.length) return
+  if (activeSkillEntry.value?.id === id) return { accepted: true }
+  const version = ++starterVersion
+  const context = `${currentChatId.value || ''}:${selectedProjectId.value}:${currentAgentId.value}`
+  const skill = resolveEntrySkill(entry, mentionConfig.value.skills)
+  const nextText = skill ? buildSkillEntryPrompt(entry, skill) : ''
+  if (userInput.value && userInput.value !== generatedStarterText && userInput.value !== nextText) {
+    const accepted = await new Promise((resolve) =>
+      Modal.confirm({
+        title: '替换为技能预设提示词？',
+        content: '输入框已有编辑内容。确认后替换提示词，已上传附件保留；取消将保留当前草稿。',
+        okText: '替换提示词',
+        cancelText: '保留当前草稿',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false)
+      })
+    )
+    if (!accepted) return { accepted: false, activeId: activeSkillEntry.value?.id }
+  }
+  if (
+    version !== starterVersion ||
+    context !== `${currentChatId.value || ''}:${selectedProjectId.value}:${currentAgentId.value}`
+  )
+    return
+  activeSkillEntry.value = entry
+  generatedStarterText = nextText
+  generatedSkillToken = skill ? formatMentionToken('skill', skill.slug) : ''
+  userInput.value = nextText
+  return { accepted: true }
+}
+
+/** 无技能入口只移除本入口自动填入的内容。 */
+const clearSkillEntry = (preserveInput = false) => {
+  starterVersion += 1
+  activeSkillEntry.value = null
+  if (!preserveInput) {
+    if (userInput.value === generatedStarterText) userInput.value = ''
+    else if (generatedSkillToken)
+      userInput.value = userInput.value.replace(generatedSkillToken, '').trim()
+  }
+  generatedStarterText = ''
+  generatedSkillToken = ''
+}
+
+watch(userInput, (text) => {
+  if (generatedSkillToken && !text.includes(generatedSkillToken)) {
+    activeSkillEntry.value = null
+    generatedSkillToken = ''
+    generatedStarterText = ''
+    if (!currentChatId.value) emit('skill-entry-cleared')
+  }
+})
+
+watch(
+  [selectedProjectId, currentAgentId],
+  ([projectId, agentId]) => {
+    if (currentChatId.value) return
+    const restored = threadDraftSession.switchDraftContext(
+      draftContextKey(projectId, agentId),
+      userInput.value
+    )
+    clearSkillEntry()
+    userInput.value = restored
+  },
+  { flush: 'sync' }
+)
 const currentThreadRuns = computed(() => threadRuns.value[currentChatId.value] || [])
-const currentRunById = computed(() => new Map(currentThreadRuns.value.map((run) => [run.run_id, run])))
+const currentRunById = computed(
+  () => new Map(currentThreadRuns.value.map((run) => [run.run_id, run]))
+)
 const getMessageRun = (message) => currentRunById.value.get(getMessageRunId(message)) || null
 const currentThreadHasHistory = computed(() => currentThreadMessages.value.length > 0)
 const currentThreadConfigNotice = computed(() => {
@@ -2136,7 +2258,10 @@ watch(
 )
 
 const historyConversations = computed(() => {
-  return MessageProcessor.convertServerHistoryToMessages(currentThreadMessages.value, currentThreadRuns.value)
+  return MessageProcessor.convertServerHistoryToMessages(
+    currentThreadMessages.value,
+    currentThreadRuns.value
+  )
 })
 
 function mergeLocalImageFields(message, localMessage) {
@@ -2203,7 +2328,9 @@ function mergeActiveRunOngoingIntoHistory(historyConvs, ongoingMessages, activeR
     }))
     .filter((conv) => conv.messages.length > 0 || conv.run)
 
-  const activeGroupIndex = filteredHistoryConvs.findIndex((conv) => conv.run?.run_id === activeRunId)
+  const activeGroupIndex = filteredHistoryConvs.findIndex(
+    (conv) => conv.run?.run_id === activeRunId
+  )
   if (activeGroupIndex !== -1) {
     const conv = filteredHistoryConvs[activeGroupIndex]
     filteredHistoryConvs[activeGroupIndex] = {
@@ -2269,7 +2396,9 @@ const conversations = computed(() => {
 /** 间隔超过一小时时，在新用户消息上方显示发送时间。 */
 const getConversationTimeLabel = (conv, previousConv) => {
   const sentAt = conv.messages.find((message) => message.type === 'human')?.created_at
-  const finishedAt = getMessageRun(previousConv?.messages.findLast((message) => message.type === 'ai'))?.timing?.finished_at
+  const finishedAt = getMessageRun(
+    previousConv?.messages.findLast((message) => message.type === 'ai')
+  )?.timing?.finished_at
   if (!sentAt || !finishedAt) return ''
 
   // 历史消息的无时区时间来自 PostgreSQL UTC，不能按浏览器本地时间解析。
@@ -2446,6 +2575,7 @@ watch(
 )
 const isSendButtonDisabled = computed(() => {
   return (
+    (activeSkillEntry.value && !activeEntrySkill.value) ||
     sendCooldownActive.value ||
     props.sendDisabled ||
     isWaitingForUserAction.value ||
@@ -2979,16 +3109,23 @@ const handleAttachmentUpload = async (files = []) => {
   attachmentUploadModalOpen.value = true
 }
 
+let attachmentThreadPromotion = false
 const ensureAttachmentThread = async () => {
   if (currentChatId.value) return currentChatId.value
   // 无线程状态上传附件会先创建线程：保留输入框已有文本并迁移到新线程草稿
   const inputText = userInput.value
-  const threadId = await ensureActiveThread('新的对话')
-  if (threadId && inputText) {
-    userInput.value = inputText
-    threadDraftSession.clearDraftThread()
+  attachmentThreadPromotion = true
+  try {
+    const threadId = await ensureActiveThread('新的对话')
+    await nextTick()
+    if (threadId && inputText) {
+      userInput.value = inputText
+      threadDraftSession.clearDraftThread()
+    }
+    return threadId
+  } finally {
+    attachmentThreadPromotion = false
   }
-  return threadId
 }
 
 const handleTmpAttachmentsAdded = async () => {
@@ -3259,6 +3396,10 @@ const selectThreadFromRoute = async (threadId) => {
 }
 
 const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
+  if (activeSkillEntry.value && !activeEntrySkill.value) {
+    message.warning('当前技能不可用，请检查权限或智能体配置')
+    return
+  }
   const text = userInput.value.trim()
   const imageContent = image?.imageContent || null
   if (
@@ -3596,7 +3737,9 @@ const buildExportPayload = () => {
 
 defineExpose({
   getExportPayload: buildExportPayload,
-  selectThreadFromRoute
+  selectThreadFromRoute,
+  prepareSkillEntry,
+  clearSkillEntry
 })
 
 const handleAgentStateRefresh = async (threadId = null) => {
@@ -3902,10 +4045,16 @@ watch(
 
 watch(currentChatId, (threadId, oldThreadId) => {
   if (threadId === oldThreadId) return
+  if (oldThreadId) clearSkillEntry(true)
   // 旧线程已被删除时丢弃输入草稿，避免写入无法再次访问的孤儿缓存
   const keepInput = !oldThreadId || threads.value.some((thread) => thread.id === oldThreadId)
   // 切换线程：保存旧线程的输入草稿，并还原新线程（或新建对话）的草稿
-  userInput.value = threadDraftSession.switchThread(threadId, keepInput ? userInput.value : '')
+  const previousInput = userInput.value
+  const restoredInput = threadDraftSession.switchThread(threadId, keepInput ? previousInput : '')
+  // 附件创建线程时直接迁移草稿，避免短暂空值被识别为用户删除技能引用。
+  userInput.value =
+    attachmentThreadPromotion && !oldThreadId && threadId ? previousInput : restoredInput
+  threadDraftSession.saveInput(userInput.value)
   if (!threadId || approvalState.threadId !== threadId) {
     hideApprovalState()
   }

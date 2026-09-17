@@ -593,15 +593,26 @@ async def test_knowledge_routes_enforce_permissions(test_client, standard_user, 
     forbidden_chunk_presets = await test_client.get("/api/knowledge/chunk-presets", headers=standard_user["headers"])
     _assert_forbidden_response(forbidden_chunk_presets)
 
-    forbidden_get = await test_client.get(f"/api/knowledge/databases/{kb_id}", headers=standard_user["headers"])
-    _assert_forbidden_response(forbidden_get)
+    readable = await test_client.get(f"/api/knowledge/databases/{kb_id}", headers=standard_user["headers"])
+    assert readable.status_code == 200, readable.text
+    assert readable.json()["can_manage"] is False
+    assert readable.json()["effective_permission"] == "read"
+    assert "share_config" not in readable.json()
 
-    forbidden_exists = await test_client.get(
+    readable_exists = await test_client.get(
         f"/api/knowledge/databases/{kb_id}/documents/exists",
         params={"filename": "demo.txt"},
         headers=standard_user["headers"],
     )
-    _assert_forbidden_response(forbidden_exists)
+    assert readable_exists.status_code == 200, readable_exists.text
+    forbidden_update = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}",
+        json={"name": "unauthorized-change", "description": "must not persist"},
+        headers=standard_user["headers"],
+    )
+    _assert_forbidden_response(forbidden_update)
+    unchanged = await test_client.get(f"/api/knowledge/databases/{kb_id}", headers=standard_user["headers"])
+    assert unchanged.json()["name"] == readable.json()["name"]
 
 
 async def test_kb_image_proxy_requires_auth_and_streams_private_image(
@@ -1003,6 +1014,11 @@ async def test_share_config_filters_accessible_databases(test_client, admin_head
 
         assert database["kb_id"] in await _accessible_kb_ids(test_client, user_a["headers"])
         assert database["kb_id"] not in await _accessible_kb_ids(test_client, user_b["headers"])
+        detail = await test_client.get(f"/api/knowledge/databases/{database['kb_id']}", headers=user_a["headers"])
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["can_manage"] is False
+        denied = await test_client.get(f"/api/knowledge/databases/{database['kb_id']}", headers=user_b["headers"])
+        _assert_forbidden_response(denied)
     finally:
         if database:
             await test_client.delete(f"/api/knowledge/databases/{database['kb_id']}", headers=admin_headers)
@@ -1151,10 +1167,10 @@ async def test_mindmap_permissions(test_client, standard_user, knowledge_databas
     forbidden_list = await test_client.get("/api/knowledge/mindmap/databases", headers=standard_user["headers"])
     _assert_forbidden_response(forbidden_list)
 
-    forbidden_files = await test_client.get(
+    readable_files = await test_client.get(
         f"/api/knowledge/databases/{kb_id}/mindmap/files", headers=standard_user["headers"]
     )
-    _assert_forbidden_response(forbidden_files)
+    assert readable_files.status_code == 200, readable_files.text
 
     forbidden_generate = await test_client.post(
         f"/api/knowledge/databases/{kb_id}/mindmap/generate",
@@ -1189,12 +1205,13 @@ async def test_document_search_returns_empty_results(test_client, admin_headers,
         assert payload["limit"] == search_params["limit"]
 
 
-async def test_document_search_requires_admin(test_client, standard_user, knowledge_database):
-    """普通用户不能访问管理端搜索接口。"""
+async def test_document_search_allows_shared_read(test_client, standard_user, knowledge_database):
+    """普通用户可以搜索共享知识库文件。"""
     kb_id = knowledge_database["kb_id"]
     response = await test_client.get(
         f"/api/knowledge/databases/{kb_id}/documents/search",
         params={"query": "x"},
         headers=standard_user["headers"],
     )
-    _assert_forbidden_response(response)
+    assert response.status_code == 200, response.text
+    assert response.json()["files"] == []

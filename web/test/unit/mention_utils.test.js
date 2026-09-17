@@ -52,3 +52,11 @@ test('没有 chip 边界时仍按文本 mention 解析删除', () => {
     end: mentionEnd
   })
 })
+
+test('历史技能引用显示中文而不是英文名称或 slug', () => {
+  assert.equal(mentionUtils.getMentionDisplayLabel('skill', 'audit-report-writer', {
+    'skill:audit-report-writer': 'Audit Report Writer'
+  }), '撰写稽查报告')
+  assert.equal(mentionUtils.getMentionDisplayLabel('skill', 'ai-assisted-review'), '撰写审理文书')
+  assert.equal(mentionUtils.getMentionDisplayLabel('skill', 'vat-surtax-recalc'), '申报数据处理')
+})

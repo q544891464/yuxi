@@ -1,0 +1,145 @@
+[
+  {
+    "id": "inspection",
+    "label": "撰写稽查报告",
+    "skillSlug": "audit-report-writer",
+    "skillDisplayName": "撰写稽查报告",
+    "inputHint": "申报表、净入库数据、检查发现及相关证据材料",
+    "outputHint": "数据汇总、问题验证和按模板撰写的正式稽查报告（供人工审核）",
+    "presetPrompt": "请按稽查报告编制流程处理我提供的材料，依次核对数据、验证问题，并按模板撰写稽查报告。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+    "children": [
+      {
+        "id": "declarations",
+        "label": "申报数据处理",
+        "skillSlug": "vat-surtax-recalc",
+        "skillDisplayName": "申报数据处理",
+        "inputHint": "申报表及净入库数据",
+        "outputHint": "数据表格、稽查报告第二页汇总表",
+        "presetPrompt": "请处理我提供的申报表和净入库数据，核对所属期、税种及金额，生成数据表格和稽查报告第二页汇总表。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+        "children": []
+      },
+      {
+        "id": "findings",
+        "label": "发现问题导入",
+        "skillSlug": "audit-report-writer",
+        "skillDisplayName": "撰写稽查报告",
+        "inputHint": "检查人员发现的问题、工作底稿、银行流水、开票信息、企业基本信息等",
+        "outputHint": "问题验证报告及计算过程校验结果",
+        "presetPrompt": "请对检查人员发现的问题及工作底稿、银行流水、开票信息、企业基本信息等材料进行验证，生成验证报告，逐项列出计算过程并校验。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+        "children": []
+      },
+      {
+        "id": "inspection-report",
+        "label": "生成稽查报告",
+        "skillSlug": "audit-report-writer",
+        "skillDisplayName": "撰写稽查报告",
+        "inputHint": "申报数据处理、发现问题导入两项的输出结果及报告模板",
+        "outputHint": "按模板撰写的正式稽查报告（供人工审核）",
+        "presetPrompt": "请使用申报数据处理和发现问题验证的输出结果，依据技能中的报告模板撰写一份正式稽查报告。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+        "children": []
+      },
+      {
+        "id": "inspection-check",
+        "label": "校验稽查报告",
+        "skillSlug": "audit-report-writer",
+        "skillDisplayName": "撰写稽查报告",
+        "inputHint": "稽查报告、申报表、入库表、工作底稿、银行流水、发票数据等",
+        "outputHint": "报告准确性校验结果、差异清单和修改建议",
+        "presetPrompt": "请对照申报表、入库表、工作底稿、银行流水及发票数据等材料，校验稽查报告准确性，列明数据差异、计算过程、证据出处和修改建议。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+        "children": []
+      }
+    ]
+  },
+  {
+    "id": "review",
+    "label": "撰写审理文书",
+    "skillSlug": "ai-assisted-review",
+    "skillDisplayName": "撰写审理文书",
+    "inputHint": "正式稽查报告及相关案卷材料",
+    "outputHint": "审理报告、处理处罚等文书及审理建议（供人工审核）",
+    "presetPrompt": "请对我提供的正式稽查报告和案卷材料进行辅助审理，按技能流程核查并生成所需审理文书。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+    "children": [
+      {
+        "id": "review-check",
+        "label": "校验稽查报告",
+        "skillSlug": "ai-assisted-review",
+        "skillDisplayName": "撰写审理文书",
+        "inputHint": "稽查报告、申报表、入库表、工作底稿、银行流水、发票数据等",
+        "outputHint": "报告准确性核查结果、疑点及补充材料清单",
+        "presetPrompt": "请从审理角度对照所提供材料校验稽查报告准确性，核查事实证据、程序、数据计算和适用依据，列出问题及修改建议。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+        "children": []
+      },
+      {
+        "id": "review-document",
+        "label": "生成审理文书",
+        "skillSlug": "ai-assisted-review",
+        "skillDisplayName": "撰写审理文书",
+        "inputHint": "正式稽查报告",
+        "outputHint": "审理报告、处罚决定书等适用文书（供人工审核）",
+        "presetPrompt": "请根据我提供的正式稽查报告，按技能模板生成审理文书，包括审理报告、适用的处罚决定书等，明确需要人工确认的内容。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+        "children": []
+      },
+      {
+        "id": "case-nature",
+        "label": "判断案件性质",
+        "skillSlug": "ai-assisted-review",
+        "skillDisplayName": "撰写审理文书",
+        "inputHint": "案件事实、证据及相关报告",
+        "outputHint": "重大案审、一案双查、黑名单、移送公安相关条件的辅助核查意见",
+        "presetPrompt": "请结合可核实的适用规则，辅助判断案件是否涉及重大案审、一案双查、黑名单及移送公安，逐项说明依据和证据缺口，仅形成供人工审核的建议。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+        "children": [
+          {
+            "id": "case-major",
+            "label": "重大案审",
+            "skillSlug": "ai-assisted-review",
+            "skillDisplayName": "撰写审理文书",
+            "inputHint": "案件事实、证据及相关报告",
+            "outputHint": "重大案审条件核对、依据及待人工确认事项",
+            "presetPrompt": "请根据案件材料及可核实的适用规则，辅助核查重大案审相关条件，列明匹配事实、依据、证据缺口及待确认事项，仅形成供人工审核的建议。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+            "children": []
+          },
+          {
+            "id": "case-dual",
+            "label": "一案双查",
+            "skillSlug": "ai-assisted-review",
+            "skillDisplayName": "撰写审理文书",
+            "inputHint": "案件事实、证据及相关报告",
+            "outputHint": "一案双查条件核对、依据及待人工确认事项",
+            "presetPrompt": "请根据案件材料及可核实的适用规则，辅助核查一案双查相关条件，列明匹配事实、依据、证据缺口及待确认事项，仅形成供人工审核的建议。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+            "children": []
+          },
+          {
+            "id": "case-list",
+            "label": "黑名单",
+            "skillSlug": "ai-assisted-review",
+            "skillDisplayName": "撰写审理文书",
+            "inputHint": "案件事实、证据及相关报告",
+            "outputHint": "黑名单条件核对、依据及待人工确认事项",
+            "presetPrompt": "请根据案件材料及可核实的适用规则，辅助核查黑名单相关条件，列明匹配事实、依据、证据缺口及待确认事项，仅形成供人工审核的建议。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+            "children": []
+          },
+          {
+            "id": "case-transfer",
+            "label": "移送公安",
+            "skillSlug": "ai-assisted-review",
+            "skillDisplayName": "撰写审理文书",
+            "inputHint": "案件事实、证据及相关报告",
+            "outputHint": "移送公安条件核对、依据及待人工确认事项",
+            "presetPrompt": "请根据案件材料及可核实的适用规则，辅助核查移送公安相关条件，列明匹配事实、依据、证据缺口及待确认事项，仅形成供人工审核的建议。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "review-ledger",
+        "label": "审理台账",
+        "skillSlug": "ai-assisted-review",
+        "skillDisplayName": "撰写审理文书",
+        "inputHint": "审理报告、税务处理决定书、税务行政处罚决定书或不予处罚文书",
+        "outputHint": "按技能模板整理的审理台账",
+        "presetPrompt": "请从审理报告、税务处理决定书、税务行政处罚决定书或不予处罚文书中提取信息，按技能模板生成审理台账。请以所提供材料为准，注明来源、缺失信息和待核实事项，不补造事实或数据。",
+        "children": []
+      }
+    ]
+  }
+]

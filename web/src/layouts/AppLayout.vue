@@ -28,6 +28,9 @@ import UserInfoComponent from '@/components/UserInfoComponent.vue'
 import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
+import SkillEntryMenu from '@/components/SkillEntryMenu.vue'
+import { useSkillNavigationStore } from '@/stores/skillNavigation'
+import { INSPECTION_KB_ID } from '@/utils/skillEntries'
 import GlobalSearchModal from '@/components/GlobalSearchModal.vue'
 import { searchWorkspaceFiles } from '@/apis/workspace_api'
 import { projectApi } from '@/apis/project_api'
@@ -53,6 +56,25 @@ const settingsInitialTab = ref('')
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
 const conversationSearchOpen = ref(false)
 const projectPendingId = ref(null)
+const skillsExpanded = ref(true)
+const skillNavigation = useSkillNavigationStore()
+const skillEntryTree = computed(() => skillNavigation.nodes)
+const loadSkillNavigation = () => skillNavigation.load(true).catch(() => {})
+onMounted(loadSkillNavigation)
+const projectSkillPickerId = ref('')
+
+/** 技能入口只准备草稿，上传或发送沿用对话组件的线程创建。 */
+const openSkillEntry = async (skillId, projectId = '') => {
+  if (threadCreationInFlight.value) return
+  await router.push({
+    name: entryRoute.value,
+    query: {
+      ...(projectId ? { project_id: projectId } : {}),
+      ...(skillId ? { skill: skillId } : {})
+    }
+  })
+  projectSkillPickerId.value = ''
+}
 
 // Provide settings modal methods to child components
 const openSettingsModal = (tab) => {
@@ -169,7 +191,7 @@ const mainList = computed(() => {
     activeIcon: LibraryBig
   })
 
-  if (userStore.isSuperAdmin) {
+  if (userStore.isAdmin) {
     items.push({
       name: '数据总览',
       path: '/dashboard',
@@ -200,6 +222,11 @@ const toggleSidebar = () => {
   setSidebarCollapsed(!sidebarCollapsed.value)
 }
 
+const openSkillsMenu = () => {
+  setSidebarCollapsed(false)
+  skillsExpanded.value = true
+}
+
 const openConversationSearch = () => {
   conversationSearchOpen.value = true
 }
@@ -226,6 +253,7 @@ const loadProjects = async () => {
 const handleSelectChat = (threadId) => {
   if (!threadId) return
   if (!chatThreadsStore.setCurrentThreadId(threadId)) return
+  projectSkillPickerId.value = ''
   router.push({ name: `${entryRoute.value}WithThreadId`, params: { thread_id: threadId } })
 }
 
@@ -241,11 +269,16 @@ const handleSearchSelectThread = (thread) => {
 
 const handleCreateConversationFromSearch = () => {
   if (!chatThreadsStore.setCurrentThreadId(null)) return
+  projectSkillPickerId.value = ''
   router.push({ name: entryRoute.value })
 }
 
 const handleCreateProjectChat = async (projectId) => {
   if (!projectId || projectPendingId.value || threadCreationInFlight.value) return
+  if (consumerChat.value) {
+    projectSkillPickerId.value = projectSkillPickerId.value === projectId ? '' : projectId
+    return
+  }
   await router.push({ name: entryRoute.value, query: { project_id: projectId } })
   chatThreadsStore.setCurrentThreadId(null)
 }
@@ -455,6 +488,51 @@ provide('settingsModal', {
         </RouterLink>
       </div>
       <div class="fill">
+        <button
+          v-if="consumerChat && sidebarCollapsed"
+          class="consumer-nav-link"
+          type="button"
+          aria-label="打开技能菜单"
+          @click="openSkillsMenu"
+        >
+          <LibraryBig :size="18" />
+        </button>
+        <div v-if="consumerChat && !sidebarCollapsed" class="consumer-skills-nav">
+          <button
+            type="button"
+            class="consumer-nav-link"
+            :aria-expanded="skillsExpanded"
+            @click="skillsExpanded = !skillsExpanded"
+          >
+            <LibraryBig :size="17" />技能
+            <span class="skill-expand-hint">{{ skillsExpanded ? '收起' : '展开' }}</span>
+          </button>
+          <div v-if="skillsExpanded">
+            <RouterLink class="consumer-nav-link" to="/extensions?tab=skills">添加技能</RouterLink>
+            <button
+              v-if="skillNavigation.error"
+              type="button"
+              class="consumer-nav-link"
+              @click="loadSkillNavigation"
+            >
+              {{ skillNavigation.error }}
+            </button>
+            <SkillEntryMenu
+              :nodes="skillEntryTree"
+              :selected-id="String(route.query.skill || '')"
+              :disabled="threadCreationInFlight"
+              @select="openSkillEntry($event)"
+            />
+          </div>
+          <RouterLink
+            class="consumer-nav-link"
+            :to="`/extensions/knowledgebase/${INSPECTION_KB_ID}`"
+            ><LibraryBig :size="17" />知识库</RouterLink
+          >
+          <RouterLink v-if="userStore.isAdmin" class="consumer-nav-link" to="/dashboard"
+            ><BarChart3 :size="17" />数据总览</RouterLink
+          >
+        </div>
         <ConversationNavSection
           v-if="!sidebarCollapsed"
           class="sidebar-conversations"
@@ -466,6 +544,10 @@ provide('settingsModal', {
           :project-pending-id="projectPendingId"
           :has-more-chats="hasMoreThreads"
           :is-loading-more="isLoadingMoreThreads"
+          :skill-picker-project-id="projectSkillPickerId"
+          :skill-entries="consumerChat ? skillEntryTree : []"
+          :skill-selection-disabled="threadCreationInFlight"
+          @select-project-skill="({ skillId, projectId }) => openSkillEntry(skillId, projectId)"
           @select-chat="handleSelectChat"
           @delete-chat="handleDeleteChat"
           @rename-chat="handleRenameChat"
@@ -535,6 +617,38 @@ provide('settingsModal', {
 </template>
 
 <style lang="less" scoped>
+.consumer-skills-nav {
+  padding: 8px 10px;
+}
+.consumer-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+}
+.consumer-nav-link:hover {
+  background: var(--main-10);
+}
+.skill-expand-hint {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+.consumer-layout .header > .fill {
+  overflow-y: auto;
+}
+.consumer-layout .header .sidebar-conversations {
+  overflow: visible;
+  height: auto;
+}
 .app-layout.consumer-layout {
   --main-color: #1765ff;
   display: grid;
@@ -656,13 +770,13 @@ provide('settingsModal', {
     grid-row: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 22px 20px;
+    padding: 14px 24px 18px;
   }
   :deep(.chat-main > .chat-box > :first-child) {
     margin-top: auto;
   }
   :deep(.custom-chat-welcome > *) {
-    max-width: 1100px;
+    max-width: 1060px;
     margin: 0 auto;
   }
   :deep(.bottom),

@@ -10,12 +10,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi import get_version
 from yuxi.config.options import invalidate_option_cache, system_options, update_option_value
 from yuxi.services.readiness_service import get_readiness
+from yuxi.services.skill_navigation_service import (
+    NavigationConfig,
+    NavigationConflict,
+    get_skill_navigation,
+    save_skill_navigation,
+)
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.logging_config import LOG_FILE, logger
 
 from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
 
 system = APIRouter(prefix="/system", tags=["system"])
+
+
+@system.get("/skill-navigation")
+async def read_skill_navigation(
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """返回全平台业务技能入口。"""
+    return await get_skill_navigation(db)
+
+
+@system.put("/skill-navigation")
+async def write_skill_navigation(
+    payload: NavigationConfig,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """管理员发布业务技能导航配置。"""
+    try:
+        return await save_skill_navigation(db, payload, current_user)
+    except NavigationConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # =============================================================================

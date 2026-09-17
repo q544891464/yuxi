@@ -1,3 +1,4 @@
+import { getSkillDisplayName } from './skillDisplayName.js'
 import { getDisplayFileName } from '@/utils/file_utils'
 import { mentionTypePrefixMap } from './mention_token.js'
 
@@ -102,6 +103,7 @@ export const buildMentionDisplayLabels = (mention = {}) => {
 
 export const getMentionDisplayLabel = (type, value, displayLabels = {}) => {
   const mappedLabel = displayLabels[`${type}:${value}`]
+  if (type === 'skill') return getSkillDisplayName(mappedLabel || value)
   if (mappedLabel) return mappedLabel
 
   if (type === 'file') {

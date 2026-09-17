@@ -31,7 +31,7 @@ def test_serialize_knowledge_base_redacts_credentials_from_compatibility_fields(
     assert "dify_token" not in response["metadata"]
 
 
-@pytest.mark.parametrize(("uid", "role", "can_read"), [("admin-1", "admin", True), ("other-user", "user", False)])
+@pytest.mark.parametrize(("uid", "role", "can_read"), [("admin-1", "admin", True), ("other-user", "user", True)])
 @pytest.mark.asyncio
 async def test_non_manager_cannot_manage_global_read_knowledge_base(monkeypatch, uid, role, can_read):
     database = {
@@ -50,7 +50,7 @@ async def test_non_manager_cannot_manage_global_read_knowledge_base(monkeypatch,
     user = SimpleNamespace(uid=uid, role=role, department_id=2)
 
     if can_read:
-        assert await knowledge_router.require_knowledge_base_read("kb-1", user) is user
+        assert await knowledge_router.require_knowledge_base_user_read("kb-1", user) is user
 
     with pytest.raises(HTTPException) as exc_info:
         await knowledge_router.require_knowledge_base_manage("kb-1", user)
@@ -74,10 +74,10 @@ async def test_query_parameter_routes_apply_knowledge_base_acl(monkeypatch):
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
     readonly_admin = SimpleNamespace(uid="admin-1", role="admin", department_id=2)
 
-    assert await knowledge_router.require_knowledge_base_read("kb-1", readonly_admin) is readonly_admin
+    assert await knowledge_router.require_knowledge_base_user_read("kb-1", readonly_admin) is readonly_admin
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.require_knowledge_base_read(
+        await knowledge_router.require_knowledge_base_user_read(
             "kb-1", SimpleNamespace(uid="admin-2", role="admin", department_id=2)
         )
     assert exc_info.value.status_code == 403

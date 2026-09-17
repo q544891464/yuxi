@@ -1,5 +1,9 @@
 <template>
-  <section class="chat-welcome" aria-label="智能辅助稽查数字人欢迎页">
+  <section
+    class="chat-welcome"
+    :class="{ 'skill-selected': skillSelected }"
+    aria-label="智能辅助稽查数字人欢迎页"
+  >
     <div class="welcome-hero">
       <div class="assistant-portrait" role="img" aria-label="智能辅助稽查数字人形象"></div>
       <div class="welcome-copy">
@@ -27,37 +31,25 @@
         </div>
       </dl>
     </div>
-    <div v-if="questions.length" class="welcome-questions" aria-label="知识库示例问题">
-      <button
-        v-for="question in questions"
-        :key="question"
-        type="button"
-        @click="$emit('prompt', question)"
-      >
-        {{ question }}<ChevronRight :size="16" />
-      </button>
-    </div>
+    <slot name="skill-description"></slot>
     <div v-if="!loading && loadFailed" class="welcome-data-note" role="status">
       部分资源暂未加载 <button type="button" @click="loadResources">重试</button>
     </div>
-    <p v-else-if="!loading && !questions.length" class="welcome-data-note">
-      知识库暂无预置问题，您可以直接输入问题。
-    </p>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ChevronRight, ShieldCheck, Files, Bot, Sparkles } from '@lucide/vue'
+import { ShieldCheck, Files, Bot, Sparkles } from '@lucide/vue'
 import { databaseApi } from '@/apis/knowledge_api'
 import { agentApi } from '@/apis/agent_api'
 import { listAccessibleSkills } from '@/apis/skill_api'
 import { summarizeChatWelcome } from '@/utils/chatWelcome'
 
-defineEmits(['prompt'])
+defineProps({ skillSelected: Boolean })
+
 const loading = ref(true)
 const summary = ref({ questions: [], fileCount: null, subagentCount: null, skillCount: null })
-const questions = computed(() => summary.value.questions)
 const stats = computed(() => [
   { label: '知识库文件', value: summary.value.fileCount, icon: Files },
   { label: '子智能体', value: summary.value.subagentCount, icon: Bot },
@@ -92,8 +84,8 @@ onMounted(loadResources)
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 280px;
-  margin-top: 40px;
+  min-height: clamp(164px, 23vh, 230px);
+  margin-top: 24px;
   border: 1px solid white;
   border-radius: 26px;
   overflow: visible;
@@ -111,9 +103,9 @@ onMounted(loadResources)
   pointer-events: none;
 }
 .assistant-portrait {
-  flex: 0 0 306px;
-  height: 320px;
-  margin: -40px 24px 0 16px;
+  flex: 0 0 clamp(170px, 20vw, 240px);
+  height: clamp(188px, calc(23vh + 24px), 254px);
+  margin: -24px 24px 0 16px;
   align-self: flex-end;
   background: url('/cydx/assistant-cutout.png') center bottom / contain no-repeat;
 }
@@ -129,7 +121,7 @@ onMounted(loadResources)
   letter-spacing: 3px;
 }
 .welcome-copy h1 {
-  font-size: clamp(30px, 3.5vw, 40px);
+  font-size: clamp(28px, 2.4vw, 36px);
   color: #101e47;
   margin: 10px 0;
   font-weight: 750;
@@ -142,7 +134,7 @@ onMounted(loadResources)
   margin: 10px 0 12px;
 }
 .welcome-copy p {
-  font-size: clamp(16px, 1.7vw, 20px);
+  font-size: clamp(15px, 1.25vw, 18px);
   line-height: 1.7;
   margin: 0;
 }
@@ -160,8 +152,8 @@ onMounted(loadResources)
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 18px 24px;
-  margin: 14px 0;
+  padding: 12px 20px;
+  margin: 12px 0;
   background: #ffffffbf;
   border: 1px solid #fff;
   border-radius: 22px;
@@ -169,8 +161,8 @@ onMounted(loadResources)
 .role-symbol {
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   background: #e7f0ff;
   color: #1765ff;
@@ -179,7 +171,7 @@ onMounted(loadResources)
 .welcome-role h2 {
   color: #145bf1;
   margin: 0 0 5px;
-  font-size: 19px;
+  font-size: 17px;
 }
 .welcome-role p {
   margin: 0;
@@ -202,8 +194,8 @@ onMounted(loadResources)
   text-align: center;
 }
 .resource-stats dd {
-  margin: 0 0 8px;
-  font-size: 28px;
+  margin: 0 0 4px;
+  font-size: 24px;
   font-weight: 750;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
@@ -228,70 +220,50 @@ onMounted(loadResources)
   color: #145bf1;
   cursor: pointer;
 }
-.welcome-questions {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-.welcome-questions button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 52px;
-  line-height: 1.5;
-  padding: 12px 14px;
-  border: 1px solid #e3edff;
-  border-radius: 30px;
-  background: #ffffffd9;
-  color: #385681;
-  cursor: pointer;
-  text-align: left;
-  font-size: 12px;
-  box-shadow: 0 3px 12px #326cc008;
-}
-.welcome-questions button:hover {
-  border-color: #1765ff;
-  color: #1765ff;
-}
-.welcome-questions button:focus-visible {
-  outline: 2px solid #1765ff;
-  outline-offset: 3px;
-}
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
   .welcome-motto {
     display: none;
   }
   .resource-stats > div {
-    min-width: 90px;
+    min-width: 82px;
     padding-inline: 10px;
   }
-  .assistant-portrait {
-    flex-basis: 306px;
-  }
 }
-@media (max-height: 850px) and (min-width: 1000px) {
+@media (max-height: 760px) and (min-width: 761px) {
   .welcome-hero {
-    min-height: 180px;
-    margin-top: 24px;
+    min-height: 140px;
   }
   .assistant-portrait {
-    flex-basis: 195px;
-    height: 204px;
-    margin-top: -24px;
+    height: 164px;
+    flex-basis: 160px;
   }
   .welcome-copy {
     padding: 8px 0;
   }
   .welcome-copy h1 {
-    font-size: 32px;
+    margin: 4px 0;
+    font-size: 28px;
+  }
+  .welcome-rule {
     margin: 6px 0;
   }
-  .welcome-copy p {
-    font-size: 17px;
+  .welcome-eyebrow {
+    font-size: 11px;
   }
   .welcome-role {
-    padding: 12px 18px;
+    padding-block: 10px;
+  }
+}
+@media (max-width: 900px) {
+  .welcome-role {
+    flex-wrap: wrap;
+  }
+  .resource-stats {
+    width: 100%;
+    justify-content: space-around;
+  }
+  .resource-stats > div {
+    flex: 1;
   }
 }
 @media (max-width: 640px) {
@@ -331,10 +303,6 @@ onMounted(loadResources)
   .role-symbol {
     width: 40px;
     height: 40px;
-  }
-  .welcome-questions {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
   }
 }
 </style>

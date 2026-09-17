@@ -423,6 +423,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useUserStore } from '@/stores/user'
 import { useRoute, useRouter } from 'vue-router'
 import { useDatabaseStore } from '@/stores/database'
 import { useTaskerStore } from '@/stores/tasker'
@@ -483,7 +484,8 @@ const {
 
 const kbId = computed(() => store.kbId)
 const database = computed(() => store.database)
-const canManageDatabase = computed(() => database.value?.can_manage === true)
+const userStore = useUserStore()
+const canManageDatabase = computed(() => userStore.isAdmin && database.value?.can_manage === true)
 const isCurrentDatabaseLoaded = computed(() => database.value?.kb_id === kbId.value)
 const kbType = computed(() =>
   isCurrentDatabaseLoaded.value ? database.value.kb_type?.toLowerCase() || 'milvus' : ''
@@ -870,7 +872,7 @@ watch(
 )
 
 const backToDatabase = () => {
-  router.push({ path: '/extensions', query: { tab: 'knowledge' } })
+  router.push(userStore.isAdmin ? { path: '/extensions', query: { tab: 'knowledge' } } : '/chat')
 }
 
 const copyDatabaseId = async () => {
@@ -1096,9 +1098,11 @@ const handleEditSubmit = async () => {
 }
 
 onMounted(() => {
-  loadChunkPresetOptions()
-  loadDepartments()
-  loadUsers()
+  if (userStore.isAdmin) {
+    loadChunkPresetOptions()
+    loadDepartments()
+    loadUsers()
+  }
   document.addEventListener('click', onUploadMenuOutsideClick)
 })
 

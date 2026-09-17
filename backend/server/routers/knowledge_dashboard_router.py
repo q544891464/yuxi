@@ -5,7 +5,7 @@ import traceback
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from server.utils.auth_middleware import get_superadmin_user
+from server.utils.auth_middleware import get_admin_user
 from yuxi.services.knowledge_dashboard_service import get_knowledge_stats
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.logging_config import logger
@@ -27,9 +27,9 @@ class KnowledgeStats(BaseModel):
 
 @knowledge_dashboard.get("/stats/knowledge", response_model=KnowledgeStats)
 async def read_knowledge_stats(
-    current_user: User = Depends(get_superadmin_user),
+    current_user: User = Depends(get_admin_user),
 ):
-    """获取知识库统计（超级管理员权限）。"""
+    """获取知识库统计（管理员权限）。"""
 
     try:
         return KnowledgeStats(**await get_knowledge_stats())
