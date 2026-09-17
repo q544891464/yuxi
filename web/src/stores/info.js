@@ -10,6 +10,24 @@ function readDebugMode() {
   }
 }
 
+const LEGACY_BRAND_NAME = '智能辅助审理数字人'
+const CURRENT_BRAND_NAME = '智能辅助稽查数字人'
+
+function normalizeBrandConfig(config) {
+  const next = { ...(config || {}) }
+  if (next.organization?.name === LEGACY_BRAND_NAME) {
+    next.organization = { ...next.organization, name: CURRENT_BRAND_NAME }
+  }
+  if (next.branding?.name === LEGACY_BRAND_NAME || next.branding?.title === LEGACY_BRAND_NAME) {
+    next.branding = {
+      ...next.branding,
+      ...(next.branding.name === LEGACY_BRAND_NAME ? { name: CURRENT_BRAND_NAME } : {}),
+      ...(next.branding.title === LEGACY_BRAND_NAME ? { title: CURRENT_BRAND_NAME } : {})
+    }
+  }
+  return next
+}
+
 export const useInfoStore = defineStore('info', () => {
   // 状态
   const infoConfig = ref({})
@@ -50,7 +68,7 @@ export const useInfoStore = defineStore('info', () => {
 
   // 动作方法
   function setInfoConfig(newConfig) {
-    infoConfig.value = newConfig
+    infoConfig.value = normalizeBrandConfig(newConfig)
     isLoaded.value = true
   }
 

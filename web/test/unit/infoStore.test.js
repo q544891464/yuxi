@@ -65,3 +65,29 @@ test('品牌配置合并并发读取，成功缓存，失败与强制刷新可�
     await server.close()
   }
 })
+
+test('品牌配置兼容旧默认名称并统一为稽查品牌', async (t) => {
+  const server = await createServer({
+    server: { middlewareMode: true, hmr: false },
+    appType: 'custom'
+  })
+  setActivePinia(createPinia())
+  try {
+    const { useInfoStore } = await server.ssrLoadModule('/src/stores/info.js')
+    const { brandApi } = await server.ssrLoadModule('/src/apis/system_api.js')
+    const store = useInfoStore()
+    t.mock.method(brandApi, 'getInfoConfig', async () => ({
+      success: true,
+      data: {
+        organization: { name: '智能辅助审理数字人' },
+        branding: { name: '智能辅助审理数字人', title: '智能辅助审理数字人' }
+      }
+    }))
+    await store.loadInfoConfig()
+    assert.equal(store.organization.name, '智能辅助稽查数字人')
+    assert.equal(store.branding.name, '智能辅助稽查数字人')
+    assert.equal(store.branding.title, '智能辅助稽查数字人')
+  } finally {
+    await server.close()
+  }
+})

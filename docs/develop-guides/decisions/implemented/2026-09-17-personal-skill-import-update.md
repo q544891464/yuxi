@@ -22,6 +22,8 @@ Owner：backend/package/yuxi/agents/skills/service.py
 
 导入接口的 400 仍遵循前端统一错误脱敏策略；Skill 导入页将这类通用提示转换为不含内部路径或服务端细节的结构要求，直接提示 ZIP 只能包含一个 `SKILL.md`，方便用户修正归档。
 
+品牌配置对旧的默认审理名称做前端兼容映射，确保已有部署的配置在后端配置文件更新前也显示新的稽查名称；自定义组织名称保持不变。
+
 ## 验证
 
 - Linux 隔离容器运行 `test/unit/services/test_personal_skill_export.py test/unit/services/test_skill_service.py test/unit/routers/test_skill_router.py -q`：中间修订版 102 项通过；最后一次源码安全修订因远程 SSH 暂时不可达未重跑。
