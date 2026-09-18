@@ -157,6 +157,8 @@
           </CollapseTransition>
         </section>
 
+        <slot name="after-projects" />
+
         <section class="history-group recent-history-group">
           <button
             type="button"
@@ -245,6 +247,7 @@ const emit = defineEmits([
   'rename-project',
   'delete-project',
   'create-project-chat',
+  'project-expanded',
   'select-project-skill',
   'retry-projects'
 ])
@@ -257,6 +260,7 @@ watch(
     if (!projectId) return
     projectsExpanded.value = true
     expandedProjects.value = new Set([...expandedProjects.value, projectId])
+    emit('project-expanded', true)
   }
 )
 const groupedNavigation = computed(() =>
@@ -271,6 +275,7 @@ const toggleProject = (projectId) => {
   if (next.has(projectId)) next.delete(projectId)
   else next.add(projectId)
   expandedProjects.value = next
+  emit('project-expanded', next.has(projectId))
 }
 
 const renameProject = (project) => {

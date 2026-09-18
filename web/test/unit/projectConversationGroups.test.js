@@ -98,6 +98,9 @@ test('侧边栏同时展示项目和最近分组，最近只展示其他对话',
 
   assert.ok(projectHeadingIndex >= 0)
   assert.ok(projectHeadingIndex < recentHeadingIndex)
+  const projectSlotIndex = source.indexOf('<slot name="after-projects" />')
+  assert.ok(projectSlotIndex > projectHeadingIndex)
+  assert.ok(projectSlotIndex < recentHeadingIndex)
   assert.match(
     source,
     /<section\s+v-if="projectsLoading \|\| projectsError \|\| projectGroups\.length"\s+class="history-group project-history-group"/
@@ -120,6 +123,7 @@ test('项目默认折叠且提供完整名称提示', () => {
     /const isProjectExpanded = \(projectId\) => expandedProjects\.value\.has\(projectId\)/
   )
   assert.match(source, /class="project-name" :title="group\.project\.name"/)
+  assert.match(source, /emit\('project-expanded', next\.has\(projectId\)\)/)
 })
 
 test('项目运行状态仅在折叠时展示', () => {
@@ -146,6 +150,29 @@ test('页面内创建的 Project 会写入共享侧边栏导航 Owner', () => {
   assert.match(layoutSource, /useProjectsStore\(\)/)
   assert.match(selectionSource, /useProjectsStore\(\)/)
   assert.match(selectionSource, /projectsStore\.upsertProject\(project\)/)
+})
+
+test('技能、知识库和数据总览位于项目分组之后且项目展开会收起技能列表', () => {
+  const navigationSource = readFileSync(
+    new URL('../../src/components/ConversationNavSection.vue', import.meta.url),
+    'utf8'
+  )
+  const layoutSource = readFileSync(
+    new URL('../../src/layouts/AppLayout.vue', import.meta.url),
+    'utf8'
+  )
+  assert.match(layoutSource, /import \{[\s\S]*WandSparkles[\s\S]*\} from '@lucide\/vue'/)
+  assert.match(layoutSource, /<WandSparkles :size="17" \/>技能/)
+  assert.match(layoutSource, /<LibraryBig :size="17" \/>知识库/)
+
+  assert.match(layoutSource, /#after-projects/)
+  assert.match(layoutSource, /@project-expanded="handleProjectExpanded"/)
+  assert.match(layoutSource, /const handleProjectExpanded = \(expanded\) =>/)
+  assert.match(navigationSource, /emit\('project-expanded', true\)/)
+  assert.doesNotMatch(
+    layoutSource,
+    /<div v-if="consumerChat && !sidebarCollapsed" class="consumer-skills-nav">/
+  )
 })
 
 test('对话选择与操作菜单使用并列按钮语义', () => {

@@ -11,7 +11,8 @@ import {
   PanelLeft,
   PanelLeftOpen,
   MessageCirclePlus,
-  Search
+  Search,
+  WandSparkles
 } from '@lucide/vue'
 
 import { useConfigStore } from '@/stores/config'
@@ -225,6 +226,10 @@ const toggleSidebar = () => {
 const openSkillsMenu = () => {
   setSidebarCollapsed(false)
   skillsExpanded.value = true
+}
+
+const handleProjectExpanded = (expanded) => {
+  if (expanded) skillsExpanded.value = false
 }
 
 const openConversationSearch = () => {
@@ -495,44 +500,8 @@ provide('settingsModal', {
           aria-label="打开技能菜单"
           @click="openSkillsMenu"
         >
-          <LibraryBig :size="18" />
+          <WandSparkles :size="18" />
         </button>
-        <div v-if="consumerChat && !sidebarCollapsed" class="consumer-skills-nav">
-          <button
-            type="button"
-            class="consumer-nav-link"
-            :aria-expanded="skillsExpanded"
-            @click="skillsExpanded = !skillsExpanded"
-          >
-            <LibraryBig :size="17" />技能
-            <span class="skill-expand-hint">{{ skillsExpanded ? '收起' : '展开' }}</span>
-          </button>
-          <div v-if="skillsExpanded">
-            <RouterLink class="consumer-nav-link" to="/extensions?tab=skills">添加技能</RouterLink>
-            <button
-              v-if="skillNavigation.error"
-              type="button"
-              class="consumer-nav-link"
-              @click="loadSkillNavigation"
-            >
-              {{ skillNavigation.error }}
-            </button>
-            <SkillEntryMenu
-              :nodes="skillEntryTree"
-              :selected-id="String(route.query.skill || '')"
-              :disabled="threadCreationInFlight"
-              @select="openSkillEntry($event)"
-            />
-          </div>
-          <RouterLink
-            class="consumer-nav-link"
-            :to="`/extensions/knowledgebase/${INSPECTION_KB_ID}`"
-            ><LibraryBig :size="17" />知识库</RouterLink
-          >
-          <RouterLink v-if="userStore.isAdmin" class="consumer-nav-link" to="/dashboard"
-            ><BarChart3 :size="17" />数据总览</RouterLink
-          >
-        </div>
         <ConversationNavSection
           v-if="!sidebarCollapsed"
           class="sidebar-conversations"
@@ -555,9 +524,49 @@ provide('settingsModal', {
           @rename-project="handleRenameProject"
           @delete-project="handleDeleteProject"
           @create-project-chat="handleCreateProjectChat"
+          @project-expanded="handleProjectExpanded"
           @retry-projects="loadProjects"
           @load-more-chats="() => chatThreadsStore.loadMoreThreads()"
-        />
+        >
+          <template #after-projects>
+            <div v-if="consumerChat" class="consumer-skills-nav sidebar-skill-module">
+              <button
+                type="button"
+                class="consumer-nav-link"
+                :aria-expanded="skillsExpanded"
+                @click="skillsExpanded = !skillsExpanded"
+              >
+                <WandSparkles :size="17" />技能
+                <span class="skill-expand-hint">{{ skillsExpanded ? '收起' : '展开' }}</span>
+              </button>
+              <div v-if="skillsExpanded">
+                <RouterLink class="consumer-nav-link" to="/extensions?tab=skills">添加技能</RouterLink>
+                <button
+                  v-if="skillNavigation.error"
+                  type="button"
+                  class="consumer-nav-link"
+                  @click="loadSkillNavigation"
+                >
+                  {{ skillNavigation.error }}
+                </button>
+                <SkillEntryMenu
+                  :nodes="skillEntryTree"
+                  :selected-id="String(route.query.skill || '')"
+                  :disabled="threadCreationInFlight"
+                  @select="openSkillEntry($event)"
+                />
+              </div>
+              <RouterLink
+                class="consumer-nav-link"
+                :to="`/extensions/knowledgebase/${INSPECTION_KB_ID}`"
+                ><LibraryBig :size="17" />知识库</RouterLink
+              >
+              <RouterLink v-if="userStore.isAdmin" class="consumer-nav-link" to="/dashboard"
+                ><BarChart3 :size="17" />数据总览</RouterLink
+              >
+            </div>
+          </template>
+        </ConversationNavSection>
       </div>
       <div class="foo">
         <!-- 用户信息组件 -->
