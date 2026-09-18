@@ -232,6 +232,418 @@ async def test_create_thread_view_rejects_client_attachment_metadata():
         )
 
 
+async def test_update_thread_view_moves_conversation_to_owned_project(monkeypatch):
+    conversation = SimpleNamespace(
+        id=1,
+        thread_id="thread-move",
+        uid="user-1",
+        status="active",
+        project_id="project-old",
+        agent_id="main",
+        last_viewed_run_id=None,
+    )
+    target_project = SimpleNamespace(id="project-new", workdir_path="projects/new")
+
+    class FakeConversationRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+        async def lock_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+        async def update_conversation(self, _thread_id, **_kwargs):
+            return conversation
+
+    class FakeProjectRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_active_selectable_for_user(self, project_id, uid):
+            assert project_id == "project-new"
+            assert uid == "user-1"
+            return target_project
+
+    class FakeAgentRunRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_active_run_by_thread_for_user(self, **_kwargs):
+            return None
+
+        async def get_latest_top_level_runs_for_threads(self, _uid, _thread_ids):
+            return {}
+
+    class FakeAgentRunRequestRepository:
+        def __init__(self, _db):
+            pass
+
+        async def list_queued(self, **_kwargs):
+            return []
+
+    class FakeSubagentThreadRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_child_conversation_for_user(self, _conversation_id, _uid):
+            return None
+
+        async def get_by_parent_conversation_for_user(self, _conversation_id, _uid):
+            return None
+
+    async def serialize_thread(thread, **_kwargs):
+        return {"id": thread.thread_id, "project_id": thread.project_id}
+
+    monkeypatch.setattr(svc, "ConversationRepository", FakeConversationRepository)
+    monkeypatch.setattr(svc, "ProjectRepository", FakeProjectRepository)
+    monkeypatch.setattr(svc, "AgentRunRepository", FakeAgentRunRepository)
+    monkeypatch.setattr(svc, "AgentRunRequestRepository", FakeAgentRunRequestRepository)
+    monkeypatch.setattr(svc, "SubagentThreadRepository", FakeSubagentThreadRepository)
+    monkeypatch.setattr(svc, "_serialize_thread", serialize_thread)
+    monkeypatch.setattr(svc.Workdir, "open_existing", lambda *_args: None)
+
+    result = await svc.update_thread_view(
+        thread_id="thread-move",
+        project_id="project-new",
+        db=object(),
+        current_uid="user-1",
+    )
+
+    assert conversation.project_id == "project-new"
+    assert result == {"id": "thread-move", "project_id": "project-new"}
+
+
+async def test_update_thread_view_rejects_move_while_run_is_active(monkeypatch):
+    conversation = SimpleNamespace(
+        thread_id="thread-busy",
+        uid="user-1",
+        status="active",
+        project_id="project-old",
+        agent_id="main",
+    )
+
+    class FakeConversationRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+        async def lock_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+    class FakeProjectRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_active_selectable_for_user(self, _project_id, _uid):
+            return SimpleNamespace(id="project-new", workdir_path="projects/new")
+
+    class FakeAgentRunRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_active_run_by_thread_for_user(self, **_kwargs):
+            return SimpleNamespace(id="run-active")
+
+    monkeypatch.setattr(svc, "ConversationRepository", FakeConversationRepository)
+    monkeypatch.setattr(svc, "ProjectRepository", FakeProjectRepository)
+    monkeypatch.setattr(svc, "AgentRunRepository", FakeAgentRunRepository)
+    monkeypatch.setattr(svc.Workdir, "open_existing", lambda *_args: None)
+
+    with pytest.raises(svc.HTTPException) as exc_info:
+        await svc.update_thread_view(
+            thread_id="thread-busy",
+            project_id="project-new",
+            db=object(),
+            current_uid="user-1",
+        )
+
+    assert exc_info.value.status_code == 409
+    assert conversation.project_id == "project-old"
+
+
+async def test_update_thread_view_rejects_move_with_queued_request(monkeypatch):
+    conversation = SimpleNamespace(
+        thread_id="thread-queued",
+        uid="user-1",
+        status="active",
+        project_id="project-old",
+        agent_id="main",
+    )
+
+    class FakeConversationRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+        async def lock_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+    class FakeProjectRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_active_selectable_for_user(self, _project_id, _uid):
+            return SimpleNamespace(id="project-new", workdir_path="projects/new")
+
+    class FakeAgentRunRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_active_run_by_thread_for_user(self, **_kwargs):
+            return None
+
+    class FakeAgentRunRequestRepository:
+        def __init__(self, _db):
+            pass
+
+        async def list_queued(self, **_kwargs):
+            return [SimpleNamespace(request_id="request-queued")]
+
+    monkeypatch.setattr(svc, "ConversationRepository", FakeConversationRepository)
+    monkeypatch.setattr(svc, "ProjectRepository", FakeProjectRepository)
+    monkeypatch.setattr(svc, "AgentRunRepository", FakeAgentRunRepository)
+    monkeypatch.setattr(svc, "AgentRunRequestRepository", FakeAgentRunRequestRepository)
+    monkeypatch.setattr(svc.Workdir, "open_existing", lambda *_args: None)
+
+    with pytest.raises(svc.HTTPException) as exc_info:
+        await svc.update_thread_view(
+            thread_id="thread-queued",
+            project_id="project-new",
+            db=object(),
+            current_uid="user-1",
+        )
+
+    assert exc_info.value.status_code == 409
+    assert conversation.project_id == "project-old"
+
+
+async def test_update_thread_view_rejects_move_with_subagent_threads(monkeypatch):
+    conversation = SimpleNamespace(
+        id=10,
+        thread_id="thread-subagent",
+        uid="user-1",
+        status="active",
+        project_id="project-old",
+        agent_id="main",
+    )
+
+    class FakeConversationRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+        async def lock_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+    class FakeProjectRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_active_selectable_for_user(self, _project_id, _uid):
+            return SimpleNamespace(id="project-new", workdir_path="projects/new")
+
+    class FakeAgentRunRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_active_run_by_thread_for_user(self, **_kwargs):
+            return None
+
+    class FakeAgentRunRequestRepository:
+        def __init__(self, _db):
+            pass
+
+        async def list_queued(self, **_kwargs):
+            return []
+
+    class FakeSubagentThreadRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_child_conversation_for_user(self, _conversation_id, _uid):
+            return None
+
+        async def get_by_parent_conversation_for_user(self, _conversation_id, _uid):
+            return SimpleNamespace(id=99)
+
+    monkeypatch.setattr(svc, "ConversationRepository", FakeConversationRepository)
+    monkeypatch.setattr(svc, "ProjectRepository", FakeProjectRepository)
+    monkeypatch.setattr(svc, "AgentRunRepository", FakeAgentRunRepository)
+    monkeypatch.setattr(svc, "AgentRunRequestRepository", FakeAgentRunRequestRepository)
+    monkeypatch.setattr(svc, "SubagentThreadRepository", FakeSubagentThreadRepository)
+    monkeypatch.setattr(svc.Workdir, "open_existing", lambda *_args: None)
+
+    with pytest.raises(svc.HTTPException) as exc_info:
+        await svc.update_thread_view(
+            thread_id="thread-subagent",
+            project_id="project-new",
+            db=object(),
+            current_uid="user-1",
+        )
+
+    assert exc_info.value.status_code == 409
+    assert conversation.project_id == "project-old"
+
+
+async def test_update_thread_view_rejects_move_of_subagent_child_thread(monkeypatch):
+    conversation = SimpleNamespace(
+        id=11,
+        thread_id="thread-child",
+        uid="user-1",
+        status="active",
+        project_id="project-old",
+        agent_id="subagent",
+    )
+
+    class FakeConversationRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+        async def lock_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+    class FakeProjectRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_active_selectable_for_user(self, _project_id, _uid):
+            return SimpleNamespace(id="project-new", workdir_path="projects/new")
+
+    class FakeAgentRunRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_active_run_by_thread_for_user(self, **_kwargs):
+            return None
+
+    class FakeAgentRunRequestRepository:
+        def __init__(self, _db):
+            pass
+
+        async def list_queued(self, **_kwargs):
+            return []
+
+    class FakeSubagentThreadRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_child_conversation_for_user(self, _conversation_id, _uid):
+            return SimpleNamespace(id=100, parent_conversation_id=10)
+
+        async def get_by_parent_conversation_for_user(self, _conversation_id, _uid):
+            return None
+
+    monkeypatch.setattr(svc, "ConversationRepository", FakeConversationRepository)
+    monkeypatch.setattr(svc, "ProjectRepository", FakeProjectRepository)
+    monkeypatch.setattr(svc, "AgentRunRepository", FakeAgentRunRepository)
+    monkeypatch.setattr(svc, "AgentRunRequestRepository", FakeAgentRunRequestRepository)
+    monkeypatch.setattr(svc, "SubagentThreadRepository", FakeSubagentThreadRepository)
+    monkeypatch.setattr(svc.Workdir, "open_existing", lambda *_args: None)
+
+    with pytest.raises(svc.HTTPException) as exc_info:
+        await svc.update_thread_view(
+            thread_id="thread-child",
+            project_id="project-new",
+            db=object(),
+            current_uid="user-1",
+        )
+
+    assert exc_info.value.status_code == 409
+    assert conversation.project_id == "project-old"
+
+
+async def test_update_thread_view_rejects_unavailable_target_project(monkeypatch):
+    conversation = SimpleNamespace(
+        thread_id="thread-target",
+        uid="user-1",
+        status="active",
+        project_id="project-old",
+        agent_id="main",
+    )
+
+    class FakeConversationRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+    class FakeProjectRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_active_selectable_for_user(self, _project_id, _uid):
+            return None
+
+    monkeypatch.setattr(svc, "ConversationRepository", FakeConversationRepository)
+    monkeypatch.setattr(svc, "ProjectRepository", FakeProjectRepository)
+
+    with pytest.raises(svc.HTTPException) as exc_info:
+        await svc.update_thread_view(
+            thread_id="thread-target",
+            project_id="project-other-user",
+            db=object(),
+            current_uid="user-1",
+        )
+
+    assert exc_info.value.status_code == 404
+    assert conversation.project_id == "project-old"
+
+
+async def test_update_thread_view_rejects_missing_target_workdir(monkeypatch):
+    conversation = SimpleNamespace(
+        thread_id="thread-workdir",
+        uid="user-1",
+        status="active",
+        project_id="project-old",
+        agent_id="main",
+    )
+
+    class FakeConversationRepository:
+        def __init__(self, _db):
+            pass
+
+        async def get_conversation_by_thread_id(self, _thread_id):
+            return conversation
+
+    class FakeProjectRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_active_selectable_for_user(self, _project_id, _uid):
+            return SimpleNamespace(id="project-new", workdir_path="projects/missing")
+
+    monkeypatch.setattr(svc, "ConversationRepository", FakeConversationRepository)
+    monkeypatch.setattr(svc, "ProjectRepository", FakeProjectRepository)
+
+    def fail_open_existing(*_args):
+        raise FileNotFoundError("missing")
+
+    monkeypatch.setattr(svc.Workdir, "open_existing", fail_open_existing)
+
+    with pytest.raises(svc.HTTPException) as exc_info:
+        await svc.update_thread_view(
+            thread_id="thread-workdir",
+            project_id="project-new",
+            db=object(),
+            current_uid="user-1",
+        )
+
+    assert exc_info.value.status_code == 409
+    assert conversation.project_id == "project-old"
+
+
 async def test_explicit_project_creation_locks_project_until_commit(monkeypatch):
     project = SimpleNamespace(
         id="project-1",

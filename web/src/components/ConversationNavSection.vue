@@ -142,11 +142,13 @@
                         :key="chat.id"
                         :chat="chat"
                         :current-chat-id="currentChatId"
+                        :projects="projects"
                         nested
                         @select-chat="$emit('select-chat', $event)"
                         @delete-chat="$emit('delete-chat', $event)"
                         @rename-chat="$emit('rename-chat', $event)"
                         @toggle-pin="$emit('toggle-pin', $event)"
+                        @move-chat="$emit('move-chat', $event)"
                       />
                       <div v-if="!group.conversations.length" class="project-empty">暂无对话</div>
                     </div>
@@ -179,10 +181,12 @@
                   :key="chat.id"
                   :chat="chat"
                   :current-chat-id="currentChatId"
+                  :projects="projects"
                   @select-chat="$emit('select-chat', $event)"
                   @delete-chat="$emit('delete-chat', $event)"
                   @rename-chat="$emit('rename-chat', $event)"
                   @toggle-pin="$emit('toggle-pin', $event)"
+                  @move-chat="$emit('move-chat', $event)"
                 />
                 <div v-if="!otherConversations.length" class="list-state">暂无对话历史</div>
               </template>
@@ -243,6 +247,7 @@ const emit = defineEmits([
   'delete-chat',
   'rename-chat',
   'toggle-pin',
+  'move-chat',
   'load-more-chats',
   'rename-project',
   'delete-project',

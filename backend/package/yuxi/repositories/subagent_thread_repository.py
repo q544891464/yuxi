@@ -42,6 +42,20 @@ class SubagentThreadRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_parent_conversation_for_user(
+        self,
+        parent_conversation_id: int,
+        uid: str,
+    ) -> SubagentThread | None:
+        """按父对话 ID 查找当前用户已有的子智能体线程关系。"""
+        result = await self.db.execute(
+            select(SubagentThread).where(
+                SubagentThread.parent_conversation_id == parent_conversation_id,
+                SubagentThread.uid == str(uid),
+            ).limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def create(
         self,
         *,

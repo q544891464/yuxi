@@ -330,6 +330,19 @@ const handleTogglePinChat = async (threadId) => {
   }
 }
 
+const handleMoveChat = async ({ chatId, projectId }) => {
+  if (!chatId || !projectId) return
+  const targetProject = projects.value.find((project) => project.id === projectId)
+  if (!targetProject) return
+  try {
+    await chatThreadsStore.updateThread(chatId, null, undefined, undefined, projectId)
+    message.success(`对话已移至“${targetProject.name}”`)
+  } catch (error) {
+    console.warn('移动对话失败:', error)
+    message.error(error?.message || '移动对话失败')
+  }
+}
+
 const handleRenameProject = async ({ projectId, name }) => {
   if (!projectId || projectPendingId.value) return
   projectPendingId.value = projectId
@@ -521,6 +534,7 @@ provide('settingsModal', {
           @delete-chat="handleDeleteChat"
           @rename-chat="handleRenameChat"
           @toggle-pin="handleTogglePinChat"
+          @move-chat="handleMoveChat"
           @rename-project="handleRenameProject"
           @delete-project="handleDeleteProject"
           @create-project-chat="handleCreateProjectChat"

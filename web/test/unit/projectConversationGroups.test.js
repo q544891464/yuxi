@@ -229,3 +229,27 @@ test('对话状态拥有常驻遮罩且项目提供带项目上下文的新建�
   )
   assert.doesNotMatch(chatSource, /ensureActiveThread\.reset\(\)\s*selectedProjectId\.value = AUTO_PROJECT_ID/)
 })
+
+test('对话操作菜单支持移至其他项目并沿用线程更新接口', () => {
+  const itemSource = readFileSync(
+    new URL('../../src/components/ConversationNavItem.vue', import.meta.url),
+    'utf8'
+  )
+  const sectionSource = readFileSync(
+    new URL('../../src/components/ConversationNavSection.vue', import.meta.url),
+    'utf8'
+  )
+  const layoutSource = readFileSync(
+    new URL('../../src/layouts/AppLayout.vue', import.meta.url),
+    'utf8'
+  )
+  const apiSource = readFileSync(new URL('../../src/apis/agent_api.js', import.meta.url), 'utf8')
+
+  assert.match(itemSource, /title="移至项目"/)
+  assert.match(itemSource, /project\.id !== props\.chat\.project_id/)
+  assert.match(itemSource, /@click\.stop="\$emit\('move-chat'/)
+  assert.match(sectionSource, /'move-chat'/)
+  assert.match(layoutSource, /const handleMoveChat = async/)
+  assert.match(layoutSource, /updateThread\(chatId, null, undefined, undefined, projectId\)/)
+  assert.match(apiSource, /project_id: projectId/)
+})

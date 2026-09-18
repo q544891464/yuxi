@@ -10,7 +10,7 @@ def test_thread_create_rejects_legacy_direct_workdir_path():
         ThreadCreate(agent_id="main", workdir_path="client/demo")
 
 
-def test_thread_update_rejects_project_rebinding():
-    """已有 Conversation 不接受 project_id 改绑。"""
-    with pytest.raises(ValidationError):
-        ThreadUpdate(project_id="project-2")
+def test_thread_update_accepts_project_move_request():
+    """线程更新允许提交目标项目，权限和运行状态由服务层校验。"""
+    update = ThreadUpdate(project_id="project-2")
+    assert update.project_id == "project-2"

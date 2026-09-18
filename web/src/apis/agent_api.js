@@ -326,13 +326,15 @@ export const threadApi = {
    * @param {string} title - 对话标题
    * @param {boolean} is_pinned - 是否置顶
    * @param {string} toolApprovalMode - 工具审批模式
+   * @param {string} projectId - 可选的目标项目 ID
    * @returns {Promise} - 更新结果
    */
-  updateThread: (threadId, title, is_pinned, toolApprovalMode) =>
+  updateThread: (threadId, title, is_pinned, toolApprovalMode, projectId) =>
     apiPut(`/api/chat/thread/${threadId}`, {
       title,
       is_pinned,
-      tool_approval_mode: toolApprovalMode
+      tool_approval_mode: toolApprovalMode,
+      ...(projectId ? { project_id: projectId } : {})
     }),
 
   /**

@@ -196,12 +196,31 @@ async def test_linked_project_and_thread_selection_keep_directory_bytes(
     assert thread["project_id"] == project["id"]
     assert thread["workdir_path"] == directory_name
 
+    target_project_response = await test_client.post(
+        "/api/projects",
+        headers=admin_headers,
+        json={
+            "request_id": make_test_resource_id("move-target-linked-project"),
+            "name": "Move Target",
+            "workdir": {"mode": "linked", "path": directory_name},
+        },
+    )
+    assert target_project_response.status_code == 200, target_project_response.text
+    target_project = target_project_response.json()
+
     rebind = await test_client.put(
         f"/api/chat/thread/{thread['id']}",
         headers=admin_headers,
-        json={"project_id": str(uuid.uuid4())},
+        json={"project_id": target_project["id"]},
     )
-    assert rebind.status_code == 422, rebind.text
+    assert rebind.status_code == 200, rebind.text
+    assert rebind.json()["project_id"] == target_project["id"]
+    async with _database_connection() as db:
+        moved_row = await db.fetchrow(
+            "SELECT project_id FROM conversations WHERE thread_id = $1",
+            thread["id"],
+        )
+    assert moved_row["project_id"] == target_project["id"]
 
     legacy_direct_path = await test_client.post(
         "/api/chat/thread",

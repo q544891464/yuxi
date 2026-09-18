@@ -50,6 +50,18 @@
             <a-menu-item key="rename" :icon="h(SquarePen, { size: 14 })" @click.stop="renameChat">
               重命名
             </a-menu-item>
+            <a-sub-menu key="move" :icon="h(FolderInput, { size: 14 })" title="移至项目">
+              <a-menu-item
+                v-for="project in moveTargets"
+                :key="`move-${project.id}`"
+                @click.stop="$emit('move-chat', { chatId: chat.id, projectId: project.id })"
+              >
+                {{ project.name }}
+              </a-menu-item>
+              <a-menu-item v-if="!moveTargets.length" key="move-empty" disabled>
+                暂无可用项目
+              </a-menu-item>
+            </a-sub-menu>
             <a-menu-item
               key="delete"
               :icon="h(Trash2, { size: 14 })"
@@ -71,17 +83,27 @@
 </template>
 
 <script setup>
-import { h } from 'vue'
+import { computed, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { Loader2, MoreVertical, Pin, PinOff, SquarePen, Trash2 } from '@lucide/vue'
+import { FolderInput, Loader2, MoreVertical, Pin, PinOff, SquarePen, Trash2 } from '@lucide/vue'
 
 const props = defineProps({
   chat: { type: Object, required: true },
   currentChatId: { type: String, default: null },
-  nested: { type: Boolean, default: false }
+  nested: { type: Boolean, default: false },
+  projects: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['select-chat', 'delete-chat', 'rename-chat', 'toggle-pin'])
+const emit = defineEmits(['select-chat', 'delete-chat', 'rename-chat', 'toggle-pin', 'move-chat'])
+const moveTargets = computed(() =>
+  props.projects.filter(
+    (project) =>
+      project?.id &&
+      project.id !== props.chat.project_id &&
+      (project.status === undefined || project.status === 'active') &&
+      (project.selection_status === undefined || project.selection_status === 'selectable')
+  )
+)
 
 const renameChat = () => {
   let newTitle = props.chat.title || ''

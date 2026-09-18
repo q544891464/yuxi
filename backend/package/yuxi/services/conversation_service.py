@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.models.utils import parse_assistant_message_body
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import AgentRunRepository
+from yuxi.repositories.agent_run_request_repository import AgentRunRequestRepository
 from yuxi.repositories.conversation_repository import INVOCATION_CONVERSATION_SOURCES, ConversationRepository
 from yuxi.repositories.project_repository import ProjectRepository
+from yuxi.repositories.subagent_thread_repository import SubagentThreadRepository
 from yuxi.services.attachment_service import serialize_attachment
 from yuxi.services.project_service import create_implicit_project
 from yuxi.services.workdir_service import (
@@ -326,11 +328,69 @@ async def update_thread_view(
     title: str | None = None,
     is_pinned: bool | None = None,
     tool_approval_mode: str | None = None,
+    project_id: str | None = None,
     db: AsyncSession,
     current_uid: str,
 ) -> dict:
     conv_repo = ConversationRepository(db)
-    await require_user_conversation(conv_repo, thread_id, str(current_uid))
+    conversation = await require_user_conversation(conv_repo, thread_id, str(current_uid))
+
+    if project_id is not None and project_id != conversation.project_id:
+        # 项目归属会决定后续请求使用的工作目录。移动前锁住会话和目标项目，
+        # 并拒绝正在运行或排队的请求，避免执行中的任务读写到另一项目。
+        # 先锁 Project，再锁 Conversation，与删除项目的锁顺序保持一致，避免死锁。
+        target_project = await ProjectRepository(db).lock_active_selectable_for_user(
+            project_id,
+            str(current_uid),
+        )
+        if target_project is None:
+            raise HTTPException(status_code=404, detail="目标项目不存在或不可用")
+        try:
+            Workdir.open_existing(str(current_uid), target_project.workdir_path)
+        except (FileNotFoundError, NotADirectoryError, PermissionError, OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="项目目录不可用") from exc
+
+        locked_conversation = await conv_repo.lock_conversation_by_thread_id(thread_id)
+        if (
+            not locked_conversation
+            or locked_conversation.uid != str(current_uid)
+            or locked_conversation.status == "deleted"
+        ):
+            raise HTTPException(status_code=404, detail="对话线程不存在")
+        conversation = locked_conversation
+
+        if conversation.project_id != target_project.id:
+            active_run = await AgentRunRepository(db).get_active_run_by_thread_for_user(
+                agent_slug=conversation.agent_id,
+                conversation_thread_id=conversation.thread_id,
+                uid=str(current_uid),
+            )
+            if active_run:
+                raise HTTPException(status_code=409, detail="对话正在运行或排队，完成后才能移动项目")
+
+            queued_requests = await AgentRunRequestRepository(db).list_queued(
+                uid=str(current_uid),
+                agent_slug=conversation.agent_id,
+                conversation_thread_id=conversation.thread_id,
+            )
+            if queued_requests:
+                raise HTTPException(status_code=409, detail="对话正在运行或排队，完成后才能移动项目")
+
+            subagent_thread_repo = SubagentThreadRepository(db)
+            if await subagent_thread_repo.get_by_child_conversation_for_user(
+                conversation.id,
+                str(current_uid),
+            ):
+                raise HTTPException(status_code=409, detail="该对话属于子智能体线程，暂不能移动项目")
+
+            if await subagent_thread_repo.get_by_parent_conversation_for_user(
+                conversation.id,
+                str(current_uid),
+            ):
+                raise HTTPException(status_code=409, detail="该对话包含子智能体线程，暂不能移动项目")
+
+        conversation.project_id = target_project.id
+
     metadata = {"tool_approval_mode": tool_approval_mode} if tool_approval_mode is not None else None
     updated_conv = await conv_repo.update_conversation(
         thread_id,

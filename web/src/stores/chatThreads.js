@@ -180,19 +180,20 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
     return removedIds
   }
 
-  const updateThread = async (threadId, title, isPinned, toolApprovalMode) => {
+  const updateThread = async (threadId, title, isPinned, toolApprovalMode, projectId) => {
     if (!threadId) return
 
     const normalizedTitle = title ? String(title).replace(/\s+/g, ' ').trim().slice(0, 255) : null
     if (title && !normalizedTitle) return
-    if (!normalizedTitle && isPinned === undefined && toolApprovalMode === undefined) return
+    if (!normalizedTitle && isPinned === undefined && toolApprovalMode === undefined && !projectId) return
 
     try {
       const updatedThread = await threadApi.updateThread(
         threadId,
         normalizedTitle,
         isPinned,
-        toolApprovalMode
+        toolApprovalMode,
+        projectId
       )
       upsertThread(updatedThread)
       return updatedThread

@@ -345,13 +345,14 @@ async def delete_thread(
 
 
 class ThreadUpdate(BaseModel):
-    """线程可变展示字段，不接受绑定字段。"""
+    """线程可变字段；项目归属由后端按当前用户权限校验。"""
 
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = None
     is_pinned: bool | None = None
     tool_approval_mode: ToolApprovalMode | None = None
+    project_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 @chat.put("/thread/{thread_id}", response_model=ThreadResponse)
@@ -367,6 +368,7 @@ async def update_thread(
         title=thread_update.title,
         is_pinned=thread_update.is_pinned,
         tool_approval_mode=thread_update.tool_approval_mode,
+        project_id=thread_update.project_id,
         db=db,
         current_uid=str(current_user.uid),
     )
