@@ -36,8 +36,10 @@ from yuxi.agents.skills.service import (
     read_personal_skill_file,
     read_skill_file,
     update_skill_dependencies,
+    update_skill_display_name,
     update_skill_enabled,
     update_skill_file,
+    update_personal_skill_display_name,
     update_skill_share_config,
     user_can_manage_skill,
 )
@@ -56,6 +58,10 @@ class ShareConfigPayload(BaseModel):
 
 class SkillEnabledUpdateRequest(BaseModel):
     enabled: bool = Field(..., description="是否启用")
+
+
+class SkillDisplayNameUpdateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128, description="技能展示名称")
 
 
 class SkillNodeCreateRequest(BaseModel):
@@ -310,6 +316,22 @@ async def read_personal_skill_file_route(
         raise HTTPException(status_code=500, detail="读取个人 Skill 文件失败")
 
 
+@user_skills.put("/personal/{slug}/display-name")
+async def update_personal_skill_display_name_route(
+    slug: str,
+    payload: SkillDisplayNameUpdateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    try:
+        item = await update_personal_skill_display_name(str(current_user.uid), slug, payload.name)
+        return {"success": True, "data": _serialize_skill_for_user(item, current_user)}
+    except ValueError as e:
+        _raise_from_value_error(e)
+    except Exception as e:
+        logger.error(f"Failed to update personal Skill display name '{slug}': {e}")
+        raise HTTPException(status_code=500, detail="更新个人 Skill 名称失败")
+
+
 @user_skills.delete("/personal/{slug}")
 async def delete_personal_skill_route(
     slug: str,
@@ -433,6 +455,23 @@ async def update_skill_enabled_route(
     except Exception as e:
         logger.error(f"Failed to update skill enabled '{slug}': {e}")
         raise HTTPException(status_code=500, detail="更新 Skill 启用状态失败")
+
+
+@skills.put("/{slug}/display-name")
+async def update_skill_display_name_route(
+    slug: str,
+    payload: SkillDisplayNameUpdateRequest,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        item = await update_skill_display_name(db, slug=slug, display_name=payload.name, operator=current_user)
+        return {"success": True, "data": _serialize_skill_for_user(item, current_user)}
+    except ValueError as e:
+        _raise_from_value_error(e)
+    except Exception as e:
+        logger.error(f"Failed to update Skill display name '{slug}': {e}")
+        raise HTTPException(status_code=500, detail="更新 Skill 名称失败")
 
 
 @skills.get("/{slug}/tree")

@@ -536,6 +536,221 @@ def test_parse_skill_markdown_supports_display_name_with_slug():
     assert meta["version"] == "1.0.2"
 
 
+def test_rewrite_display_name_keeps_legacy_skill_slug_stable():
+    content = "---\nname: english-skill\ndescription: demo\n---\n# Demo\n"
+
+    updated = svc._rewrite_frontmatter_display_name(content, slug="english-skill", display_name="中文技能名")
+    slug, name, description, _ = svc._parse_skill_markdown(updated)
+
+    assert slug == "english-skill"
+    assert name == "中文技能名"
+    assert description == "demo"
+    assert "slug: english-skill" in updated
+
+
+def test_rewrite_display_name_rejects_blank_name():
+    content = "---\nname: english-skill\ndescription: demo\n---\n"
+
+    with pytest.raises(ValueError, match="缺少 name"):
+        svc._rewrite_frontmatter_display_name(content, slug="english-skill", display_name="   ")
+
+
+def test_rewrite_display_name_reports_malformed_yaml_as_value_error():
+    with pytest.raises(ValueError, match="YAML 解析失败"):
+        svc._rewrite_frontmatter_display_name(
+            "---\nname: [broken\ndescription: demo\n---\n",
+            slug="english-skill",
+            display_name="中文技能名",
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_shared_skill_display_name_syncs_file_and_index(monkeypatch: pytest.MonkeyPatch):
+    skill_dir = svc.get_skills_root_dir() / "english-skill"
+    skill_dir.mkdir(parents=True)
+    skill_md = skill_dir / "SKILL.md"
+    skill_md.write_text("---\nname: english-skill\ndescription: demo\n---\n# Demo\n", encoding="utf-8")
+    item = Skill(
+        slug="english-skill",
+        name="english-skill",
+        description="demo",
+        source_type="upload",
+        dir_path="shared/english-skill",
+        share_config={
+            "version": 2,
+            "read_scope": {"access_level": "user", "user_uids": ["root"]},
+            "manage_scope": {"access_level": "user", "user_uids": ["root"]},
+        },
+        created_by="root",
+    )
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_slug(self, slug: str, *, for_update: bool = False):
+            assert slug == "english-skill"
+            return item
+
+        async def update_metadata(self, target, *, name, description, updated_by):
+            assert target is item
+            target.name = name
+            target.description = description
+            target.updated_by = updated_by
+            return target
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    updated = await svc.update_skill_display_name(
+        _UnitOfWork(), slug="english-skill", display_name="中文技能名", operator=_user()
+    )
+
+    assert updated.name == "中文技能名"
+    content = skill_md.read_text(encoding="utf-8")
+    assert "name: 中文技能名" in content
+    assert "slug: english-skill" in content
+
+
+@pytest.mark.asyncio
+async def test_update_shared_skill_display_name_restores_file_when_commit_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    skill_dir = svc.get_skills_root_dir() / "english-skill"
+    skill_dir.mkdir(parents=True)
+    skill_md = skill_dir / "SKILL.md"
+    original = "---\nname: english-skill\ndescription: demo\n---\n# Demo\n"
+    skill_md.write_text(original, encoding="utf-8")
+    item = Skill(
+        slug="english-skill",
+        name="english-skill",
+        description="demo",
+        source_type="upload",
+        dir_path="shared/english-skill",
+        share_config={"version": 2, "read_scope": None, "manage_scope": None},
+        created_by="root",
+    )
+    rolled_back = False
+
+    class FailingUnitOfWork(_UnitOfWork):
+        async def commit(self) -> None:
+            raise RuntimeError("commit failed")
+
+        async def rollback(self) -> None:
+            nonlocal rolled_back
+            rolled_back = True
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_slug(self, slug: str, *, for_update: bool = False):
+            return item
+
+        async def update_metadata(self, target, **_kwargs):
+            return target
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    with pytest.raises(RuntimeError, match="commit failed"):
+        await svc.update_skill_display_name(
+            FailingUnitOfWork(), slug="english-skill", display_name="中文技能名", operator=_user()
+        )
+
+    assert rolled_back is True
+    assert skill_md.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.asyncio
+async def test_update_shared_skill_display_name_rolls_back_when_file_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    skill_dir = svc.get_skills_root_dir() / "english-skill"
+    skill_dir.mkdir(parents=True)
+    skill_md = skill_dir / "SKILL.md"
+    original = "---\nname: english-skill\ndescription: demo\n---\n"
+    skill_md.write_text(original, encoding="utf-8")
+    item = Skill(
+        slug="english-skill",
+        name="english-skill",
+        description="demo",
+        source_type="upload",
+        dir_path="shared/english-skill",
+        share_config={"version": 2, "read_scope": None, "manage_scope": None},
+        created_by="root",
+    )
+    rolled_back = False
+
+    class UnitOfWork(_UnitOfWork):
+        async def rollback(self) -> None:
+            nonlocal rolled_back
+            rolled_back = True
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_slug(self, slug: str, *, for_update: bool = False):
+            return item
+
+        async def update_metadata(self, target, **_kwargs):
+            return target
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+    monkeypatch.setattr(svc, "_atomic_replace_text", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk")))
+
+    with pytest.raises(OSError, match="disk"):
+        await svc.update_skill_display_name(
+            UnitOfWork(), slug="english-skill", display_name="中文技能名", operator=_user()
+        )
+
+    assert rolled_back is True
+    assert skill_md.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.asyncio
+async def test_update_shared_skill_display_name_rejects_readonly_and_builtin(monkeypatch: pytest.MonkeyPatch):
+    readonly = Skill(
+        slug="readonly",
+        name="readonly",
+        description="demo",
+        source_type="upload",
+        dir_path="shared/readonly",
+        share_config={
+            "version": 2,
+            "read_scope": {"access_level": "user", "user_uids": ["reader"]},
+            "manage_scope": None,
+        },
+        created_by="owner",
+    )
+    builtin = Skill(
+        slug="builtin-skill",
+        name="builtin-skill",
+        description="demo",
+        source_type="builtin",
+        dir_path="shared/builtin-skill",
+        share_config={"version": 2, "read_scope": {"access_level": "global"}, "manage_scope": None},
+        created_by="builtin-system",
+    )
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_slug(self, slug: str, *, for_update: bool = False):
+            return readonly if slug == "readonly" else builtin
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    with pytest.raises(ValueError, match="无权管理"):
+        await svc.update_skill_display_name(
+            _UnitOfWork(), slug="readonly", display_name="只读", operator=_user("reader", role="user")
+        )
+    with pytest.raises(ValueError, match="内置 skill 不允许"):
+        await svc.update_skill_display_name(
+            _UnitOfWork(), slug="builtin-skill", display_name="内置", operator=_user("root", role="admin")
+        )
+
+
 def test_parse_skill_markdown_requires_frontmatter():
     with pytest.raises(ValueError, match="frontmatter"):
         svc._parse_skill_markdown("# missing")
@@ -2094,6 +2309,39 @@ async def test_personal_skill_list_reads_current_workspace_state(
 
     assert first[0].description == "first"
     assert current[0].description == "changed"
+
+
+@pytest.mark.asyncio
+async def test_update_personal_skill_display_name_persists_without_renaming_slug(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    root = _personal_skill_root(tmp_path, monkeypatch)
+    skill_dir = _write_personal_skill(root, "english-skill", "demo")
+
+    updated = await svc.update_personal_skill_display_name("user-1", "english-skill", "中文技能名")
+    rescanned = await svc.list_personal_skills("user-1")
+
+    assert updated.slug == "english-skill"
+    assert updated.name == "中文技能名"
+    assert rescanned[0].name == "中文技能名"
+    assert skill_dir.name == "english-skill"
+    assert "slug: english-skill" in (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_update_personal_skill_display_name_cannot_reach_another_users_skill(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    owner_root = _personal_skill_root(tmp_path, monkeypatch, uid="owner")
+    _write_personal_skill(owner_root, "english-skill", "demo")
+
+    with pytest.raises(ValueError, match="个人 Skill 不存在"):
+        await svc.update_personal_skill_display_name("other", "english-skill", "越权名称")
+
+    owner_items = await svc.list_personal_skills("owner")
+    assert owner_items[0].name == "english-skill"
 
 
 @pytest.mark.asyncio

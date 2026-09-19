@@ -176,6 +176,15 @@
             </div>
           </div>
           <div class="skill-preview-actions">
+            <a-button
+              v-if="canRenamePreviewSkill"
+              size="small"
+              class="lucide-icon-btn"
+              @click="openRenameSkill"
+            >
+              <Pencil :size="13" />
+              <span>修改名称</span>
+            </a-button>
             <a-switch
               v-if="previewSkill.sourceScope !== 'personal'"
               :checked="previewSkill.enabled !== false"
@@ -229,6 +238,30 @@
           </div>
         </div>
       </div>
+    </a-modal>
+
+    <a-modal
+      v-model:open="renameSkillVisible"
+      title="修改技能名称"
+      ok-text="保存"
+      cancel-text="取消"
+      :confirm-loading="renamingSkill"
+      @ok="saveSkillDisplayName"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="展示名称" required>
+          <a-input
+            v-model:value="renameSkillName"
+            :maxlength="128"
+            show-count
+            placeholder="例如：申报数据处理"
+            @press-enter="saveSkillDisplayName"
+          />
+        </a-form-item>
+        <div class="rename-skill-hint">
+          内部标识 <code>{{ previewSkill?.slug }}</code> 保持不变，已有调用和绑定不会受影响。
+        </div>
+      </a-form>
     </a-modal>
 
     <SkillInstallFlowModal
@@ -512,6 +545,7 @@ import {
   RefreshCw,
   Upload,
   Computer,
+  Pencil,
   WandSparkles,
   History,
   Trash2,
@@ -606,6 +640,9 @@ const togglingSkillSlugs = ref([])
 const skills = ref([])
 const skillPreviewVisible = ref(false)
 const previewSkill = ref(null)
+const renameSkillVisible = ref(false)
+const renameSkillName = ref('')
+const renamingSkill = ref(false)
 const skillPreviewMarkdown = ref('')
 const skillPreviewLoading = ref(false)
 const skillPreviewError = ref('')
@@ -719,6 +756,12 @@ const filteredDeletableSkills = computed(() =>
   )
 )
 const canDeletePreviewSkill = computed(
+  () =>
+    !!previewSkill.value &&
+    canManageSkill(previewSkill.value) &&
+    previewSkill.value.sourceType !== 'builtin'
+)
+const canRenamePreviewSkill = computed(
   () =>
     !!previewSkill.value &&
     canManageSkill(previewSkill.value) &&
@@ -843,6 +886,48 @@ const navigateToDetail = (skill) => {
 
 const closeSkillPreview = () => {
   skillPreviewVisible.value = false
+}
+
+const openRenameSkill = () => {
+  if (!canRenamePreviewSkill.value) return
+  renameSkillName.value = previewSkill.value?.name || ''
+  renameSkillVisible.value = true
+}
+
+const saveSkillDisplayName = async () => {
+  const target = previewSkill.value
+  const name = renameSkillName.value.trim()
+  if (!target || !canRenamePreviewSkill.value || renamingSkill.value) return
+  if (!name) {
+    message.warning('请输入技能名称')
+    return
+  }
+  renamingSkill.value = true
+  try {
+    const result =
+      target.sourceScope === 'personal'
+        ? await skillApi.updatePersonalSkillDisplayName(target.slug, name)
+        : await skillApi.updateSkillDisplayName(target.slug, name)
+    const updated = result?.data
+    const index = skills.value.findIndex(
+      (item) => item.slug === target.slug && item.source_scope === target.sourceScope
+    )
+    if (updated && index > -1) skills.value[index] = updated
+    previewSkill.value = {
+      ...target,
+      ...(updated || {}),
+      name,
+      sourceType: updated?.source_type || target.sourceType,
+      sourceScope: updated?.source_scope || target.sourceScope
+    }
+    renameSkillVisible.value = false
+    await openSkillPreview(previewSkill.value)
+    message.success('技能名称已更新')
+  } catch (error) {
+    message.error(error?.response?.data?.detail || error.message || '更新技能名称失败')
+  } finally {
+    renamingSkill.value = false
+  }
 }
 
 const handleExportPersonalSkill = async () => {
@@ -1529,6 +1614,16 @@ defineExpose({
   flex-shrink: 0;
   gap: 8px;
   padding-top: 2px;
+}
+
+.rename-skill-hint {
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 20px;
+
+  code {
+    color: var(--gray-700);
+  }
 }
 
 .skill-preview-body {

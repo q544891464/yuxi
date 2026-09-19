@@ -112,3 +112,10 @@ test('个人技能导入的通用 400 提示给出安全的归档结构指引', 
     'Skill 导入失败：请检查文件格式、ZIP 内是否只有一个 SKILL.md，以及 SKILL.md 的 frontmatter 是否完整'
   )
 })
+
+test('技能预览提供展示名编辑且按技能来源调用对应接口', () => {
+  assert.match(source, /修改名称/)
+  assert.match(source, /updatePersonalSkillDisplayName\(target\.slug, name\)/)
+  assert.match(source, /updateSkillDisplayName\(target\.slug, name\)/)
+  assert.match(source, /内部标识/)
+})

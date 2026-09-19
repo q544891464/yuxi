@@ -103,6 +103,14 @@ export const updateSkillEnabled = async (slug, enabled) => {
   return apiPut(`${BASE_URL}/${encodeURIComponent(slug)}/enabled`, { enabled })
 }
 
+export const updateSkillDisplayName = async (slug, name) => {
+  return apiPut(`${BASE_URL}/${encodeURIComponent(slug)}/display-name`, { name })
+}
+
+export const updatePersonalSkillDisplayName = async (slug, name) => {
+  return apiPut(`${USER_BASE_URL}/personal/${encodeURIComponent(slug)}/display-name`, { name })
+}
+
 export const deleteSkillFile = async (slug, path) => {
   return apiDelete(`${BASE_URL}/${encodeURIComponent(slug)}/file?path=${encodeURIComponent(path)}`)
 }
@@ -149,6 +157,8 @@ export const skillApi = {
   updateSkillDependencies,
   updateSkillShareConfig,
   updateSkillEnabled,
+  updateSkillDisplayName,
+  updatePersonalSkillDisplayName,
   deleteSkillFile,
   exportSkill,
   exportPersonalSkill,

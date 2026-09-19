@@ -72,12 +72,35 @@ async def test_personal_skill_install_list_preview_and_delete_without_database_r
         assert preview_response.status_code == 200, preview_response.text
         assert preview_response.json()["data"]["content"] == skill_md
 
+        rename_response = await test_client.put(
+            f"/api/skills/personal/{slug}/display-name",
+            headers=headers,
+            json={"name": "集成测试中文名"},
+        )
+        assert rename_response.status_code == 200, rename_response.text
+        assert rename_response.json()["data"]["name"] == "集成测试中文名"
+        assert rename_response.json()["data"]["slug"] == slug
+        renamed_preview = await test_client.get(
+            f"/api/skills/personal/{slug}/file",
+            headers=headers,
+            params={"path": "SKILL.md"},
+        )
+        renamed_content = renamed_preview.json()["data"]["content"]
+        assert "name: 集成测试中文名" in renamed_content
+        assert f"slug: {slug}" in renamed_content
+        other_user_rename = await test_client.put(
+            f"/api/skills/personal/{slug}/display-name",
+            headers=admin_headers,
+            json={"name": "越权名称"},
+        )
+        assert other_user_rename.status_code == 404
+
         export_url = f"/api/skills/personal/{slug}/export"
         exported = await test_client.get(export_url, headers=headers)
         assert exported.status_code == 200, exported.text
         assert exported.headers["content-type"] == "application/zip"
         with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
-            assert archive.read(f"{slug}/SKILL.md").decode() == skill_md
+            assert archive.read(f"{slug}/SKILL.md").decode() == renamed_content
         updated_skill_md = skill_md.replace("# Personal", "# Updated personal skill")
         update_prepare = await test_client.post(
             "/api/skills/import/prepare",

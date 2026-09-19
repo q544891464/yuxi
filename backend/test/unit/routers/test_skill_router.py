@@ -168,6 +168,31 @@ def test_personal_skill_confirm_and_delete_routes(monkeypatch):
     assert delete_resp.status_code == 200, delete_resp.text
 
 
+def test_update_personal_skill_display_name_route(monkeypatch):
+    async def fake_update(uid, slug, name):
+        assert (uid, slug, name) == ("user", "english-skill", "中文技能名")
+        return _skill(slug="english-skill", source_type="personal", created_by="user")
+
+    monkeypatch.setattr("server.routers.skill_router.update_personal_skill_display_name", fake_update)
+    client = TestClient(_build_app(role="user"))
+
+    response = client.put(
+        "/api/skills/personal/english-skill/display-name",
+        json={"name": "中文技能名"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["slug"] == "english-skill"
+
+
+def test_update_shared_skill_display_name_route_rejects_blank_name():
+    client = TestClient(_build_app(role="user"))
+
+    response = client.put("/api/system/skills/english-skill/display-name", json={"name": ""})
+
+    assert response.status_code == 422
+
+
 def test_prepare_skill_upload_route(monkeypatch):
     captured: dict[str, object] = {}
 

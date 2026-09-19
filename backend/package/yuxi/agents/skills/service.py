@@ -868,6 +868,34 @@ def _rewrite_frontmatter_slug(content: str, new_slug: str) -> str:
     return f"---\n{dumped}\n---\n{body}"
 
 
+def _rewrite_frontmatter_display_name(content: str, *, slug: str, display_name: str) -> str:
+    """更新展示名并固化 slug，避免名称变化改变技能调用标识。"""
+    frontmatter_raw, body = _split_frontmatter(content)
+    try:
+        data = yaml.safe_load(frontmatter_raw)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"SKILL.md frontmatter YAML 解析失败: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("SKILL.md frontmatter 必须是对象")
+    parsed_slug, _old_name, _description, _metadata = _parse_skill_markdown(content)
+    if parsed_slug != slug:
+        raise ValueError("SKILL.md frontmatter.slug 必须与 skill slug 一致")
+    data["name"] = _validate_skill_display_name(display_name)
+    data["slug"] = slug
+    dumped = yaml.safe_dump(data, sort_keys=False, allow_unicode=True).strip()
+    return f"---\n{dumped}\n---\n{body}"
+
+
+def _atomic_replace_text(path: Path, content: str) -> None:
+    """在同一目录写入临时文件后原子替换文本文件。"""
+    temp_path = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        temp_path.write_text(content, encoding="utf-8")
+        temp_path.replace(path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def _validate_zip_paths(zip_file: zipfile.ZipFile) -> None:
     for name in zip_file.namelist():
         pure = PurePosixPath(name)
@@ -993,6 +1021,29 @@ async def read_personal_skill_file(uid: str, slug: str, relative_path: str) -> d
         except UnicodeDecodeError as exc:
             raise ValueError("文件编码不支持（仅支持 UTF-8）") from exc
         return {"path": normalized_path, "content": content}
+
+
+async def update_personal_skill_display_name(uid: str, slug: str, display_name: str) -> ResolvedSkill:
+    """修改个人 Skill 展示名，保持目录与调用 slug 不变。"""
+    return await asyncio.to_thread(_update_personal_skill_display_name_sync, uid, slug, display_name)
+
+
+def _update_personal_skill_display_name_sync(uid: str, slug: str, display_name: str) -> ResolvedSkill:
+    """在个人 Skill 文件锁内原子更新 SKILL.md 展示名。"""
+    with _personal_skill_storage_lock(uid):
+        root = _personal_skills_root(uid)
+        _recover_pending_personal_install(root)
+        skill_dir = _resolve_personal_skill_dir(root, slug)
+        if not skill_dir.is_dir() or skill_dir.is_symlink():
+            raise ValueError("个人 Skill 不存在")
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.is_file() or skill_md.is_symlink():
+            raise ValueError("个人 Skill 缺少 SKILL.md")
+        content = skill_md.read_text(encoding="utf-8")
+        updated_content = _rewrite_frontmatter_display_name(content, slug=slug, display_name=display_name)
+        _atomic_replace_text(skill_md, updated_content)
+        metadata = parse_skill_dir_metadata(skill_dir)
+        return _resolved_personal_skill(uid, root, metadata)
 
 
 async def delete_personal_skill(uid: str, slug: str) -> None:
@@ -1791,6 +1842,45 @@ async def update_skill_file(
 
     target.write_text(content, encoding="utf-8")
     await db.commit()
+
+
+async def update_skill_display_name(
+    db: AsyncSession,
+    *,
+    slug: str,
+    display_name: str,
+    operator: User,
+) -> Skill:
+    """修改共享 Skill 展示名，并保持稳定 slug。"""
+    slug = slug.strip() if isinstance(slug, str) else ""
+    if not is_valid_skill_slug(slug):
+        raise ValueError("无效 skill slug")
+    repo = SkillRepository(db)
+    item = await repo.get_by_slug(slug, for_update=True)
+    if not item or not user_can_manage_skill(operator, item):
+        raise ValueError(f"技能 '{slug}' 不存在或无权管理")
+    _ensure_non_builtin(item)
+    skill_dir = _resolve_skill_dir(item)
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.is_file() or skill_md.is_symlink():
+        raise ValueError("Skill 缺少 SKILL.md")
+    content = skill_md.read_text(encoding="utf-8")
+    updated_content = _rewrite_frontmatter_display_name(content, slug=slug, display_name=display_name)
+    parsed_slug, parsed_name, parsed_desc, _ = _parse_skill_markdown(updated_content)
+    if parsed_slug != item.slug:
+        raise ValueError("SKILL.md frontmatter.slug 必须与 skill slug 一致")
+    await repo.update_metadata(item, name=parsed_name, description=parsed_desc, updated_by=operator.uid)
+    file_replaced = False
+    try:
+        _atomic_replace_text(skill_md, updated_content)
+        file_replaced = True
+        await db.commit()
+    except BaseException:
+        await db.rollback()
+        if file_replaced:
+            _atomic_replace_text(skill_md, content)
+        raise
+    return item
 
 
 async def _update_skill_metadata_if_skills_md(
