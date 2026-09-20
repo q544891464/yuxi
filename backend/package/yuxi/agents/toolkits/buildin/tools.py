@@ -407,7 +407,18 @@ def _resolve_runtime_sandbox_scope(runtime: ToolRuntime) -> tuple[str, str, str]
     return runtime_thread_id, uid, workdir_path
 
 
-@tool(category="buildin", tags=["文件"], display_name="解压 ZIP")
+class ExtractZipInput(BaseModel):
+    """解压 ZIP 的模型可见参数。"""
+
+    file_path: str = Field(description="当前项目中待解压 ZIP 文件的绝对运行时路径")
+
+
+@tool(
+    category="buildin",
+    tags=["文件"],
+    display_name="解压 ZIP",
+    args_schema=ExtractZipInput,
+)
 async def extract_zip(file_path: str, runtime: ToolRuntime) -> dict:
     """解压当前项目的 ZIP 到独立目录，最多 200MB 压缩包、1GB 解压量和 1000 个条目；不递归解压。"""
     from yuxi.agents.backends.paths import runtime_path_for_workdir_scope, workdir_scope_from_runtime_path

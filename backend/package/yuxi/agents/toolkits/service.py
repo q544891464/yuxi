@@ -48,6 +48,7 @@ def _ensure_metadata_loaded():
     all_tools = get_all_tool_instances()
     extra_meta = get_all_extra_metadata()
 
+    loaded_metadata: list[dict] = []
     for tool in all_tools:
         tool_name = tool.name
         runtime_info = _extract_tool_info(tool)
@@ -67,9 +68,12 @@ def _ensure_metadata_loaded():
             runtime_info["tags"] = []
             runtime_info["config_guide"] = ""
 
-        _metadata_cache.append(runtime_info)
+        loaded_metadata.append(runtime_info)
 
-    logger.info(f"Tool service loaded {len(_metadata_cache)} tools (lazy load)")
+    # 只有全部工具都成功解析后才发布缓存，避免首次失败留下半成品，
+    # 导致下一次请求误以为元数据已经完整加载。
+    _metadata_cache = loaded_metadata
+    logger.info(f"Tool service loaded {len(loaded_metadata)} tools (lazy load)")
 
 
 def get_tool_metadata(category: str = None) -> list[dict]:
