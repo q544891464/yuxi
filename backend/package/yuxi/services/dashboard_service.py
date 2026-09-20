@@ -108,6 +108,10 @@ class DashboardService:
 
         messages = await self.conv_repo.get_messages(conversation.id)
         stats = await self.conv_repo.get_stats(conversation.id)
+        total_tokens = await self.repo.get_conversation_total_tokens(
+            conversation.id,
+            legacy_total=stats.total_tokens if stats else 0,
+        )
         audit_metadata = await self.repo.get_conversation_audit_metadata(conversation)
         message_list = []
         for message in messages:
@@ -149,6 +153,6 @@ class DashboardService:
             "message_count": stats.message_count if stats else len(message_list),
             "created_at": conversation.created_at.isoformat() if conversation.created_at else "",
             "updated_at": conversation.updated_at.isoformat() if conversation.updated_at else "",
-            "total_tokens": stats.total_tokens if stats else 0,
+            "total_tokens": total_tokens,
             "messages": message_list,
         }

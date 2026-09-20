@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import pytest
 import pytest_asyncio
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from yuxi.services.dashboard_service import DashboardService
 from yuxi.storage.postgres.models_business import (
     Agent,
+    AgentRun,
     Base,
     Conversation,
     ConversationStats,
@@ -258,6 +259,52 @@ async def dashboard_db():
                 removed_agent_feedback,
             ]
         )
+        await db.flush()
+        db.add(
+            AgentRun(
+                id="run-thread-102",
+                conversation_thread_id=conv2.thread_id,
+                runtime_scope_id=conv2.thread_id,
+                conversation_id=conv2.id,
+                agent_slug=conv2.agent_id,
+                uid=conv2.uid,
+                status="completed",
+                request_id="request-thread-102",
+                run_type="chat",
+                input_payload={},
+                token_usage={"total": {"input_tokens": 30, "output_tokens": 12, "total_tokens": 42}},
+            )
+        )
+        db.add_all(
+            [
+                AgentRun(
+                    id="run-thread-102-interrupted",
+                    conversation_thread_id=conv2.thread_id,
+                    runtime_scope_id=conv2.thread_id,
+                    conversation_id=conv2.id,
+                    agent_slug=conv2.agent_id,
+                    uid=conv2.uid,
+                    status="interrupted",
+                    request_id="request-thread-102-interrupted",
+                    run_type="chat",
+                    input_payload={},
+                    token_usage={"total": {"input_tokens": 7, "output_tokens": 1, "total_tokens": 8}},
+                ),
+                AgentRun(
+                    id="run-thread-102-unavailable",
+                    conversation_thread_id=conv2.thread_id,
+                    runtime_scope_id=conv2.thread_id,
+                    conversation_id=conv2.id,
+                    agent_slug=conv2.agent_id,
+                    uid=conv2.uid,
+                    status="failed",
+                    request_id="request-thread-102-unavailable",
+                    run_type="chat",
+                    input_payload={},
+                    token_usage={"available": False},
+                ),
+            ]
+        )
         await db.commit()
         yield db
     await engine.dispose()
@@ -320,7 +367,7 @@ async def test_dashboard_service_thread_analytics(dashboard_db):
     assert summary["active_threads"] >= 1
     assert summary["pinned_threads"] == 1
     assert summary["total_messages"] == 4
-    assert summary["total_tokens"] == 5000
+    assert summary["total_tokens"] == 1550
     assert summary["avg_messages_per_thread"] > 0
     assert summary["avg_tokens_per_thread"] > 0
 
@@ -336,6 +383,7 @@ async def test_dashboard_service_thread_analytics(dashboard_db):
     coder_stat = next(a for a in agents if a["agent_id"] == "agent-coder")
     assert coder_stat["thread_count"] == 2
     assert coder_stat["agent_name"] == "Coder Agent"
+    assert coder_stat["token_count"] == 350
 
     with_subagents = await service.get_thread_analytics(time_range="7days", include_subagents=True)
     assert with_subagents["summary"]["total_threads"] == 4
@@ -438,10 +486,16 @@ async def test_dashboard_service_list_conversations_search(dashboard_db):
     assert search_result["items"][0]["thread_id"] == "thread-103"
     assert search_result["items"][0]["username"] == "Alice"
     assert search_result["items"][0]["agent_name"] == "Coder Agent"
+    assert next(item for item in all_convs["items"] if item["thread_id"] == "thread-102")["total_tokens"] == 50
 
     active_only = await service.list_conversations(status="active")
     assert active_only["total"] == 4
     assert len(active_only["items"]) == 4
+
+    second_page = await service.list_conversations(limit=1, offset=1)
+    assert second_page["total"] == 6
+    assert len(second_page["items"]) == 1
+    assert second_page["items"][0]["thread_id"] == all_convs["items"][1]["thread_id"]
 
     options = await service.get_conversation_filter_options()
     assert next(item for item in options["users"] if item["uid"] == "uid-deleted")["is_deleted"] is True
@@ -454,10 +508,25 @@ async def test_dashboard_service_conversation_detail(dashboard_db):
 
     assert detail is not None
     assert detail["thread_id"] == "thread-102"
-    assert detail["total_tokens"] == 3500
+    assert detail["total_tokens"] == 50
     assert detail["user_deleted"] is False
     assert detail["agent_deleted"] is False
     assert len(detail["messages"]) == 2
     assistant_msg = next(m for m in detail["messages"] if m["role"] == "assistant")
     assert "tool_calls" in assistant_msg
     assert assistant_msg["tool_calls"][0]["tool_name"] == "bash"
+
+
+async def test_conversation_list_treats_null_legacy_tokens_as_zero(dashboard_db):
+    stats = (
+        await dashboard_db.execute(
+            select(ConversationStats)
+            .join(Conversation, ConversationStats.conversation_id == Conversation.id)
+            .where(Conversation.thread_id == "thread-103")
+        )
+    ).scalar_one()
+    stats.total_tokens = None
+    await dashboard_db.commit()
+
+    conversations = await DashboardService(dashboard_db).list_conversations(search="Python")
+    assert conversations["items"][0]["total_tokens"] == 0
