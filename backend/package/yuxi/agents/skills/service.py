@@ -221,8 +221,12 @@ def user_can_access_skill(user: User, skill: Skill, *, require_enabled: bool = T
 
 
 def user_can_manage_skill(user: User, skill: Skill) -> bool:
+    """限制普通用户仅管理自己创建的个人 Skill。"""
+
     if is_builtin_skill(skill):
         return user.role in ADMIN_ROLES
+    if user.role not in ADMIN_ROLES:
+        return skill.source_type == PERSONAL_SKILL_SOURCE_TYPE and skill.created_by == user.uid
     return resolve_skill_permission(user, skill) == ResourcePermission.MANAGE
 
 

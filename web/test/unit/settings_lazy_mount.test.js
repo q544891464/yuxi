@@ -21,7 +21,7 @@ test('设置仅挂载访问页，切换保留表单，关闭重开只挂载当�
           if (id.endsWith('/src/utils/asyncPanel.js')) {
             return `import { h, ref } from 'vue'
               export const createAsyncPanel = (loader) => ({ setup() {
-                const name = loader.toString().match(/components\\/(\\w+)\\.vue/)[1]
+                const name = loader.toString().match(/components\\/(?:extensions\\/)?(\\w+)\\.vue/)[1]
                 const draft = ref('')
                 return () => h('input', { panel: name, value: draft.value,
                   onInput: (event) => { draft.value = event.target.value } })
@@ -144,13 +144,22 @@ test('设置仅挂载访问页，切换保留表单，关闭重开只挂载当�
     )
     assert.equal(agentEnv.props.value, 'env-draft')
 
+    useUserStore().userRole = 'user'
+    await nextTick()
+    await select('侧栏技能')
+    assert.ok(find(host, (node) => node.props.panel === 'SkillCardList'))
+    assert.equal(
+      find(host, (node) => node.props.panel === 'SkillNavigationSettings'),
+      undefined
+    )
+
     visible.value = false
     await nextTick()
     visible.value = true
     await nextTick()
-    assert.ok(find(host, (node) => node.props.panel === 'OCRSettingsSection'))
+    assert.ok(find(host, (node) => node.props.panel === 'AccountSettingsComponent'))
     assert.equal(
-      find(host, (node) => node.props.panel === 'AccountSettingsComponent'),
+      find(host, (node) => node.props.panel === 'OCRSettingsSection'),
       undefined
     )
   } finally {
@@ -158,4 +167,16 @@ test('设置仅挂载访问页，切换保留表单，关闭重开只挂载当�
     disposePinia(pinia)
     await server.close()
   }
+})
+
+test('普通用户可打开侧栏技能且个人管理面板替代全局导航编辑器', () => {
+  const source = readFileSync(
+    new URL('../../src/components/SettingsModal.vue', import.meta.url),
+    'utf8'
+  )
+  assert.match(source, /v-if="userStore\.isLoggedIn"[\s\S]*?<span>侧栏技能<\/span>/)
+  assert.match(source, /<SkillNavigationSettings v-if="userStore\.isAdmin" \/>/)
+  assert.match(source, /<SkillCardList \/>/)
+  assert.match(source, /平台共享技能仅供查看，无法修改/)
+  assert.match(source, /tabs\.push\('account', 'apiKeys', 'agentEnv', 'skillNavigation'\)/)
 })

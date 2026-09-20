@@ -31,7 +31,7 @@ import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
 import SkillEntryMenu from '@/components/SkillEntryMenu.vue'
 import { useSkillNavigationStore } from '@/stores/skillNavigation'
-import { INSPECTION_KB_ID } from '@/utils/skillEntries'
+import { INSPECTION_KB_ID, SKILL_CREATOR_ENTRY } from '@/utils/skillEntries'
 import GlobalSearchModal from '@/components/GlobalSearchModal.vue'
 import { searchWorkspaceFiles } from '@/apis/workspace_api'
 import { projectApi } from '@/apis/project_api'
@@ -554,7 +554,14 @@ provide('settingsModal', {
                 <span class="skill-expand-hint">{{ skillsExpanded ? '收起' : '展开' }}</span>
               </button>
               <div v-if="skillsExpanded">
-                <RouterLink class="consumer-nav-link" to="/extensions?tab=skills">添加技能</RouterLink>
+                <button
+                  type="button"
+                  class="consumer-nav-link"
+                  :disabled="threadCreationInFlight"
+                  @click="openSkillEntry(SKILL_CREATOR_ENTRY.id)"
+                >
+                  添加技能
+                </button>
                 <button
                   v-if="skillNavigation.error"
                   type="button"

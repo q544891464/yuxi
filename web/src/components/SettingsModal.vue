@@ -47,7 +47,7 @@
             <span>基本设置</span>
           </div>
           <div
-            v-if="userStore.isAdmin"
+            v-if="userStore.isLoggedIn"
             class="sider-item"
             :class="{ activesec: activeTab === 'skillNavigation' }"
             @click="activeTab = 'skillNavigation'"
@@ -96,7 +96,7 @@
       <!-- 顶部导航 (Mobile) -->
       <div class="settings-mobile-nav">
         <div
-          v-if="userStore.isAdmin"
+          v-if="userStore.isLoggedIn"
           class="nav-item"
           :class="{ active: activeTab === 'skillNavigation' }"
           @click="activeTab = 'skillNavigation'"
@@ -190,10 +190,15 @@
           </div>
 
           <div
-            v-if="userStore.isAdmin && loadedTabs.has('skillNavigation')"
+            v-if="userStore.isLoggedIn && loadedTabs.has('skillNavigation')"
             v-show="activeTab === 'skillNavigation'"
           >
-            <SkillNavigationSettings />
+            <SkillNavigationSettings v-if="userStore.isAdmin" />
+            <div v-else class="personal-skill-settings">
+              <h2>侧栏技能</h2>
+              <p>添加和管理您的个人技能；平台共享技能仅供查看，无法修改。</p>
+              <SkillCardList />
+            </div>
           </div>
           <div v-show="activeTab === 'ocr'" v-if="userStore.isAdmin && loadedTabs.has('ocr')">
             <OCRSettingsSection />
@@ -229,6 +234,9 @@ const BasicSettingsSection = createAsyncPanel(() => import('@/components/BasicSe
 const SkillNavigationSettings = createAsyncPanel(
   () => import('@/components/SkillNavigationSettings.vue')
 )
+const SkillCardList = createAsyncPanel(
+  () => import('@/components/extensions/SkillCardList.vue')
+)
 const OCRSettingsSection = createAsyncPanel(() => import('@/components/OCRSettingsSection.vue'))
 const ApiKeyManagementComponent = createAsyncPanel(
   () => import('@/components/ApiKeyManagementComponent.vue')
@@ -263,8 +271,8 @@ const visible = computed({
 
 const availableTabs = computed(() => {
   const tabs = []
-  if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
-  if (userStore.isAdmin) tabs.push('base', 'ocr', 'user', 'skillNavigation')
+  if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv', 'skillNavigation')
+  if (userStore.isAdmin) tabs.push('base', 'ocr', 'user')
   if (userStore.isSuperAdmin) tabs.push('department')
   return tabs
 })
@@ -314,6 +322,21 @@ watch(
   }
 
   .ant-modal-body {
+    padding: 0;
+  }
+}
+
+.personal-skill-settings {
+  h2 {
+    margin: 0 0 6px;
+  }
+
+  > p {
+    margin: 0 0 16px;
+    color: var(--color-text-secondary);
+  }
+
+  .skill-cards-page {
     padding: 0;
   }
 }

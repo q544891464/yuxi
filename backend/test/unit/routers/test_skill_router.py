@@ -102,8 +102,8 @@ def test_list_visible_skills_route_allows_normal_user_readonly_items(monkeypatch
     payload = resp.json()
     assert payload["success"] is True
     assert [(item["slug"], item["can_manage"]) for item in payload["data"]] == [
-        ("owned-disabled", True),
-        ("shared", True),
+        ("owned-disabled", False),
+        ("shared", False),
     ]
     assert payload["allowed_access_levels"] == ["user"]
 
@@ -122,7 +122,7 @@ def test_list_accessible_skills_route(monkeypatch):
     payload = resp.json()
     assert payload["success"] is True
     assert payload["data"][0]["slug"] == "demo"
-    assert payload["data"][0]["can_manage"] is True
+    assert payload["data"][0]["can_manage"] is False
 
 
 def test_list_skill_cards_route_scans_personal_source(monkeypatch):
@@ -139,7 +139,9 @@ def test_list_skill_cards_route_scans_personal_source(monkeypatch):
     resp = client.get("/api/skills")
 
     assert resp.status_code == 200, resp.text
-    assert "personal_cache" not in resp.json()
+    payload = resp.json()
+    assert "personal_cache" not in payload
+    assert payload["data"][0]["can_manage"] is True
     assert captured == {"uid": "user"}
 
 

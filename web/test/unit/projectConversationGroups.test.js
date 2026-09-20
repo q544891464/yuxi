@@ -163,6 +163,8 @@ test('技能、知识库和数据总览位于项目分组之后且项目展开�
   )
   assert.match(layoutSource, /import \{[\s\S]*WandSparkles[\s\S]*\} from '@lucide\/vue'/)
   assert.match(layoutSource, /<WandSparkles :size="17" \/>技能/)
+  assert.match(layoutSource, /@click="openSkillEntry\(SKILL_CREATOR_ENTRY\.id\)"/)
+  assert.doesNotMatch(layoutSource, /to="\/extensions\?tab=skills">添加技能/)
   assert.match(layoutSource, /<LibraryBig :size="17" \/>知识库/)
 
   assert.match(layoutSource, /#after-projects/)

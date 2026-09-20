@@ -5,7 +5,8 @@ import {
   flattenSkillEntries,
   findSkillEntry as findEntry,
   resolveEntrySkill,
-  buildSkillEntryPrompt
+  buildSkillEntryPrompt,
+  SKILL_CREATOR_ENTRY
 } from '../../src/utils/skillEntries.js'
 
 const skillEntryTree = JSON.parse(
@@ -64,6 +65,16 @@ test('未开放、禁用和歧义技能均不可绑定，不静默选择其他�
 test('技能名允许大小写和分隔符差异，引用仍使用返回的原始标识', () => {
   const actual = { slug: 'ai-assisted-review', name: 'AI Assisted Review' }
   assert.equal(resolveEntrySkill(findSkillEntry('review-ledger'), [actual]), actual)
+})
+
+test('添加技能入口调用全局 skill-creator 并只准备引导草稿', () => {
+  const entry = findEntry(SKILL_CREATOR_ENTRY.id, skillEntryTree)
+  const skill = resolveEntrySkill(entry, [{ slug: 'skill-creator-v2', name: 'Skill Creator' }])
+  assert.equal(entry, SKILL_CREATOR_ENTRY)
+  assert.equal(skill.slug, 'skill-creator-v2')
+  assert.match(buildSkillEntryPrompt(entry, skill), /^@skill:skill-creator-v2 /)
+  assert.match(buildSkillEntryPrompt(entry, skill), /先询问技能用途/)
+  assert.equal(resolveEntrySkill(entry, []), null)
 })
 
 import { getSkillDisplayName } from '../../src/utils/skillDisplayName.js'
