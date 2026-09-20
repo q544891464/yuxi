@@ -245,6 +245,7 @@
       title="修改技能名称"
       ok-text="保存"
       cancel-text="取消"
+      :z-index="1100"
       :confirm-loading="renamingSkill"
       @ok="saveSkillDisplayName"
     >
