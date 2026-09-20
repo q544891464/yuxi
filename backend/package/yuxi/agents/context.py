@@ -520,12 +520,17 @@ async def normalize_agent_context_config(
     db,
     user,
     context_schema: type[BaseContext] | None = None,
+    trusted_persisted_config: bool = False,
 ) -> dict:
+    """归一化 Agent Context；可信持久配置保留管理员集中设置的运行字段。"""
     schema = context_schema or BaseContext
     raw_context = dict(context) if isinstance(context, dict) else {}
-    filtered = filter_config_by_role({"context": raw_context}, getattr(user, "role", None), schema)
     field_names = {item.name for item in fields(schema)}
-    normalized = dict(filtered.get("context") or {})
+    if trusted_persisted_config:
+        normalized = {key: value for key, value in raw_context.items() if key in field_names}
+    else:
+        filtered = filter_config_by_role({"context": raw_context}, getattr(user, "role", None), schema)
+        normalized = dict(filtered.get("context") or {})
     resource_fields = AGENT_RUNTIME_RESOURCE_FIELDS & field_names
     fields_to_load = _resource_fields_requiring_available_keys(normalized, resource_fields)
     if fields_to_load:

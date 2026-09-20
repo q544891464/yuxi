@@ -1035,6 +1035,7 @@ async def _resolve_agent_runtime(
             db=db,
             user=user,
             context_schema=backend.context_schema,
+            trusted_persisted_config=True,
         )
     return agent_item, backend, agent_config, conversation
 
@@ -1726,6 +1727,7 @@ async def get_agent_state_view(
             db=db,
             user=current_user,
             context_schema=agent.context_schema,
+            trusted_persisted_config=True,
         )
         input_context = await build_agent_input_context(
             agent_config,

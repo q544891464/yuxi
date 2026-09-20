@@ -178,6 +178,7 @@ async def build_run_manifest_result(*, run: AgentRun, user: User, db: AsyncSessi
             db=db,
             user=user,
             context_schema=backend.context_schema,
+            trusted_persisted_config=True,
         )
 
     runtime_skill_snapshot: dict[str, Any] = {}

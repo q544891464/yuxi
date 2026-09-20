@@ -63,6 +63,7 @@ async def compress_thread_context(
         db=db,
         user=current_user,
         context_schema=agent.context_schema,
+        trusted_persisted_config=True,
     )
     model_spec = await resolve_agent_run_model_spec(
         (conversation.extra_metadata or {}).get("model_spec"),

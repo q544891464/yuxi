@@ -231,6 +231,24 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
     assert "summary_l2_trigger_ratio" not in normalized
     assert "max_execution_steps" not in normalized
 
+    trusted_normalized = await normalize_agent_context_config(
+        {
+            "tools": ["ask_user_question", "missing"],
+            "skills": ["skill-a", "missing"],
+            "summary_threshold": 999,
+            "max_execution_steps": 600,
+        },
+        db=object(),
+        user=types.SimpleNamespace(role="user", uid="u1", department_id=None),
+        context_schema=ChatBotContext,
+        trusted_persisted_config=True,
+    )
+
+    assert trusted_normalized["summary_threshold"] == 999
+    assert trusted_normalized["max_execution_steps"] == 600
+    assert trusted_normalized["tools"] == ["ask_user_question"]
+    assert trusted_normalized["skills"] == ["skill-a"]
+
     empty_subagents_normalized = await normalize_agent_context_config(
         {"tools": [], "knowledges": [], "mcps": [], "skills": [], "subagents": []},
         db=object(),
