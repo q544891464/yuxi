@@ -2,6 +2,7 @@ import { message } from 'ant-design-vue'
 import { handleChatError } from '@/utils/errorHandler'
 import { unref } from 'vue'
 import { extractPendingInterrupt } from '@/composables/useApproval'
+import { markReplyLoadingStarted } from '@/utils/replyElapsed'
 
 const serializeToolArgs = (args) => {
   if (typeof args === 'string') return args
@@ -127,7 +128,9 @@ export function useAgentStreamHandler({
             }
             threadState.onGoingConv.msgChunks[resolvedRequestId] = [initMessage]
           }
-          threadState.replyLoadingVisible = true
+          const timingKey =
+            resolvedRequestId || chunk.stream_run_id || chunk.run_id || threadState.activeRunId
+          markReplyLoadingStarted(threadState, timingKey)
           threadState.contextCompressing = false
         }
         return false

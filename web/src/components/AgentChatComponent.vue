@@ -939,6 +939,7 @@ import {
 import { AUTO_PROJECT_ID } from '@/utils/projectSelection'
 import { createSingleFlight } from '@/utils/singleFlight'
 import { createThreadForContext } from '@/utils/threadCreation'
+import { getReplyElapsedSeconds } from '@/utils/replyElapsed'
 import {
   FILE_TREE_SECTION,
   MESSAGE_DEBUG_SECTION,
@@ -2531,8 +2532,8 @@ const replyLoadingText = computed(() => {
   return '正在生成回复...'
 })
 const replyElapsedSeconds = ref(0)
+const replyElapsedViewActive = ref(true)
 let replyElapsedTimer = null
-let replyStartedAt = null
 const replyElapsedLabel = computed(() => {
   const seconds = replyElapsedSeconds.value
   if (!seconds) return ''
@@ -2541,14 +2542,13 @@ const replyElapsedLabel = computed(() => {
   return `${minutes}分${seconds % 60}s`
 })
 const updateReplyElapsedSeconds = () => {
-  if (!replyStartedAt) return
-  replyElapsedSeconds.value = Math.floor((Date.now() - replyStartedAt) / 1000)
+  replyElapsedSeconds.value = getReplyElapsedSeconds(
+    currentThreadState.value?.replyStartedAtMs,
+    Date.now()
+  )
 }
-const startReplyElapsedTimer = ({ reset = false } = {}) => {
+const startReplyElapsedTimer = () => {
   stopReplyElapsedTimer()
-  if (reset || !replyStartedAt) {
-    replyStartedAt = Date.now()
-  }
   updateReplyElapsedSeconds()
   replyElapsedTimer = window.setInterval(updateReplyElapsedSeconds, 1000)
 }
@@ -2558,15 +2558,14 @@ const stopReplyElapsedTimer = ({ reset = false } = {}) => {
     replyElapsedTimer = null
   }
   if (reset) {
-    replyStartedAt = null
     replyElapsedSeconds.value = 0
   }
 }
 watch(
-  isReplyLoading,
-  (loading) => {
-    if (loading) {
-      startReplyElapsedTimer({ reset: true })
+  [currentChatId, isReplyLoading],
+  ([, loading]) => {
+    if (loading && replyElapsedViewActive.value) {
+      startReplyElapsedTimer()
     } else {
       stopReplyElapsedTimer({ reset: true })
     }
@@ -2890,6 +2889,7 @@ onMounted(() => {
 })
 
 onActivated(() => {
+  replyElapsedViewActive.value = true
   nextTick(() => {
     startChatMainResizeObserver()
   })
@@ -2899,6 +2899,7 @@ onActivated(() => {
 })
 
 onDeactivated(() => {
+  replyElapsedViewActive.value = false
   stopChatMainResizeObserver()
   stopStreamingStateRefresh()
   stopReplyElapsedTimer()

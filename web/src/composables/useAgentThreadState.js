@@ -36,6 +36,8 @@ export function useAgentThreadState({
         runLastSeq: '0-0',
         lastRetryableJobTry: null,
         replyLoadingVisible: false,
+        replyTimingKey: null,
+        replyStartedAtMs: null,
         pendingRequestId: null,
         pendingInterrupt: null,
         agentStateRequestVersion: 0,
