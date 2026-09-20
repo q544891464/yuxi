@@ -28,6 +28,7 @@ from yuxi.services.conversation_service import (
     mark_thread_viewed_view,
     search_threads_view,
     update_thread_view,
+    set_thread_archive_view,
 )
 from yuxi.services.artifact_service import (
     resolve_thread_artifact_view,
@@ -307,13 +308,39 @@ async def list_threads(
     agent_id: str | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    status: str = Query("active", pattern="^(active|archived)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_required_user),
 ):
     """获取用户的所有对话线程 (使用新存储系统)"""
     return await list_threads_view(
-        agent_slug=agent_id, db=db, current_uid=str(current_user.uid), limit=limit, offset=offset
+        agent_slug=agent_id,
+        db=db,
+        current_uid=str(current_user.uid),
+        limit=limit,
+        offset=offset,
+        status=status,
     )
+
+
+@chat.post("/thread/{thread_id}/archive", response_model=ThreadResponse)
+async def archive_thread(
+    thread_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+):
+    """归档当前用户的对话。"""
+    return await set_thread_archive_view(thread_id=thread_id, archived=True, db=db, current_uid=str(current_user.uid))
+
+
+@chat.post("/thread/{thread_id}/restore", response_model=ThreadResponse)
+async def restore_thread(
+    thread_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+):
+    """恢复当前用户已归档的对话。"""
+    return await set_thread_archive_view(thread_id=thread_id, archived=False, db=db, current_uid=str(current_user.uid))
 
 
 @chat.get("/threads/search", response_model=ThreadSearchResponse)

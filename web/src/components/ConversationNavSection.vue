@@ -91,6 +91,12 @@
                             >重命名项目</a-menu-item
                           >
                           <a-menu-item
+                            key="archive"
+                            :icon="h(Archive, { size: 14 })"
+                            @click="confirmArchiveProject(group.project)"
+                            >归档项目</a-menu-item
+                          >
+                          <a-menu-item
                             key="delete"
                             danger
                             :icon="h(Trash2, { size: 14 })"
@@ -146,6 +152,7 @@
                         nested
                         @select-chat="$emit('select-chat', $event)"
                         @delete-chat="$emit('delete-chat', $event)"
+                        @archive-chat="$emit('archive-chat', $event)"
                         @rename-chat="$emit('rename-chat', $event)"
                         @toggle-pin="$emit('toggle-pin', $event)"
                         @move-chat="$emit('move-chat', $event)"
@@ -184,6 +191,7 @@
                   :projects="projects"
                   @select-chat="$emit('select-chat', $event)"
                   @delete-chat="$emit('delete-chat', $event)"
+                  @archive-chat="$emit('archive-chat', $event)"
                   @rename-chat="$emit('rename-chat', $event)"
                   @toggle-pin="$emit('toggle-pin', $event)"
                   @move-chat="$emit('move-chat', $event)"
@@ -203,6 +211,9 @@
         >
           {{ isLoadingMore ? '加载中...' : '加载更多' }}
         </button>
+        <button type="button" class="archive-entry" @click="$emit('open-archive')">
+          <Archive :size="15" />已归档
+        </button>
       </div>
     </div>
   </section>
@@ -213,6 +224,7 @@ import { computed, h, ref, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import {
   ChevronDown,
+  Archive,
   FolderClosed,
   FolderOpen,
   Loader2,
@@ -245,12 +257,15 @@ const props = defineProps({
 const emit = defineEmits([
   'select-chat',
   'delete-chat',
+  'archive-chat',
   'rename-chat',
   'toggle-pin',
   'move-chat',
   'load-more-chats',
   'rename-project',
   'delete-project',
+  'archive-project',
+  'open-archive',
   'create-project-chat',
   'project-expanded',
   'select-project-skill',
@@ -320,6 +335,18 @@ const confirmDeleteProject = (project) => {
     cancelText: '取消',
     content: '项目中的对话会被删除，项目文件夹和其中的文件会保留。',
     onOk: () => emit('delete-project', project.id)
+  })
+}
+
+const confirmArchiveProject = (project) => {
+  Modal.confirm({
+    title: `归档项目“${project.name}”？`,
+    icon: null,
+    centered: true,
+    okText: '归档',
+    cancelText: '取消',
+    content: '项目及其中对话将从主列表隐藏，可在“已归档”中恢复。',
+    onOk: () => emit('archive-project', project.id)
   })
 }
 </script>
@@ -540,6 +567,25 @@ const confirmDeleteProject = (project) => {
   color: var(--main-color);
   cursor: pointer;
   font-size: 12px;
+}
+.archive-entry {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gray-600);
+  cursor: pointer;
+  font-size: 13px;
+  &:hover,
+  &:focus-visible {
+    background: var(--gray-50);
+    color: var(--gray-900);
+  }
 }
 @media (hover: none) {
   .project-row {

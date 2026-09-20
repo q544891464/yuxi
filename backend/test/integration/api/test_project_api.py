@@ -21,6 +21,7 @@ from test.live_api_cleanup import (
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.repositories.project_repository import ProjectRepository
 from yuxi.services.agent_run_service import prepare_agent_run_creation_scope
+from yuxi.services.conversation_service import set_thread_archive_view
 from yuxi.services.project_service import delete_project_view
 from yuxi.services.subagent_run_service import SubagentRunService
 from yuxi.storage.postgres.models_business import Conversation, Project, SubagentThread, User
@@ -364,6 +365,160 @@ async def test_project_rename_and_delete_soft_delete_conversations_but_keep_work
         headers=admin_headers,
     )
     assert repeated_delete.status_code == 404, repeated_delete.text
+
+
+async def test_project_and_conversation_archive_are_separate_recoverable_lifecycles(
+    test_client,
+    admin_headers,
+    linked_directory,
+    standard_user,
+):
+    project_response = await test_client.post(
+        "/api/projects",
+        headers=admin_headers,
+        json={
+            "request_id": make_test_resource_id("archive-project"),
+            "name": "Archive lifecycle",
+            "workdir": {"mode": "linked", "path": linked_directory},
+        },
+    )
+    assert project_response.status_code == 200, project_response.text
+    project = project_response.json()
+
+    thread_response = await test_client.post(
+        "/api/chat/thread",
+        headers=admin_headers,
+        json={
+            "agent_id": await _default_agent_slug(test_client, admin_headers),
+            "project_id": project["id"],
+            "title": make_test_conversation_title("archive-thread"),
+            "metadata": make_test_conversation_metadata("archive-thread"),
+        },
+    )
+    assert thread_response.status_code == 200, thread_response.text
+    thread = thread_response.json()
+
+    denied = await test_client.post(
+        f"/api/projects/{project['id']}/archive",
+        headers=standard_user["headers"],
+    )
+    assert denied.status_code == 404, denied.text
+
+    archived_thread = await test_client.post(
+        f"/api/chat/thread/{thread['id']}/archive",
+        headers=admin_headers,
+    )
+    assert archived_thread.status_code == 200, archived_thread.text
+
+    archived_project = await test_client.post(
+        f"/api/projects/{project['id']}/archive",
+        headers=admin_headers,
+    )
+    assert archived_project.status_code == 200, archived_project.text
+    assert archived_project.json()["status"] == "archived"
+
+    active_projects = await test_client.get("/api/projects", headers=admin_headers)
+    archived_projects = await test_client.get("/api/projects?status=archived", headers=admin_headers)
+    active_threads = await test_client.get("/api/chat/threads", headers=admin_headers)
+    assert project["id"] not in {item["id"] for item in active_projects.json()}
+    assert project["id"] in {item["id"] for item in archived_projects.json()}
+    assert thread["id"] not in {item["id"] for item in active_threads.json()}
+
+    archived_threads = await test_client.get(
+        "/api/chat/threads?status=archived",
+        headers=admin_headers,
+    )
+    assert thread["id"] in {item["id"] for item in archived_threads.json()}
+    blocked_restore = await test_client.post(
+        f"/api/chat/thread/{thread['id']}/restore",
+        headers=admin_headers,
+    )
+    assert blocked_restore.status_code == 409, blocked_restore.text
+
+    restored_project = await test_client.post(
+        f"/api/projects/{project['id']}/restore",
+        headers=admin_headers,
+    )
+    assert restored_project.status_code == 200, restored_project.text
+    assert restored_project.json()["status"] == "active"
+
+    restored_thread = await test_client.post(
+        f"/api/chat/thread/{thread['id']}/restore",
+        headers=admin_headers,
+    )
+    assert restored_thread.status_code == 200, restored_thread.text
+    assert restored_thread.json()["id"] == thread["id"]
+
+
+async def test_thread_archive_cannot_revive_conversation_deleted_with_project(
+    monkeypatch: pytest.MonkeyPatch,
+    project_lifecycle_database,
+):
+    """Project 删除持锁期间发起归档时，归档必须拒绝而不能复活 Conversation。"""
+    session_factory, uid, project_id = project_lifecycle_database
+    thread_id = f"pytest-archive-delete-{uuid.uuid4()}"
+    await _create_lifecycle_conversation(
+        session_factory,
+        uid=uid,
+        project_id=project_id,
+        thread_id=thread_id,
+        label="archive-delete-race",
+        status="active",
+    )
+    project_locked = asyncio.Event()
+    allow_delete = asyncio.Event()
+    original_lock = ProjectRepository.lock_active_selectable_for_user
+
+    async def pause_with_project_lock(self, locked_project_id, locked_uid):
+        project = await original_lock(self, locked_project_id, locked_uid)
+        project_locked.set()
+        await allow_delete.wait()
+        return project
+
+    monkeypatch.setattr(ProjectRepository, "lock_active_selectable_for_user", pause_with_project_lock)
+
+    async def delete_project():
+        async with session_factory() as session:
+            return await delete_project_view(uid=uid, project_id=project_id, db=session)
+
+    async def archive_thread():
+        async with session_factory() as session:
+            return await set_thread_archive_view(
+                thread_id=thread_id,
+                archived=True,
+                db=session,
+                current_uid=uid,
+            )
+
+    delete_task = asyncio.create_task(delete_project())
+    archive_task = None
+    try:
+        await asyncio.wait_for(project_locked.wait(), timeout=5)
+        archive_task = asyncio.create_task(archive_thread())
+        await asyncio.sleep(0.05)
+        assert not archive_task.done()
+
+        allow_delete.set()
+        await asyncio.wait_for(delete_task, timeout=5)
+        with pytest.raises(HTTPException) as exc_info:
+            await asyncio.wait_for(archive_task, timeout=5)
+        assert exc_info.value.status_code == 404
+
+        async with _database_connection() as database:
+            project_status = await database.fetchval("SELECT status FROM projects WHERE id = $1", project_id)
+            conversation_status = await database.fetchval(
+                "SELECT status FROM conversations WHERE thread_id = $1",
+                thread_id,
+            )
+        assert project_status == "deleted"
+        assert conversation_status == "deleted"
+    finally:
+        allow_delete.set()
+        tasks = [task for task in (delete_task, archive_task) if task is not None]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def test_project_delete_waits_for_locked_conversation_creation(

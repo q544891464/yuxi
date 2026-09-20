@@ -23,7 +23,7 @@ from yuxi.utils import logger
 from yuxi.utils.singleton import SingletonMeta
 
 AGENT_RUN_TERMINAL_STATUS_SQL = ", ".join(f"'{status}'" for status in AGENT_RUN_TERMINAL_STATUSES)
-BUSINESS_SCHEMA_VERSION = 8
+BUSINESS_SCHEMA_VERSION = 9
 KNOWLEDGE_SCHEMA_VERSION = 2
 SCHEMA_VERSION_TABLE = "yuxi_schema_migrations"
 AGENT_RUN_LEASE_SCHEMA_STATEMENTS = (
@@ -126,19 +126,11 @@ WORKDIR_PATH_SCHEMA_STATEMENTS = (
     "ALTER TABLE IF EXISTS projects ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'active'",
     "ALTER TABLE IF EXISTS projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITHOUT TIME ZONE",
     "CREATE INDEX IF NOT EXISTS ix_projects_status ON projects(status)",
-    f"""
-    DO $$
-    BEGIN
-        IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = '{PROJECT_STATUS_CONSTRAINT_NAME}'
-              AND conrelid = 'projects'::regclass
-        ) THEN
-            ALTER TABLE projects
-            ADD CONSTRAINT {PROJECT_STATUS_CONSTRAINT_NAME} CHECK ({PROJECT_STATUS_CONSTRAINT_SQL});
-        END IF;
-    END $$
-    """,
+    f"ALTER TABLE IF EXISTS projects DROP CONSTRAINT IF EXISTS {PROJECT_STATUS_CONSTRAINT_NAME}",
+    (
+        f"ALTER TABLE IF EXISTS projects ADD CONSTRAINT {PROJECT_STATUS_CONSTRAINT_NAME} "
+        f"CHECK ({PROJECT_STATUS_CONSTRAINT_SQL})"
+    ),
     "ALTER TABLE IF EXISTS projects DROP CONSTRAINT IF EXISTS uq_projects_uid_workdir_path",
     "ALTER TABLE IF EXISTS projects ALTER COLUMN name DROP NOT NULL",
     """

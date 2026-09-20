@@ -56,7 +56,7 @@ OR (
 )
 """
 PROJECT_STATUS_CONSTRAINT_NAME = "ck_projects_status"
-PROJECT_STATUS_CONSTRAINT_SQL = "status IN ('active', 'deleted')"
+PROJECT_STATUS_CONSTRAINT_SQL = "status IN ('active', 'archived', 'deleted')"
 
 
 # 新建线程的初始已查看标记，用于区分"尚无任何 Run"与"上线前的历史会话"，

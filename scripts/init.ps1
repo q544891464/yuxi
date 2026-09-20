@@ -313,16 +313,32 @@ foreach ($image in $images) {
     }
 }
 
-$sandboxImage = "enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox:1.11.0"
-if (-not (Test-SkipExistingImage $sandboxImage)) {
-    Write-Host "🔄 Pulling ${sandboxImage}..." -ForegroundColor Yellow
-    docker pull $sandboxImage
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ Successfully pulled ${sandboxImage}" -ForegroundColor Green
-    } else {
-        Write-Host "❌ Failed to pull ${sandboxImage}" -ForegroundColor Red
+$configuredSandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { Get-EnvValue "SANDBOX_IMAGE" }
+if ($configuredSandboxImage) {
+    Write-Host "ℹ️ SANDBOX_IMAGE is configured; skipping the default Agent runtime build." -ForegroundColor Cyan
+} else {
+    $sandboxImage = "enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox:1.11.0"
+    if (-not (Test-SkipExistingImage $sandboxImage)) {
+        Write-Host "🔄 Pulling ${sandboxImage}..." -ForegroundColor Yellow
+        docker pull $sandboxImage
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Successfully pulled ${sandboxImage}" -ForegroundColor Green
+        } else {
+            Write-Host "❌ Failed to pull ${sandboxImage}" -ForegroundColor Red
+            exit 1
+        }
+    }
+
+    $projectName = if ($env:COMPOSE_PROJECT_NAME) { $env:COMPOSE_PROJECT_NAME } else { "yuxi" }
+    $runtimeVersion = if ($env:YUXI_VERSION) { $env:YUXI_VERSION } else { "0.7.3" }
+    $runtimeImage = "${projectName}-agent-sandbox:${runtimeVersion}"
+    Write-Host "🔨 Building ${runtimeImage} with common Agent dependencies..." -ForegroundColor Yellow
+    docker build -t $runtimeImage docker/sandbox-runtime
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ Failed to build ${runtimeImage}" -ForegroundColor Red
         exit 1
     }
+    Write-Host "✅ Successfully built ${runtimeImage}" -ForegroundColor Green
 }
 
 Write-Host ""

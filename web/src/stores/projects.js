@@ -48,6 +48,18 @@ export const useProjectsStore = defineStore('projects', () => {
     projects.value = projects.value.filter((project) => project.id !== projectId)
   }
 
+  const archiveProject = async (projectId) => {
+    const project = await projectApi.archiveProject(projectId)
+    removeProject(projectId)
+    return project
+  }
+
+  const restoreProject = async (projectId) => {
+    const project = await projectApi.restoreProject(projectId)
+    upsertProject(project)
+    return project
+  }
+
   return {
     projects,
     isLoading,
@@ -55,6 +67,8 @@ export const useProjectsStore = defineStore('projects', () => {
     loadProjects,
     upsertProject,
     replaceProject,
-    removeProject
+    removeProject,
+    archiveProject,
+    restoreProject
   }
 })

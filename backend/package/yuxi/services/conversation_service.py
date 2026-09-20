@@ -223,12 +223,15 @@ async def list_threads_view(
     current_uid: str,
     limit: int | None = None,
     offset: int = 0,
+    status: str = "active",
 ) -> list[dict]:
+    if status not in {"active", "archived"}:
+        raise HTTPException(status_code=422, detail="对话状态非法")
     conv_repo = ConversationRepository(db)
     conversations = await conv_repo.list_conversations(
         uid=str(current_uid),
         agent_id=agent_slug,
-        status="active",
+        status=status,
         limit=limit,
         offset=offset,
         exclude_sources=INVOCATION_CONVERSATION_SOURCES,
@@ -320,6 +323,47 @@ async def delete_thread_view(
         raise HTTPException(status_code=404, detail="对话线程不存在")
 
     return {"message": "删除成功"}
+
+
+async def set_thread_archive_view(*, thread_id: str, archived: bool, db: AsyncSession, current_uid: str) -> dict:
+    """归档或恢复当前用户的对话。"""
+    conv_repo = ConversationRepository(db)
+    # 统一先锁 Project、再锁 Conversation，与 Project 删除路径保持相同顺序，
+    # 避免并发删除后旧 ORM 对象把 deleted 会话重新写回 active/archived。
+    initial = await require_user_conversation(conv_repo, thread_id, str(current_uid))
+    project = await ProjectRepository(db).lock_for_user(initial.project_id, str(current_uid))
+    if not project:
+        raise HTTPException(status_code=404, detail="对话所属项目不存在")
+    conversation = await conv_repo.lock_conversation_by_thread_id(thread_id)
+    expected_status = "active" if archived else "archived"
+    if (
+        conversation is None
+        or conversation.uid != str(current_uid)
+        or conversation.project_id != project.id
+        or conversation.status != expected_status
+    ):
+        raise HTTPException(status_code=404, detail="对话线程不存在")
+    if project.status != "active":
+        if archived:
+            raise HTTPException(status_code=404, detail="对话线程不存在")
+        raise HTTPException(status_code=409, detail="请先恢复对话所属项目")
+
+    transitioned = await conv_repo.transition_archive_status(
+        conversation,
+        expected_status=expected_status,
+        target_status="archived" if archived else "active",
+        unpin=archived,
+    )
+    if not transitioned:
+        raise HTTPException(status_code=404, detail="对话线程不存在")
+    await db.commit()
+    await db.refresh(conversation)
+    return await _serialize_thread(
+        conversation,
+        thread_status="done",
+        db=db,
+        workdir_path=project.workdir_path,
+    )
 
 
 async def update_thread_view(

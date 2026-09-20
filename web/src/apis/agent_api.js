@@ -271,11 +271,14 @@ export const threadApi = {
    * @param {number} offset - 偏移量，默认0
    * @returns {Promise} - 对话线程列表
    */
-  getThreads: (agentId = null, limit = 100, offset = 0) => {
+  getThreads: (agentId = null, limit = 100, offset = 0, status = 'active') => {
     const params = new URLSearchParams({
       limit: String(limit),
       offset: String(offset)
     })
+    if (status !== 'active') {
+      params.set('status', status)
+    }
     if (agentId) {
       params.set('agent_id', agentId)
     }
@@ -350,6 +353,10 @@ export const threadApi = {
    * @returns {Promise} - 删除结果
    */
   deleteThread: (threadId) => apiDelete(`/api/chat/thread/${threadId}`),
+
+  archiveThread: (threadId) => apiPost(`/api/chat/thread/${threadId}/archive`, {}),
+
+  restoreThread: (threadId) => apiPost(`/api/chat/thread/${threadId}/restore`, {}),
 
   /**
    * 获取线程附件列表

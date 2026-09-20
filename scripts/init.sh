@@ -321,11 +321,21 @@ for image in "${images[@]}"; do
     fi
 done
 
-sandbox_image="enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox:1.11.0"
-if ! skip_existing_image "$sandbox_image"; then
-    echo "🔄 Pulling ${sandbox_image}..."
-    docker pull "$sandbox_image"
-    echo "✅ Successfully pulled ${sandbox_image}"
+configured_sandbox_image="${SANDBOX_IMAGE:-$(get_env_value SANDBOX_IMAGE)}"
+if [ -n "$configured_sandbox_image" ]; then
+    echo "ℹ️ SANDBOX_IMAGE is configured; skipping the default Agent runtime build."
+else
+    sandbox_image="enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox:1.11.0"
+    if ! skip_existing_image "$sandbox_image"; then
+        echo "🔄 Pulling ${sandbox_image}..."
+        docker pull "$sandbox_image"
+        echo "✅ Successfully pulled ${sandbox_image}"
+    fi
+
+    runtime_image="${COMPOSE_PROJECT_NAME:-yuxi}-agent-sandbox:${YUXI_VERSION:-0.7.3}"
+    echo "🔨 Building ${runtime_image} with common Agent dependencies..."
+    docker build -t "$runtime_image" docker/sandbox-runtime
+    echo "✅ Successfully built ${runtime_image}"
 fi
 
 echo ""

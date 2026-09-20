@@ -50,6 +50,13 @@
             <a-menu-item key="rename" :icon="h(SquarePen, { size: 14 })" @click.stop="renameChat">
               重命名
             </a-menu-item>
+            <a-menu-item
+              key="archive"
+              :icon="h(Archive, { size: 14 })"
+              @click.stop="$emit('archive-chat', chat.id)"
+            >
+              归档
+            </a-menu-item>
             <a-sub-menu key="move" :icon="h(FolderInput, { size: 14 })" title="移至项目">
               <a-menu-item
                 v-for="project in moveTargets"
@@ -85,7 +92,16 @@
 <script setup>
 import { computed, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { FolderInput, Loader2, MoreVertical, Pin, PinOff, SquarePen, Trash2 } from '@lucide/vue'
+import {
+  Archive,
+  FolderInput,
+  Loader2,
+  MoreVertical,
+  Pin,
+  PinOff,
+  SquarePen,
+  Trash2
+} from '@lucide/vue'
 
 const props = defineProps({
   chat: { type: Object, required: true },
@@ -94,7 +110,14 @@ const props = defineProps({
   projects: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['select-chat', 'delete-chat', 'rename-chat', 'toggle-pin', 'move-chat'])
+const emit = defineEmits([
+  'select-chat',
+  'delete-chat',
+  'archive-chat',
+  'rename-chat',
+  'toggle-pin',
+  'move-chat'
+])
 const moveTargets = computed(() =>
   props.projects.filter(
     (project) =>

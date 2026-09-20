@@ -60,7 +60,7 @@ Compose 中的 `sandbox-provisioner` 使用以下变量：
 | --- | --- | --- |
 | `PROVISIONER_BACKEND` | `docker`、`kubernetes` 或测试用 `memory` | `docker` |
 | `PROVISIONER_PUBLIC_URL` | 返回给 API/worker 的代理基地址 | `http://sandbox-provisioner:8002` |
-| `SANDBOX_IMAGE` | 动态沙盒镜像 | AIO Sandbox `1.11.0` |
+| `SANDBOX_IMAGE` | 动态沙盒镜像 | Compose 构建的 `yuxi-agent-sandbox` |
 | `SANDBOX_RUNTIME_PROFILE` | 动态沙盒启用的服务规格 | `core` |
 | `SANDBOX_CONTAINER_PORT` | 沙盒内部 HTTP 端口 | `8080` |
 | `SANDBOX_HEALTH_TIMEOUT_SECONDS` | 创建后的健康检查上限 | `300` |
@@ -84,6 +84,8 @@ Docker backend 对同一 Sandbox generation 的创建和删除保持串行，不
 | `full` | `browser` 加 Jupyter、code-server 和 NodeJS REPL 服务 | 需要完整交互式开发环境的任务 |
 
 修改规格后重新创建 `sandbox-provisioner`；该设置只影响之后创建的动态沙盒。未知值会阻止 provisioner 启动。规格对应的镜像服务开关由部署拥有，Agent 请求和 `sandbox.env` 不能覆盖。
+
+默认 `yuxi-agent-sandbox` 基于 AIO Sandbox `1.11.0`，并在构建阶段预装 PyMySQL、MarkItDown PPTX 支持、Tesseract 中英文 OCR 和 .NET 8 SDK。标准 `docker compose ... up --build` 会先构建该镜像，再启动 provisioner；初始化脚本也会预构建它。显式设置 `SANDBOX_IMAGE` 时，Compose 构建检查以该镜像作为基础，不访问默认 Volcengine 基础镜像；初始化脚本会读取进程环境或 `.env` 并跳过默认镜像的拉取与构建。`SILICONFLOW_API_KEY`、`MYSQL_*` 等凭据和连接参数不进入镜像，仍由管理员或用户在沙盒环境变量中配置；环境变量变更和镜像升级都只影响之后创建的沙盒。
 
 ## Docker 后端
 

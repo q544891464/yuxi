@@ -29,12 +29,14 @@ import UserInfoComponent from '@/components/UserInfoComponent.vue'
 import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
+import ArchivedItemsDrawer from '@/components/ArchivedItemsDrawer.vue'
 import SkillEntryMenu from '@/components/SkillEntryMenu.vue'
 import { useSkillNavigationStore } from '@/stores/skillNavigation'
 import { INSPECTION_KB_ID, SKILL_CREATOR_ENTRY } from '@/utils/skillEntries'
 import GlobalSearchModal from '@/components/GlobalSearchModal.vue'
 import { searchWorkspaceFiles } from '@/apis/workspace_api'
 import { projectApi } from '@/apis/project_api'
+import { threadApi } from '@/apis/agent_api'
 import { resolveConsumerChatReturnTarget } from '@/utils/consumerWorkspace'
 
 const configStore = useConfigStore()
@@ -64,6 +66,11 @@ const skillEntryTree = computed(() => skillNavigation.nodes)
 const loadSkillNavigation = () => skillNavigation.load(true).catch(() => {})
 onMounted(loadSkillNavigation)
 const projectSkillPickerId = ref('')
+const archiveOpen = ref(false)
+const archiveLoading = ref(false)
+const archiveError = ref('')
+const archivedProjects = ref([])
+const archivedThreads = ref([])
 
 /** 技能入口只准备草稿，上传或发送沿用对话组件的线程创建。 */
 const openSkillEntry = async (skillId, projectId = '') => {
@@ -315,6 +322,49 @@ const handleDeleteChat = async (threadId) => {
   }
 }
 
+const loadArchivedItems = async () => {
+  archiveLoading.value = true
+  archiveError.value = ''
+  try {
+    const [loadedProjects, loadedThreads] = await Promise.all([
+      projectApi.getProjects('archived'),
+      threadApi.getThreads(null, 500, 0, 'archived')
+    ])
+    archivedProjects.value = loadedProjects || []
+    archivedThreads.value = loadedThreads || []
+  } catch (error) {
+    archiveError.value = error?.message || '已归档内容加载失败'
+  } finally {
+    archiveLoading.value = false
+  }
+}
+
+const openArchive = () => {
+  archiveOpen.value = true
+  void loadArchivedItems()
+}
+
+const handleArchiveChat = async (threadId) => {
+  if (!threadId) return
+  try {
+    await chatThreadsStore.archiveThread(threadId)
+    if (route.params.thread_id === threadId) await router.replace({ name: entryRoute.value })
+    message.success('对话已归档')
+  } catch (error) {
+    message.error(error?.message || '归档对话失败')
+  }
+}
+
+const handleRestoreChat = async (threadId) => {
+  try {
+    await chatThreadsStore.restoreThread(threadId)
+    archivedThreads.value = archivedThreads.value.filter((thread) => thread.id !== threadId)
+    message.success('对话已恢复')
+  } catch (error) {
+    message.error(error?.message || '恢复对话失败')
+  }
+}
+
 const handleRenameChat = async ({ chatId, title }) => {
   try {
     await chatThreadsStore.updateThread(chatId, title)
@@ -379,6 +429,34 @@ const handleDeleteProject = async (projectId) => {
     message.error(error?.message || '删除项目失败')
   } finally {
     projectPendingId.value = null
+  }
+}
+
+const handleArchiveProject = async (projectId) => {
+  if (!projectId || projectPendingId.value) return
+  projectPendingId.value = projectId
+  try {
+    await projectsStore.archiveProject(projectId)
+    const hiddenThreadIds = chatThreadsStore.hideThreadsByProject(projectId)
+    if (hiddenThreadIds.includes(route.params.thread_id)) {
+      await router.replace({ name: entryRoute.value })
+    }
+    message.success('项目已归档')
+  } catch (error) {
+    message.error(error?.message || '归档项目失败')
+  } finally {
+    projectPendingId.value = null
+  }
+}
+
+const handleRestoreProject = async (projectId) => {
+  try {
+    await projectsStore.restoreProject(projectId)
+    archivedProjects.value = archivedProjects.value.filter((project) => project.id !== projectId)
+    await chatThreadsStore.loadThreads()
+    message.success('项目已恢复')
+  } catch (error) {
+    message.error(error?.message || '恢复项目失败')
   }
 }
 
@@ -539,11 +617,14 @@ provide('settingsModal', {
           @select-project-skill="({ skillId, projectId }) => openSkillEntry(skillId, projectId)"
           @select-chat="handleSelectChat"
           @delete-chat="handleDeleteChat"
+          @archive-chat="handleArchiveChat"
           @rename-chat="handleRenameChat"
           @toggle-pin="handleTogglePinChat"
           @move-chat="handleMoveChat"
           @rename-project="handleRenameProject"
           @delete-project="handleDeleteProject"
+          @archive-project="handleArchiveProject"
+          @open-archive="openArchive"
           @create-project-chat="handleCreateProjectChat"
           @project-expanded="handleProjectExpanded"
           @retry-projects="loadProjects"
@@ -649,6 +730,18 @@ provide('settingsModal', {
       @create-thread="handleCreateConversationFromSearch"
       @thread-found="handleSearchThreadFound"
       @select-file="handleSearchSelectFile"
+    />
+
+    <ArchivedItemsDrawer
+      :open="archiveOpen"
+      :loading="archiveLoading"
+      :error="archiveError"
+      :projects="archivedProjects"
+      :conversations="archivedThreads"
+      @close="archiveOpen = false"
+      @retry="loadArchivedItems"
+      @restore-project="handleRestoreProject"
+      @restore-chat="handleRestoreChat"
     />
 
     <TaskCenterDrawer v-if="userStore.isAdmin" />

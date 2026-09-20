@@ -149,10 +149,27 @@ async def create_project_view(
     return project.to_dict()
 
 
-async def list_projects_view(*, uid: str, db) -> list[dict]:
-    """列出当前用户可选择的 Project。"""
-    projects = await ProjectRepository(db).list_selectable_for_user(str(uid))
+async def list_projects_view(*, uid: str, db, status: str = "active") -> list[dict]:
+    """按生命周期列出当前用户可选择的 Project。"""
+    if status not in {"active", "archived"}:
+        raise HTTPException(status_code=422, detail="Project 状态非法")
+    projects = await ProjectRepository(db).list_selectable_for_user(str(uid), status=status)
     return [project.to_dict() for project in projects]
+
+
+async def set_project_archive_view(*, uid: str, project_id: str, archived: bool, db) -> dict:
+    """归档或恢复当前用户的 selectable Project。"""
+    repository = ProjectRepository(db)
+    source_status = "active" if archived else "archived"
+    project = await repository.lock_selectable_for_user(project_id, str(uid), status=source_status)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project 不存在")
+
+    project.status = "archived" if archived else "active"
+    project.updated_at = utc_now_naive()
+    await db.commit()
+    await db.refresh(project)
+    return project.to_dict()
 
 
 async def rename_project_view(*, uid: str, project_id: str, name: str, db) -> dict:

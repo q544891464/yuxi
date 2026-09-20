@@ -406,6 +406,40 @@ test('Project 与 Workspace API 按 xhome 契约构造请求', async () => {
   })
 })
 
+test('归档 API 使用独立状态查询与资源动作端点', async () => {
+  await withServer(async (server) => {
+    storageValues.set('user_token', 'test-token')
+    const requests = []
+    globalThis.fetch = async (url, options = {}) => {
+      requests.push({ url, method: options.method || 'GET' })
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    }
+
+    setActivePinia(createPinia())
+    const { projectApi } = await server.ssrLoadModule('/src/apis/project_api.js')
+    const { threadApi } = await server.ssrLoadModule('/src/apis/agent_api.js')
+
+    await projectApi.getProjects('archived')
+    await projectApi.archiveProject('project-1')
+    await projectApi.restoreProject('project-1')
+    await threadApi.getThreads(null, 100, 0, 'archived')
+    await threadApi.archiveThread('thread-1')
+    await threadApi.restoreThread('thread-1')
+
+    assert.deepEqual(requests, [
+      { url: '/api/projects?status=archived', method: 'GET' },
+      { url: '/api/projects/project-1/archive', method: 'POST' },
+      { url: '/api/projects/project-1/restore', method: 'POST' },
+      { url: '/api/chat/threads?limit=100&offset=0&status=archived', method: 'GET' },
+      { url: '/api/chat/thread/thread-1/archive', method: 'POST' },
+      { url: '/api/chat/thread/thread-1/restore', method: 'POST' }
+    ])
+  })
+})
+
 test('工具元数据 API 使用普通用户认证且普通用户可正常请求', async () => {
   await withServer(async (server) => {
     storageValues.clear()

@@ -11,6 +11,7 @@ from yuxi.services.project_service import (
     list_history_candidates_view,
     list_projects_view,
     rename_project_view,
+    set_project_archive_view,
 )
 from yuxi.storage.postgres.models_business import User
 
@@ -46,11 +47,32 @@ class ProjectUpdate(BaseModel):
 
 @projects.get("")
 async def list_projects(
+    status: str = Query("active", pattern="^(active|archived)$"),
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
     """列出当前用户可选择的 Project。"""
-    return await list_projects_view(uid=str(current_user.uid), db=db)
+    return await list_projects_view(uid=str(current_user.uid), db=db, status=status)
+
+
+@projects.post("/{project_id}/archive")
+async def archive_project(
+    project_id: str,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """归档当前用户的 Project。"""
+    return await set_project_archive_view(uid=str(current_user.uid), project_id=project_id, archived=True, db=db)
+
+
+@projects.post("/{project_id}/restore")
+async def restore_project(
+    project_id: str,
+    current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """恢复当前用户已归档的 Project。"""
+    return await set_project_archive_view(uid=str(current_user.uid), project_id=project_id, archived=False, db=db)
 
 
 @projects.post("")

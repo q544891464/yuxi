@@ -28,7 +28,14 @@ async def session():
     await engine.dispose()
 
 
-async def _seed_conversation(db, *, thread_id: str, last_viewed_run_id: str | None = None) -> Conversation:
+async def _seed_conversation(
+    db,
+    *,
+    thread_id: str,
+    last_viewed_run_id: str | None = None,
+    conversation_status: str = "active",
+    project_status: str = "active",
+) -> Conversation:
     project_id = f"project-{thread_id}"
     db.add(
         Project(
@@ -37,6 +44,7 @@ async def _seed_conversation(db, *, thread_id: str, last_viewed_run_id: str | No
             selection_status="implicit",
             workdir_path=f"projects/workdir-{thread_id}",
             directory_mode="managed",
+            status=project_status,
         )
     )
     conversation = Conversation(
@@ -45,7 +53,7 @@ async def _seed_conversation(db, *, thread_id: str, last_viewed_run_id: str | No
         uid="user-1",
         agent_id="main",
         title=f"conv-{thread_id}",
-        status="active",
+        status=conversation_status,
         extra_metadata={},
         last_viewed_run_id=last_viewed_run_id,
     )
@@ -112,6 +120,83 @@ async def test_list_threads_view_maps_run_states(session):
     assert status_by_id["thread-ready"] == "ready"
     assert status_by_id["thread-done"] == "done"
     assert status_by_id["thread-no-run"] == "done"
+
+
+async def test_archived_threads_are_separate_and_archived_projects_only_hide_active_threads(session):
+    await _seed_conversation(session, thread_id="thread-active")
+    await _seed_conversation(session, thread_id="thread-archived", conversation_status="archived")
+    await _seed_conversation(
+        session,
+        thread_id="thread-in-archived-project",
+        project_status="archived",
+    )
+    await _seed_conversation(
+        session,
+        thread_id="thread-archived-in-archived-project",
+        conversation_status="archived",
+        project_status="archived",
+    )
+    await session.commit()
+
+    active = await svc.list_threads_view(db=session, current_uid="user-1", agent_slug=None, limit=100)
+    archived = await svc.list_threads_view(
+        db=session,
+        current_uid="user-1",
+        agent_slug=None,
+        limit=100,
+        status="archived",
+    )
+
+    assert {item["id"] for item in active} == {"thread-active"}
+    assert {item["id"] for item in archived} == {
+        "thread-archived",
+        "thread-archived-in-archived-project",
+    }
+
+
+async def test_archive_and_restore_thread_unpins_it(session):
+    conversation = await _seed_conversation(session, thread_id="thread-archive")
+    conversation.is_pinned = True
+    await session.commit()
+
+    archived = await svc.set_thread_archive_view(
+        thread_id="thread-archive",
+        archived=True,
+        db=session,
+        current_uid="user-1",
+    )
+    assert archived["id"] == "thread-archive"
+    assert conversation.status == "archived"
+    assert conversation.is_pinned is False
+
+    restored = await svc.set_thread_archive_view(
+        thread_id="thread-archive",
+        archived=False,
+        db=session,
+        current_uid="user-1",
+    )
+    assert restored["id"] == "thread-archive"
+    assert conversation.status == "active"
+
+
+async def test_restore_thread_requires_active_project(session):
+    await _seed_conversation(
+        session,
+        thread_id="thread-hidden",
+        conversation_status="archived",
+        project_status="archived",
+    )
+    await session.commit()
+
+    with pytest.raises(svc.HTTPException) as exc:
+        await svc.set_thread_archive_view(
+            thread_id="thread-hidden",
+            archived=False,
+            db=session,
+            current_uid="user-1",
+        )
+
+    assert exc.value.status_code == 409
 
 
 async def test_list_threads_view_uses_joined_projects_without_per_thread_lookup(session, monkeypatch):

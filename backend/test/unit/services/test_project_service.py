@@ -334,3 +334,49 @@ async def test_delete_project_soft_deletes_all_conversations_in_one_commit(monke
     assert result == {"message": "删除成功", "deleted_conversations": 3}
     assert calls[0][0] is project
     assert db.commits == 1
+
+
+async def test_archive_and_restore_project_only_changes_project_status(monkeypatch):
+    project = SimpleNamespace(
+        id="project-1",
+        status="active",
+        updated_at=None,
+        to_dict=lambda: {"id": project.id, "status": project.status},
+    )
+    requested_statuses = []
+
+    class _ProjectRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_selectable_for_user(self, project_id, uid, *, status):
+            assert (project_id, uid) == ("project-1", "user-1")
+            requested_statuses.append(status)
+            return project if project.status == status else None
+
+    monkeypatch.setattr(svc, "ProjectRepository", _ProjectRepository)
+    db = _Db()
+
+    archived = await svc.set_project_archive_view(uid="user-1", project_id="project-1", archived=True, db=db)
+    restored = await svc.set_project_archive_view(uid="user-1", project_id="project-1", archived=False, db=db)
+
+    assert archived == {"id": "project-1", "status": "archived"}
+    assert restored == {"id": "project-1", "status": "active"}
+    assert requested_statuses == ["active", "archived"]
+    assert db.commits == 2
+
+
+async def test_archive_project_rejects_other_user_or_wrong_status(monkeypatch):
+    class _ProjectRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_selectable_for_user(self, *_args, **_kwargs):
+            return None
+
+    monkeypatch.setattr(svc, "ProjectRepository", _ProjectRepository)
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.set_project_archive_view(uid="user-1", project_id="other-project", archived=True, db=_Db())
+
+    assert exc.value.status_code == 404

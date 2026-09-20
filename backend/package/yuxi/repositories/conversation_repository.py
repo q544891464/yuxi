@@ -20,6 +20,7 @@ from yuxi.storage.postgres.models_business import (
     Conversation,
     ConversationStats,
     Message,
+    Project,
     SubagentThread,
     ToolCall,
 )
@@ -493,7 +494,13 @@ class ConversationRepository:
         conversations are always visible in the list.
         """
 
-        base_conditions = [Conversation.status == status]
+        project_status_condition = (
+            Project.status == "active" if status == "active" else Project.status != "deleted"
+        )
+        base_conditions = [
+            Conversation.status == status,
+            Conversation.project.has(project_status_condition),
+        ]
         if uid:
             base_conditions.append(Conversation.uid == str(uid))
         if agent_id:
@@ -553,6 +560,7 @@ class ConversationRepository:
         conversation_conditions = [
             Conversation.uid == str(uid),
             Conversation.status == "active",
+            Conversation.project.has(Project.status == "active"),
         ]
         if agent_id:
             conversation_conditions.append(Conversation.agent_id == agent_id)
@@ -882,6 +890,24 @@ class ConversationRepository:
 
         logger.info(f"Updated conversation {thread_id}")
         return conversation
+
+    async def transition_archive_status(
+        self,
+        conversation: Conversation,
+        *,
+        expected_status: str,
+        target_status: str,
+        unpin: bool,
+    ) -> bool:
+        """在已锁定 Conversation 上执行受源状态保护的归档状态迁移。"""
+        if conversation.status != expected_status:
+            return False
+        conversation.status = target_status
+        if unpin:
+            conversation.is_pinned = False
+        conversation.updated_at = utc_now_naive()
+        await self.db.flush()
+        return True
 
     async def delete_conversation(self, thread_id: str, soft_delete: bool = True) -> bool:
         conversation = await self.get_conversation_by_thread_id(thread_id)

@@ -159,6 +159,21 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
     }
   }
 
+  const archiveThread = async (threadId) => {
+    if (!threadId) return null
+    const thread = await threadApi.archiveThread(threadId)
+    threads.value = threads.value.filter((item) => item.id !== threadId)
+    if (currentThreadId.value === threadId) setCurrentThreadId(null)
+    return thread
+  }
+
+  const restoreThread = async (threadId) => {
+    if (!threadId) return null
+    const thread = await threadApi.restoreThread(threadId)
+    upsertThread(thread)
+    return thread
+  }
+
   const removeThreadsByProject = (projectId) => {
     if (!projectId) return []
     const removedIds = []
@@ -178,6 +193,16 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
       setCurrentThreadId(null)
     }
     return removedIds
+  }
+
+  const hideThreadsByProject = (projectId) => {
+    if (!projectId) return []
+    const hiddenIds = threads.value
+      .filter((thread) => thread.project_id === projectId)
+      .map((thread) => thread.id)
+    threads.value = threads.value.filter((thread) => thread.project_id !== projectId)
+    if (hiddenIds.includes(currentThreadId.value)) setCurrentThreadId(null)
+    return hiddenIds
   }
 
   const updateThread = async (threadId, title, isPinned, toolApprovalMode, projectId) => {
@@ -221,7 +246,10 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
     loadMoreThreads,
     createThread,
     deleteThread,
+    archiveThread,
+    restoreThread,
     removeThreadsByProject,
+    hideThreadsByProject,
     updateThread
   }
 })

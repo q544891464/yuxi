@@ -64,6 +64,8 @@ def test_project_lifecycle_columns_and_constraint_are_in_fresh_schema():
     assert projects.c.status.nullable is False
     assert "deleted_at" in projects.c
     assert "ck_projects_status" in {constraint.name for constraint in projects.constraints}
+    constraint = next(item for item in projects.constraints if item.name == "ck_projects_status")
+    assert "archived" in str(constraint.sqltext)
 
 
 def test_agent_run_serialization_does_not_project_removed_redis_cursor():

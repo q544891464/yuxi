@@ -25,6 +25,15 @@ class ProjectRepository:
         """按用户读取 Project。"""
         return await self.db.scalar(select(Project).where(Project.id == project_id, Project.uid == str(uid)))
 
+    async def lock_for_user(self, project_id: str, uid: str) -> Project | None:
+        """按用户锁定 Project，串行化跨 Project 与 Conversation 的生命周期变更。"""
+        return await self.db.scalar(
+            select(Project)
+            .where(Project.id == project_id, Project.uid == str(uid))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
     async def lock_active_for_user(self, project_id: str, uid: str) -> Project | None:
         """锁定当前用户的 active Project。"""
         return await self.db.scalar(
@@ -56,18 +65,31 @@ class ProjectRepository:
             select(Project).where(Project.uid == str(uid), Project.idempotency_key == idempotency_key)
         )
 
-    async def list_selectable_for_user(self, uid: str) -> list[Project]:
-        """列出用户可选择的 Project。"""
+    async def list_selectable_for_user(self, uid: str, *, status: str = "active") -> list[Project]:
+        """按生命周期列出用户可选择的 Project。"""
         result = await self.db.execute(
             select(Project)
             .where(
                 Project.uid == str(uid),
                 Project.selection_status == "selectable",
-                Project.status == "active",
+                Project.status == status,
             )
             .order_by(Project.updated_at.desc(), Project.id.desc())
         )
         return list(result.scalars().all())
+
+    async def lock_selectable_for_user(self, project_id: str, uid: str, *, status: str) -> Project | None:
+        """按生命周期锁定当前用户可管理的 selectable Project。"""
+        return await self.db.scalar(
+            select(Project)
+            .where(
+                Project.id == project_id,
+                Project.uid == str(uid),
+                Project.selection_status == "selectable",
+                Project.status == status,
+            )
+            .with_for_update()
+        )
 
     async def list_selectable_workdir_paths_for_user(self, uid: str) -> list[str]:
         """列出用户已选择 Project 的去重 Workdir 路径。"""
