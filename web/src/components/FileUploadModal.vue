@@ -335,6 +335,7 @@ const emit = defineEmits(['update:visible', 'success'])
 
 const store = useDatabaseStore()
 const configStore = useConfigStore()
+const userStore = useUserStore()
 const DEFAULT_OCR_ENGINE = 'rapid_ocr'
 const defaultOcrEngine = ref(DEFAULT_OCR_ENGINE)
 
@@ -449,6 +450,10 @@ const isSupportedUploadFile = (file) => {
 }
 
 const loadSupportedFileTypes = async () => {
+  if (!userStore.isAdmin) {
+    applySupportedFileTypes(DEFAULT_SUPPORTED_TYPES)
+    return
+  }
   try {
     const data = await fileApi.getSupportedFileTypes()
     applySupportedFileTypes(data?.file_types)
@@ -1130,7 +1135,6 @@ const handleDrop = () => {}
 // 已移除文件夹上传逻辑
 
 const getAuthHeaders = () => {
-  const userStore = useUserStore()
   return userStore.getAuthHeaders()
 }
 

@@ -424,6 +424,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { resolveConsumerChatReturnTarget } from '@/utils/consumerWorkspace'
 import { useRoute, useRouter } from 'vue-router'
 import { useDatabaseStore } from '@/stores/database'
 import { useTaskerStore } from '@/stores/tasker'
@@ -872,6 +873,10 @@ watch(
 )
 
 const backToDatabase = () => {
+  if (route.meta.consumerChat) {
+    router.push(resolveConsumerChatReturnTarget(route.query.returnTo))
+    return
+  }
   router.push(userStore.isAdmin ? { path: '/extensions', query: { tab: 'knowledge' } } : '/chat')
 }
 

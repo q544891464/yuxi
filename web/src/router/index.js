@@ -37,6 +37,18 @@ const router = createRouter({
       children: [
         { path: '', name: 'ChatComp', component: () => import('../views/AgentView.vue') },
         {
+          path: 'knowledge/:kbId',
+          name: 'ConsumerKnowledgeBaseDetail',
+          component: () => import('../views/DataBaseInfoView.vue'),
+          meta: { keepAlive: true, requiresAuth: true }
+        },
+        {
+          path: 'dashboard',
+          name: 'ConsumerDashboard',
+          component: () => import('../views/DashboardView.vue'),
+          meta: { keepAlive: true, requiresAuth: true, requiresAdmin: true }
+        },
+        {
           path: ':thread_id',
           name: 'ChatCompWithThreadId',
           component: () => import('../views/AgentView.vue')

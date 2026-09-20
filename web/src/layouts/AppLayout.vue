@@ -35,6 +35,7 @@ import { INSPECTION_KB_ID, SKILL_CREATOR_ENTRY } from '@/utils/skillEntries'
 import GlobalSearchModal from '@/components/GlobalSearchModal.vue'
 import { searchWorkspaceFiles } from '@/apis/workspace_api'
 import { projectApi } from '@/apis/project_api'
+import { resolveConsumerChatReturnTarget } from '@/utils/consumerWorkspace'
 
 const configStore = useConfigStore()
 const agentStore = useAgentStore()
@@ -151,6 +152,12 @@ onUnmounted(() => {
 const route = useRoute()
 const router = useRouter()
 const consumerChat = computed(() => route.meta.consumerChat === true)
+const consumerBrandTarget = computed(() => {
+  if (route.name === 'ConsumerKnowledgeBaseDetail' || route.name === 'ConsumerDashboard') {
+    return resolveConsumerChatReturnTarget(route.query.returnTo)
+  }
+  return '/chat'
+})
 const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
 
 const activeTaskCount = computed(() => activeCountRef.value || 0)
@@ -401,7 +408,7 @@ provide('settingsModal', {
     }"
   >
     <header v-if="consumerChat" class="consumer-topbar">
-      <RouterLink to="/chat" class="consumer-brand">
+      <RouterLink :to="consumerBrandTarget" class="consumer-brand">
         <span class="consumer-logo" aria-hidden="true"></span>
         <span><strong>智能辅助稽查数字人</strong><small>税务稽查智能助手</small></span>
       </RouterLink>
@@ -579,10 +586,17 @@ provide('settingsModal', {
               </div>
               <RouterLink
                 class="consumer-nav-link"
-                :to="`/extensions/knowledgebase/${INSPECTION_KB_ID}`"
+                :to="{
+                  name: 'ConsumerKnowledgeBaseDetail',
+                  params: { kbId: INSPECTION_KB_ID },
+                  query: { returnTo: route.fullPath }
+                }"
                 ><LibraryBig :size="17" />知识库</RouterLink
               >
-              <RouterLink v-if="userStore.isAdmin" class="consumer-nav-link" to="/dashboard"
+              <RouterLink
+                v-if="userStore.isAdmin"
+                class="consumer-nav-link"
+                :to="{ name: 'ConsumerDashboard', query: { returnTo: route.fullPath } }"
                 ><BarChart3 :size="17" />数据总览</RouterLink
               >
             </div>
@@ -765,6 +779,11 @@ provide('settingsModal', {
   :deep(.consumer-agent) {
     height: 100%;
     min-height: 0;
+  }
+  :deep(.dashboard-container) {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
   }
   :deep(.chat),
   :deep(.chat-main),
