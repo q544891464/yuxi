@@ -53,3 +53,24 @@ def test_invalid_navigation_rejected(defect):
         config["revision"] = -1
     with pytest.raises(ValidationError):
         NavigationConfig.model_validate(config)
+
+
+def test_role_visibility_prunes_whole_group_and_keeps_order():
+    """隐藏父节点不能通过可见子节点绕过，空角色列表隐藏入口。"""
+    from yuxi.services.skill_navigation_service import filter_navigation_for_role
+
+    parent = node("group", visibleRoles=["ducha"])
+    parent["children"] = [node("child", visibleRoles=["user", "ducha"])]
+    config = NavigationConfig(revision=0, nodes=[parent, node("public"), node("hidden", visibleRoles=[])]).model_dump()
+    assert [n["id"] for n in filter_navigation_for_role(config, "user")["nodes"]] == ["public"]
+    result = filter_navigation_for_role(config, "ducha")["nodes"]
+    assert [n["id"] for n in result] == ["group", "public"]
+    assert result[0]["children"][0]["id"] == "child"
+    assert len(config["nodes"]) == 3
+    assert filter_navigation_for_role(config, "unknown")["nodes"] == []
+
+
+def test_unknown_visible_role_is_rejected():
+    """拼错角色不能保存成不可解释的配置。"""
+    with pytest.raises(ValidationError):
+        NavigationConfig(revision=0, nodes=[node(visibleRoles=["typo"])])

@@ -51,6 +51,7 @@
           <a-select-option value="superadmin">超级管理员</a-select-option>
           <a-select-option value="admin">管理员</a-select-option>
           <a-select-option value="user">普通用户</a-select-option>
+          <a-select-option value="ducha">督查人员</a-select-option>
         </a-select>
       </div>
     </div>
@@ -239,10 +240,17 @@
           </a-form-item>
         </template>
 
-        <a-form-item v-if="!userManagement.editMode" label="角色" class="form-item">
+        <a-form-item
+          v-if="!userManagement.editMode || ['user', 'ducha'].includes(userManagement.form.role)"
+          label="角色"
+          class="form-item"
+        >
           <a-select v-model:value="userManagement.form.role">
             <a-select-option value="user">普通用户</a-select-option>
-            <a-select-option value="admin" v-if="userStore.isSuperAdmin">管理员</a-select-option>
+            <a-select-option value="ducha">督查人员</a-select-option>
+            <a-select-option value="admin" v-if="userStore.isSuperAdmin && !userManagement.editMode"
+              >管理员</a-select-option
+            >
           </a-select>
         </a-form-item>
 
@@ -316,6 +324,7 @@ const columns = [
 
 const getRoleDisplayName = (role) => {
   const map = {
+    ducha: '督查人员',
     superadmin: '超级管理员',
     admin: '管理员',
     user: '普通用户'
@@ -633,6 +642,7 @@ const showEditUserModal = (user) => {
   userManagement.editUserId = user.id
   userManagement.form = {
     username: user.username,
+    role: user.role,
     generatedUid: user.uid || '', // 编辑模式显示现有的uid
     phoneNumber: user.phone_number || '',
     password: '',
@@ -693,6 +703,10 @@ const handleUserFormSubmit = async () => {
       // 创建更新数据对象
       const updateData = {
         username: userManagement.form.username.trim()
+      }
+
+      if (['user', 'ducha'].includes(userManagement.form.role)) {
+        updateData.role = userManagement.form.role
       }
 
       // 添加手机号字段

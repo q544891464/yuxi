@@ -49,3 +49,14 @@ test('循环、孤立节点和第四层拒绝保存；空树可明确保存', ()
     /三级/
   )
 })
+
+
+test('编辑、排序和重新组树保留节点的角色可见范围', () => {
+  const original = [
+    { id: 'a', visibleRoles: ['ducha'], children: [{ id: 'b', visibleRoles: [], children: [] }] },
+    { id: 'c', visibleRoles: ['admin', 'user'], children: [] }
+  ]
+  const rows = navigationRows(original)
+  moveNavigationRow(rows, 'c', -1)
+  assert.deepEqual(navigationTree(rows), [original[1], original[0]])
+})

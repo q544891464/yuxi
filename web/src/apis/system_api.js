@@ -123,3 +123,6 @@ export const modelProviderApi = {
     )
   }
 }
+
+/** 读取受角色保护的督查工作区配置。 */
+export const getDuchaPage = () => apiGet('/api/system/chat/ducha')

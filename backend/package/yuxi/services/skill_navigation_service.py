@@ -1,6 +1,7 @@
 """侧栏技能的受控配置与发布。"""
 
 import json
+from typing import Literal
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -21,6 +22,9 @@ class NavigationNode(BaseModel):
     inputHint: str = Field(min_length=1, max_length=2000)
     outputHint: str = Field(min_length=1, max_length=2000)
     presetPrompt: str = Field(min_length=1, max_length=10000)
+    visibleRoles: list[Literal["user", "ducha", "admin", "superadmin"]] = Field(
+        default_factory=lambda: ["user", "ducha", "admin", "superadmin"], max_length=4
+    )
     children: list["NavigationNode"] = Field(default_factory=list, max_length=100)
 
 
@@ -49,6 +53,15 @@ class NavigationConfig(BaseModel):
 
 class NavigationConflict(ValueError):
     """另一管理员已经保存新版本。"""
+
+
+def filter_navigation_for_role(config, role):
+    """父入口不可见时隐藏整个子树，保留可见入口的顺序。"""
+
+    def visible(nodes):
+        return [{**node, "children": visible(node["children"])} for node in nodes if role in node["visibleRoles"]]
+
+    return {**config, "nodes": visible(config["nodes"])}
 
 
 async def get_skill_navigation(db):

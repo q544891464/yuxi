@@ -16,8 +16,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from server.routers.system_router import system
+from server.routers.auth_router import auth
 from server.utils.auth_middleware import get_db
-from yuxi.storage.postgres.models_business import ConfigOption, Department, Skill, User
+from yuxi.storage.postgres.models_business import ConfigOption, Department, Skill, User, OperationLog
 from yuxi.utils.auth_utils import AuthUtils
 
 
@@ -29,12 +30,12 @@ def navigation_server():
         pytest.skip("需要独立 TEST_NAV_DATABASE_URL")
     assert "/nav_verify_" in url, "禁止在业务数据库运行"
     engine = create_engine(url.replace("postgresql+asyncpg", "postgresql+psycopg"))
-    tables = [Department.__table__, User.__table__, Skill.__table__, ConfigOption.__table__]
+    tables = [Department.__table__, User.__table__, Skill.__table__, ConfigOption.__table__, OperationLog.__table__]
     for table in tables:
         table.create(engine)
     with engine.begin() as conn:
         conn.execute(Department.__table__.insert().values(id=1, name="验证部门"))
-        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin")]:
+        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha")]:
             conn.execute(
                 User.__table__.insert().values(
                     id=id,
@@ -69,6 +70,7 @@ def navigation_server():
 
     app = FastAPI()
     app.include_router(system, prefix="/api")
+    app.include_router(auth, prefix="/api")
     app.dependency_overrides[get_db] = database
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -82,7 +84,7 @@ def navigation_server():
     assert server.started
     tokens = {
         role: {"Authorization": "Bearer " + AuthUtils.create_access_token({"sub": str(id)})}
-        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin")]
+        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha")]
     }
     try:
         with httpx.Client(base_url=f"http://127.0.0.1:{sock.getsockname()[1]}") as client:
@@ -132,3 +134,66 @@ def test_navigation_publish_permissions_conflict_and_persistence(navigation_serv
     assert client.get(path, headers=tokens["user"]).json() == {"revision": 3, "nodes": []}
     with engine.connect() as conn:
         assert conn.scalar(select(Skill.slug).where(Skill.slug == "navigation-test")) == "navigation-test"
+
+
+def test_ducha_role_and_navigation_http(navigation_server):
+    """真实身份、配置持久化与入口过滤不能靠伪造客户端角色绕过。"""
+    client, tokens, engine = navigation_server
+    page = "/api/system/chat/ducha"
+    path = "/api/system/skill-navigation"
+    assert client.get(page).status_code == 401
+    assert client.get(page, headers=tokens["user"]).status_code == 403
+    for role in ["ducha", "admin", "superadmin"]:
+        assert client.get(page, headers=tokens[role]).json()["specialist"] == "辅助督查专员"
+    assert client.get(path + "/manage", headers=tokens["user"]).status_code == 403
+    assert client.get(path + "/manage", headers=tokens["ducha"]).status_code == 403
+    with engine.begin() as conn:
+        conn.execute(update(Skill).where(Skill.slug == "navigation-test").values(enabled=True))
+    config = client.get(path + "/manage", headers=tokens["admin"]).json()
+    config["nodes"] = [
+        {
+            "id": "ducha-group",
+            "label": "督查",
+            "skillSlug": "navigation-test",
+            "skillDisplayName": "测试",
+            "inputHint": "材料",
+            "outputHint": "结果",
+            "presetPrompt": "检查",
+            "visibleRoles": ["ducha"],
+            "children": [
+                {
+                    "id": "child",
+                    "label": "子项",
+                    "skillSlug": "navigation-test",
+                    "skillDisplayName": "测试",
+                    "inputHint": "材料",
+                    "outputHint": "结果",
+                    "presetPrompt": "检查",
+                    "visibleRoles": ["user", "ducha"],
+                    "children": [],
+                }
+            ],
+        }
+    ]
+    assert client.put(path, headers=tokens["ducha"], json=config).status_code == 403
+    result = client.put(path, headers=tokens["admin"], json=config)
+    assert result.status_code == 200, result.text
+    assert client.get(path, headers=tokens["user"]).json()["nodes"] == []
+    assert client.get(path, headers=tokens["admin"]).json()["nodes"] == []
+    assert client.get(path, headers=tokens["ducha"]).json()["nodes"][0]["children"][0]["id"] == "child"
+    with engine.connect() as conn:
+        assert (
+            conn.scalar(select(ConfigOption.value).where(ConfigOption.key == "skill_navigation"))["nodes"]
+            == config["nodes"]
+        )
+    user_path = "/api/auth/users/2"
+    assert client.put(user_path, headers=tokens["user"], json={"role": "ducha"}).status_code == 403
+    assert client.put(user_path, headers=tokens["admin"], json={"role": "admin"}).status_code == 422
+    assert client.put("/api/auth/users/3", headers=tokens["superadmin"], json={"role": "ducha"}).status_code == 403
+    assigned = client.put(user_path, headers=tokens["admin"], json={"role": "ducha"})
+    assert assigned.status_code == 200, assigned.text
+    with engine.connect() as conn:
+        assert conn.scalar(select(User.role).where(User.id == 2)) == "ducha"
+    assert client.get(page, headers=tokens["user"]).status_code == 200
+    assert client.put(user_path, headers=tokens["admin"], json={"role": "user"}).status_code == 200
+    assert client.get(page, headers=tokens["user"]).status_code == 403

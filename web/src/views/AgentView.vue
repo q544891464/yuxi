@@ -14,7 +14,7 @@
             v-if="consumerChat"
             #welcome="{ skillEntry, skillAvailable, upload, projectName, uploadDisabled }"
           >
-            <ChatWelcome :skill-selected="!!skillEntry">
+            <ChatWelcome :skill-selected="!!skillEntry" :ducha="!!route.meta.ducha">
               <template #skill-description>
                 <SkillStartPanel
                   :entry="skillEntry"
@@ -164,7 +164,9 @@ const agentStore = useAgentStore()
 const route = useRoute()
 const router = useRouter()
 const consumerChat = computed(() => route.meta.consumerChat === true)
-const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
+const entryRoute = computed(() =>
+  route.meta.ducha ? 'DuchaChatComp' : consumerChat.value ? 'ChatComp' : 'AgentComp'
+)
 
 // 从 agentStore 中获取响应式状态
 const { agents, selectedAgentId, isLoadingConfig } = storeToRefs(agentStore)

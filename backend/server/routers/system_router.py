@@ -14,9 +14,11 @@ from yuxi.services.skill_navigation_service import (
     NavigationConfig,
     NavigationConflict,
     get_skill_navigation,
+    filter_navigation_for_role,
     save_skill_navigation,
 )
 from yuxi.storage.postgres.models_business import User
+from yuxi.services.ducha_service import get_ducha_page
 from yuxi.utils.logging_config import LOG_FILE, logger
 
 from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
@@ -29,8 +31,26 @@ async def read_skill_navigation(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """返回全平台业务技能入口。"""
+    """仅返回当前角色可见的业务技能入口。"""
+    return filter_navigation_for_role(await get_skill_navigation(db), current_user.role)
+
+
+@system.get("/skill-navigation/manage")
+async def manage_skill_navigation(
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """管理员读取包含隐藏入口的完整配置。"""
     return await get_skill_navigation(db)
+
+
+@system.get("/chat/ducha")
+async def read_ducha_page(current_user: User = Depends(get_required_user)):
+    """校验督查工作区访问身份。"""
+    try:
+        return get_ducha_page(current_user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @system.put("/skill-navigation")

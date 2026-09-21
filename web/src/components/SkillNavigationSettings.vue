@@ -53,6 +53,16 @@
           <a-form-item label="父级入口"
             ><a-select v-model:value="selected.parentId" :options="parentOptions"
           /></a-form-item>
+          <a-form-item label="可见角色">
+            <a-select
+              v-model:value="selected.visibleRoles"
+              mode="multiple"
+              :options="roleOptions"
+            />
+            <p class="hint">
+              未选择角色时隐藏入口；父级不可见时，其全部子入口也隐藏。此配置不改变技能本体的访问权限。
+            </p>
+          </a-form-item>
           <a-form-item label="绑定技能" required>
             <a-select
               :value="selected.skillSlug"
@@ -103,6 +113,12 @@ import {
   moveNavigationRow
 } from '@/utils/skillNavigationEditor'
 
+const roleOptions = [
+  { value: 'user', label: '普通用户' },
+  { value: 'ducha', label: '督查人员' },
+  { value: 'admin', label: '管理员' },
+  { value: 'superadmin', label: '超级管理员' }
+]
 const store = useSkillNavigationStore()
 const rows = ref([])
 const skills = ref([])
@@ -147,7 +163,7 @@ const load = async () => {
   loading.value = true
   error.value = ''
   try {
-    const [config, response] = await Promise.all([skillNavigationApi.get(), listSkills()])
+    const [config, response] = await Promise.all([skillNavigationApi.manage(), listSkills()])
     rows.value = navigationRows(config.nodes)
     revision.value = config.revision
     skills.value = response.data || []
@@ -174,6 +190,7 @@ const add = () => {
     skillDisplayName: '',
     inputHint: '',
     outputHint: '',
+    visibleRoles: roleOptions.map((role) => role.value),
     presetPrompt: ''
   })
   selectedId.value = id
@@ -217,10 +234,15 @@ const save = async () => {
       revision: revision.value,
       nodes: navigationTree(rows.value)
     })
-    store.accept(config)
     revision.value = config.revision
     rows.value = navigationRows(config.nodes)
     saved.value = JSON.stringify(rows.value)
+    try {
+      await store.load(true)
+    } catch {
+      message.warning('配置已保存，但侧栏刷新失败，请重新加载页面')
+      return
+    }
     message.success('已保存，侧栏及项目技能菜单已更新')
   } catch (err) {
     error.value = err.message || '保存失败，请重试'

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { getDuchaPage } from '@/apis/system_api'
 import { sanitizeRedirect } from '@/utils/oidcAutoStart'
 
 const AppLayout = () => import('@/layouts/AppLayout.vue')
@@ -36,6 +37,18 @@ const router = createRouter({
       meta: { requiresAuth: true, consumerChat: true },
       children: [
         { path: '', name: 'ChatComp', component: () => import('../views/AgentView.vue') },
+        {
+          path: 'ducha',
+          name: 'DuchaChatComp',
+          component: () => import('../views/AgentView.vue'),
+          meta: { ducha: true }
+        },
+        {
+          path: 'ducha/:thread_id',
+          name: 'DuchaChatCompWithThreadId',
+          component: () => import('../views/AgentView.vue'),
+          meta: { ducha: true }
+        },
         {
           path: 'knowledge/:kbId',
           name: 'ConsumerKnowledgeBaseDetail',
@@ -206,6 +219,14 @@ router.beforeEach(async (to) => {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 
+  if (to.meta.ducha) {
+    try {
+      await getDuchaPage()
+    } catch {
+      return '/chat'
+    }
+  }
+
   // 页面入口按已加载的身份分流，资源授权仍由后端执行。
   if (requiresAdmin && !isAdmin) return '/chat'
   if (requiresSuperAdmin && !isSuperAdmin) return isAdmin ? '/agent' : '/chat'
@@ -219,6 +240,10 @@ router.beforeEach(async (to) => {
 
   // 其他情况正常导航
   return true
+})
+
+router.afterEach((to) => {
+  document.title = to.meta.ducha ? '智能辅助督查数字人' : '智能辅助稽查数字人'
 })
 
 export default router

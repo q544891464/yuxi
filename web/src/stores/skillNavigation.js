@@ -1,4 +1,5 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { useUserStore } from './user'
 import { defineStore } from 'pinia'
 import { skillNavigationApi } from '@/apis/skill_navigation_api'
 
@@ -8,6 +9,18 @@ export const useSkillNavigationStore = defineStore('skillNavigation', () => {
   const loaded = ref(false)
   const error = ref('')
   let pending
+  let generation = 0
+  const userStore = useUserStore()
+  watch(
+    () => [userStore.userId, userStore.userRole],
+    () => {
+      generation += 1
+      nodes.value = []
+      loaded.value = false
+      pending = null
+    },
+    { flush: 'sync' }
+  )
 
   const accept = (config) => {
     nodes.value = config.nodes
@@ -16,17 +29,21 @@ export const useSkillNavigationStore = defineStore('skillNavigation', () => {
     error.value = ''
   }
   const load = async (force = false) => {
-    if (pending) return pending
+    if (pending && !force) return pending
     if (loaded.value && !force) return
+    if (force) generation += 1
+    const requestGeneration = generation
     pending = skillNavigationApi
       .get()
-      .then(accept)
+      .then((config) => {
+        if (requestGeneration === generation) accept(config)
+      })
       .catch((err) => {
-        error.value = '技能菜单加载失败，请重试'
+        if (requestGeneration === generation) error.value = '技能菜单加载失败，请重试'
         throw err
       })
       .finally(() => {
-        pending = null
+        if (requestGeneration === generation) pending = null
       })
     return pending
   }

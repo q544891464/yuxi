@@ -63,3 +63,11 @@ test('消费端知识库返回同一 chat 工作区', () => {
   assert.equal(resolveConsumerChatReturnTarget('/chat/knowledge/kb-1'), '/chat')
   assert.equal(resolveConsumerChatReturnTarget('https://example.com/chat'), '/chat')
 })
+
+
+test('督查会话从资源页返回时保持完整路由并拒绝多余层级', () => {
+  assert.equal(resolveConsumerChatReturnTarget('/chat/ducha'), '/chat/ducha')
+  assert.equal(resolveConsumerChatReturnTarget('/chat/ducha/thread-1'), '/chat/ducha/thread-1')
+  assert.equal(resolveConsumerChatReturnTarget('/chat/ducha/thread-1?skill=x'), '/chat/ducha/thread-1?skill=x')
+  assert.equal(resolveConsumerChatReturnTarget('/chat/ducha/thread-1/extra'), '/chat')
+})
