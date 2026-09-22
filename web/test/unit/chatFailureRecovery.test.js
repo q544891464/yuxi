@@ -415,3 +415,32 @@ test('删除失败恢复附件；删除成功但刷新失败保留服务器确�
     assert.deepEqual(errors, [deleteFails ? 'delete failure' : 'refresh failure'])
   }
 })
+
+test('并发删除失败不恢复另一已删除附件，也不丢失新添加的附件', async () => {
+  const currentChatId = ref('t')
+  const threadAttachmentsMap = ref({ t: [{ file_id: 'a' }, { file_id: 'b' }], other: [] })
+  const pending = {}
+  const remove = callback(chat, 'handleAttachmentRemove', {
+    currentChatId,
+    currentAgentId: ref('agent'),
+    threadAttachmentsMap,
+    threadApi: {
+      deleteThreadAttachment: (threadId, fileId) =>
+        new Promise((resolve, reject) => { pending[fileId] = { resolve, reject } })
+    },
+    fetchAgentState: async () => {},
+    fetchThreadAttachments: async () => {
+      threadAttachmentsMap.value.t = [{ file_id: 'a' }, { file_id: 'c' }]
+    },
+    handleChatError: () => {}
+  })
+  const a = remove({ file_id: 'a' })
+  const b = remove({ file_id: 'b' })
+  currentChatId.value = 'other'
+  pending.b.resolve()
+  await b
+  pending.a.reject(new Error('offline'))
+  await a
+  assert.deepEqual(threadAttachmentsMap.value.t.map((item) => item.file_id), ['a', 'c'])
+  assert.deepEqual(threadAttachmentsMap.value.other, [])
+})

@@ -3194,19 +3194,16 @@ const handleAttachmentRemove = async (attachment) => {
   const fileId = attachment?.file_id
   if (!threadId || !fileId) return
 
-  const previousAttachments = threadAttachmentsMap.value[threadId] || []
-  threadAttachmentsMap.value[threadId] = previousAttachments.filter(
-    (item) => item.file_id !== fileId
-  )
-
   try {
     await threadApi.deleteThreadAttachment(threadId, fileId)
+    threadAttachmentsMap.value[threadId] = (threadAttachmentsMap.value[threadId] || []).filter(
+      (item) => item.file_id !== fileId
+    )
     await Promise.all([
       fetchAgentState(currentAgentId.value, threadId),
       fetchThreadAttachments(threadId)
     ])
   } catch (error) {
-    threadAttachmentsMap.value[threadId] = previousAttachments
     handleChatError(error, 'delete')
   }
 }
