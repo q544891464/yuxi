@@ -11,12 +11,14 @@ export const useSkillNavigationStore = defineStore('skillNavigation', () => {
   let pending
   let generation = 0
   const userStore = useUserStore()
+  const workspace = ref('inspection')
   watch(
     () => [userStore.userId, userStore.userRole],
     () => {
       generation += 1
       nodes.value = []
       loaded.value = false
+      error.value = ''
       pending = null
     },
     { flush: 'sync' }
@@ -34,7 +36,7 @@ export const useSkillNavigationStore = defineStore('skillNavigation', () => {
     if (force) generation += 1
     const requestGeneration = generation
     pending = skillNavigationApi
-      .get()
+      .get(workspace.value)
       .then((config) => {
         if (requestGeneration === generation) accept(config)
       })
@@ -47,5 +49,16 @@ export const useSkillNavigationStore = defineStore('skillNavigation', () => {
       })
     return pending
   }
-  return { nodes, revision, loaded, error, load, accept }
+  /** 切换工作区先清空菜单，迟到响应不能恢复上一工作区的入口。 */
+  const setWorkspace = (next) => {
+    if (workspace.value === next) return
+    workspace.value = next
+    generation += 1
+    nodes.value = []
+    loaded.value = false
+    error.value = ''
+    pending = null
+    if (userStore.userId) void load().catch(() => {})
+  }
+  return { nodes, revision, loaded, error, load, accept, setWorkspace }
 })

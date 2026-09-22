@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 from pathlib import Path
 
 import aiofiles
@@ -59,11 +60,15 @@ async def write_page_access(
 
 @system.get("/skill-navigation")
 async def read_skill_navigation(
+    workspace: Literal["inspection", "ducha"] = "inspection",
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """仅返回当前角色可见的业务技能入口。"""
-    return filter_navigation_for_role(await get_skill_navigation(db), current_user.role)
+    """仅返回当前身份在指定工作区可见的业务技能入口。"""
+    path = "/chat/ducha" if workspace == "ducha" else "/chat"
+    if not resolve_page_access(await get_page_config(db), current_user.role, path)["allowed"]:
+        raise HTTPException(status_code=403, detail="无权访问该工作区")
+    return filter_navigation_for_role(await get_skill_navigation(db), current_user.role, workspace)
 
 
 @system.get("/skill-navigation/manage")

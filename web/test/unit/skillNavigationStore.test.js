@@ -38,3 +38,45 @@ test('强制刷新不接受旧请求，切换身份清除旧菜单', async () =>
     await server.close()
   }
 })
+
+test('工作区切换清空菜单，迟到的稽查响应不能覆盖督查菜单', async () => {
+  const server = await createServer({ server: { middlewareMode: true }, appType: 'custom' })
+  setActivePinia(createPinia())
+  try {
+    const { skillNavigationApi } = await server.ssrLoadModule('/src/apis/skill_navigation_api.js')
+    const { useSkillNavigationStore } = await server.ssrLoadModule('/src/stores/skillNavigation.js')
+    const { useUserStore } = await server.ssrLoadModule('/src/stores/user.js')
+    useUserStore().userId = 1
+    const requests = []
+    skillNavigationApi.get = (workspace) =>
+      new Promise((resolve) => requests.push({ workspace, resolve }))
+    const store = useSkillNavigationStore()
+    store.accept({ revision: 1, nodes: [{ id: 'inspection' }] })
+    const stale = store.load(true)
+    store.setWorkspace('ducha')
+    assert.deepEqual(store.nodes, [])
+    const current = store.load()
+    assert.deepEqual(
+      requests.map((r) => r.workspace),
+      ['inspection', 'ducha']
+    )
+    requests[1].resolve({ revision: 2, nodes: [{ id: 'dual' }] })
+    await current
+    requests[0].resolve({ revision: 1, nodes: [{ id: 'inspection' }] })
+    await stale
+    assert.deepEqual(
+      store.nodes.map((n) => n.id),
+      ['dual']
+    )
+    store.setWorkspace('inspection')
+    const back = store.load()
+    requests[2].resolve({ revision: 2, nodes: [{ id: 'inspection' }] })
+    await back
+    assert.deepEqual(
+      store.nodes.map((n) => n.id),
+      ['inspection']
+    )
+  } finally {
+    await server.close()
+  }
+})

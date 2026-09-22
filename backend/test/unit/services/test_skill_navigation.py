@@ -74,3 +74,30 @@ def test_unknown_visible_role_is_rejected():
     """拼错角色不能保存成不可解释的配置。"""
     with pytest.raises(ValidationError):
         NavigationConfig(revision=0, nodes=[node(visibleRoles=["typo"])])
+
+
+def test_workspace_and_children_visibility_intersect_with_role():
+    """父级、下级工作区和角色约束不能互相绕过。"""
+    from yuxi.services.skill_navigation_service import filter_navigation_for_role
+
+    parent = node("dual", childrenWorkspaces=["ducha"])
+    parent["children"] = [node("child"), node("private", visibleRoles=["superadmin"])]
+    config = NavigationConfig(
+        revision=0, nodes=[parent, node("inspection", visibleWorkspaces=["inspection"])]
+    ).model_dump()
+    inspection = filter_navigation_for_role(config, "user", "inspection")["nodes"]
+    assert [n["id"] for n in inspection] == ["dual", "inspection"]
+    assert inspection[0]["children"] == []
+    ducha = filter_navigation_for_role(config, "ducha", "ducha")["nodes"]
+    assert [n["id"] for n in ducha] == ["dual"]
+    assert [n["id"] for n in ducha[0]["children"]] == ["child"]
+    config["nodes"][0]["visibleWorkspaces"] = []
+    assert filter_navigation_for_role(config, "superadmin", "ducha")["nodes"] == []
+
+
+@pytest.mark.parametrize("field", ["visibleWorkspaces", "childrenWorkspaces"])
+def test_workspace_defaults_and_invalid_value(field):
+    """既有配置默认两区可见；非法工作区不能持久化。"""
+    assert getattr(NavigationConfig(revision=0, nodes=[node()]).nodes[0], field) == ["inspection", "ducha"]
+    with pytest.raises(ValidationError):
+        NavigationConfig(revision=0, nodes=[node(**{field: ["unknown"]})])

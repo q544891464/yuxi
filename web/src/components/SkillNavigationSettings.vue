@@ -63,6 +63,24 @@
               未选择角色时隐藏入口；父级不可见时，其全部子入口也隐藏。此配置不改变技能本体的访问权限。
             </p>
           </a-form-item>
+          <a-form-item label="入口可见工作区">
+            <a-select
+              v-model:value="selected.visibleWorkspaces"
+              mode="multiple"
+              :options="workspaceOptions"
+            />
+            <p class="hint">未选择时隐藏整个入口及其下级；还需满足可见角色和父级范围。</p>
+          </a-form-item>
+          <a-form-item label="下级菜单可见工作区">
+            <a-select
+              v-model:value="selected.childrenWorkspaces"
+              mode="multiple"
+              :options="workspaceOptions"
+            />
+            <p class="hint">
+              控制全部下级菜单，包括以后新增的子入口。取消稽查工作区可保留入口但隐藏其下级。此设置仅控制菜单展示，不改变技能共享权限。
+            </p>
+          </a-form-item>
           <a-form-item label="绑定技能" required>
             <a-select
               :value="selected.skillSlug"
@@ -118,6 +136,10 @@ const roleOptions = [
   { value: 'ducha', label: '督查人员' },
   { value: 'admin', label: '管理员' },
   { value: 'superadmin', label: '超级管理员' }
+]
+const workspaceOptions = [
+  { value: 'inspection', label: '稽查工作区' },
+  { value: 'ducha', label: '督查工作区' }
 ]
 const store = useSkillNavigationStore()
 const rows = ref([])
@@ -191,6 +213,8 @@ const add = () => {
     inputHint: '',
     outputHint: '',
     visibleRoles: roleOptions.map((role) => role.value),
+    visibleWorkspaces: workspaceOptions.map((workspace) => workspace.value),
+    childrenWorkspaces: workspaceOptions.map((workspace) => workspace.value),
     presetPrompt: ''
   })
   selectedId.value = id

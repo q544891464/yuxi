@@ -25,6 +25,12 @@ class NavigationNode(BaseModel):
     visibleRoles: list[Literal["user", "ducha", "admin", "superadmin"]] = Field(
         default_factory=lambda: ["user", "ducha", "admin", "superadmin"], max_length=4
     )
+    visibleWorkspaces: list[Literal["inspection", "ducha"]] = Field(
+        default_factory=lambda: ["inspection", "ducha"], max_length=2
+    )
+    childrenWorkspaces: list[Literal["inspection", "ducha"]] = Field(
+        default_factory=lambda: ["inspection", "ducha"], max_length=2
+    )
     children: list["NavigationNode"] = Field(default_factory=list, max_length=100)
 
 
@@ -55,11 +61,20 @@ class NavigationConflict(ValueError):
     """另一管理员已经保存新版本。"""
 
 
-def filter_navigation_for_role(config, role):
-    """父入口不可见时隐藏整个子树，保留可见入口的顺序。"""
+def filter_navigation_for_role(config, role, workspace=None):
+    """角色和工作区取交集，父入口及下级范围限制整个子树。"""
 
     def visible(nodes):
-        return [{**node, "children": visible(node["children"])} for node in nodes if role in node["visibleRoles"]]
+        return [
+            {
+                **node,
+                "children": visible(node["children"])
+                if workspace is None or workspace in node["childrenWorkspaces"]
+                else [],
+            }
+            for node in nodes
+            if role in node["visibleRoles"] and (workspace is None or workspace in node["visibleWorkspaces"])
+        ]
 
     return {**config, "nodes": visible(config["nodes"])}
 

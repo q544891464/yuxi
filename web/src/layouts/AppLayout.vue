@@ -159,6 +159,11 @@ onUnmounted(() => {
 })
 
 const route = useRoute()
+watch(
+  () => !!route.meta.ducha,
+  (ducha) => skillNavigation.setWorkspace(ducha ? 'ducha' : 'inspection'),
+  { immediate: true, flush: 'sync' }
+)
 const router = useRouter()
 const consumerChat = computed(() => route.meta.consumerChat === true)
 const consumerBrandTarget = computed(() => {

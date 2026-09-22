@@ -160,6 +160,8 @@ def test_ducha_role_and_navigation_http(navigation_server):
             "outputHint": "结果",
             "presetPrompt": "检查",
             "visibleRoles": ["ducha"],
+            "visibleWorkspaces": ["inspection", "ducha"],
+            "childrenWorkspaces": ["inspection", "ducha"],
             "children": [
                 {
                     "id": "child",
@@ -170,6 +172,8 @@ def test_ducha_role_and_navigation_http(navigation_server):
                     "outputHint": "结果",
                     "presetPrompt": "检查",
                     "visibleRoles": ["user", "ducha"],
+                    "visibleWorkspaces": ["inspection", "ducha"],
+                    "childrenWorkspaces": ["inspection", "ducha"],
                     "children": [],
                 }
             ],
@@ -180,7 +184,10 @@ def test_ducha_role_and_navigation_http(navigation_server):
     assert result.status_code == 200, result.text
     assert client.get(path, headers=tokens["user"]).json()["nodes"] == []
     assert client.get(path, headers=tokens["admin"]).json()["nodes"] == []
-    assert client.get(path, headers=tokens["ducha"]).json()["nodes"][0]["children"][0]["id"] == "child"
+    assert (
+        client.get(path, params={"workspace": "ducha"}, headers=tokens["ducha"]).json()["nodes"][0]["children"][0]["id"]
+        == "child"
+    )
     with engine.connect() as conn:
         assert (
             conn.scalar(select(ConfigOption.value).where(ConfigOption.key == "skill_navigation"))["nodes"]
@@ -230,3 +237,35 @@ def test_page_access_config_permissions_persistence_and_revision(navigation_serv
     options = client.get("/api/system/config/options", headers=tokens["admin"])
     assert options.status_code == 200
     assert "role_page_access" not in {item["key"] for item in options.json()["options"]}
+
+
+def test_workspace_navigation_settings_http(navigation_server):
+    """工作区筛选、父级限制及配置权限通过真实HTTP和数据库验证。"""
+    client, tokens, engine = navigation_server
+    path = "/api/system/skill-navigation"
+    config = client.get(path + "/manage", headers=tokens["superadmin"]).json()
+    root = config["nodes"][0]
+    root.update(visibleRoles=["user", "ducha", "admin", "superadmin"], childrenWorkspaces=["ducha"])
+    assert client.put(path, headers=tokens["user"], json=config).status_code == 403
+    invalid = copy.deepcopy(config)
+    invalid["nodes"][0]["visibleWorkspaces"] = ["typo"]
+    assert client.put(path, headers=tokens["superadmin"], json=invalid).status_code == 422
+    saved = client.put(path, headers=tokens["superadmin"], json=config)
+    assert saved.status_code == 200, saved.text
+    with engine.connect() as conn:
+        stored = conn.scalar(select(ConfigOption.value).where(ConfigOption.key == "skill_navigation"))
+    assert stored == saved.json()
+    assert client.get(path, headers=tokens["user"]).json()["nodes"][0]["children"] == []
+    assert (
+        client.get(path, params={"workspace": "ducha"}, headers=tokens["ducha"]).json()["nodes"][0]["children"][0]["id"]
+        == "child"
+    )
+    assert client.get(path, params={"workspace": "ducha"}, headers=tokens["user"]).status_code == 403
+    assert client.get(path, params={"workspace": "inspection"}, headers=tokens["ducha"]).status_code == 403
+    assert client.get(path, params={"workspace": "unknown"}, headers=tokens["superadmin"]).status_code == 422
+    # 超管也不能在消费者菜单绕过显式工作区隐藏；管理页仍可编辑。
+    saved = saved.json()
+    saved["nodes"][0]["visibleWorkspaces"] = ["inspection"]
+    assert client.put(path, headers=tokens["superadmin"], json=saved).status_code == 200
+    assert client.get(path, params={"workspace": "ducha"}, headers=tokens["superadmin"]).json()["nodes"] == []
+    assert len(client.get(path + "/manage", headers=tokens["superadmin"]).json()["nodes"]) == 1
