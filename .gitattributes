@@ -1,0 +1,2 @@
+# Linux shell scripts must remain executable in Windows-generated source archives.
+*.sh text eol=lf

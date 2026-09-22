@@ -5,6 +5,7 @@ name: Backend Unit Tests
 on:
   pull_request:
     paths:
+      - '.gitattributes'
       - '.env.template'
       - 'backend/**'
       - 'backend/pyproject.toml'
@@ -22,6 +23,7 @@ on:
     branches:
       - main
     paths:
+      - '.gitattributes'
       - '.env.template'
       - 'backend/**'
       - 'backend/pyproject.toml'
