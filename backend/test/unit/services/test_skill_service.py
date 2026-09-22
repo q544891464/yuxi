@@ -178,6 +178,7 @@ async def test_list_visible_skills_for_management_includes_owned_disabled_and_en
         Skill(
             slug="owned-disabled",
             name="owned-disabled",
+            source_type="personal",
             description="",
             created_by="root",
             enabled=False,
@@ -228,7 +229,7 @@ async def test_list_visible_skills_for_management_includes_owned_disabled_and_en
 
     visible = await svc.list_visible_skills_for_management(None, _user("root", role="user"))
 
-    assert [item.slug for item in visible] == ["owned-disabled", "shared-enabled", "shared-disabled"]
+    assert [item.slug for item in visible] == ["owned-disabled", "shared-enabled"]
 
 
 @pytest.mark.asyncio
@@ -239,6 +240,7 @@ async def test_list_visible_skills_for_management_includes_owned_disabled_and_en
             Skill(
                 slug="owned-disabled",
                 name="owned-disabled",
+                source_type="personal",
                 description="",
                 created_by="root",
                 enabled=False,
@@ -299,13 +301,17 @@ async def test_management_readable_skill_allows_manageable_disabled_and_enabled_
 
 
 @pytest.mark.asyncio
-async def test_management_readable_skill_allows_disabled_user_shared_manager(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.mark.parametrize("creator", ["root", "other"])
+async def test_normal_user_cannot_manage_shared_skill(monkeypatch: pytest.MonkeyPatch, enabled, creator):
+    """共享技能即便由本人创建或历史范围授予管理，也不能由普通用户修改。"""
     skill = Skill(
-        slug="shared-disabled",
-        name="shared-disabled",
+        slug="shared-skill",
+        name="shared-skill",
+        source_type="upload",
         description="",
-        created_by="other",
-        enabled=False,
+        created_by=creator,
+        enabled=enabled,
         share_config={
             "version": 2,
             "read_scope": {"access_level": "user", "user_uids": ["root"]},
@@ -323,9 +329,15 @@ async def test_management_readable_skill_allows_disabled_user_shared_manager(mon
 
     monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
 
-    result = await svc.get_management_readable_skill_or_raise(None, _user("root", role="user"), skill.slug)
-
-    assert result is skill
+    user = _user("root", role="user")
+    assert svc.user_can_manage_skill(user, skill) is False
+    with pytest.raises(ValueError, match="无权"):
+        await svc.get_manageable_skill_or_raise(None, user, skill.slug)
+    if enabled:
+        assert await svc.get_management_readable_skill_or_raise(None, user, skill.slug) is skill
+    else:
+        with pytest.raises(ValueError, match="无权"):
+            await svc.get_management_readable_skill_or_raise(None, user, skill.slug)
 
 
 @pytest.mark.asyncio

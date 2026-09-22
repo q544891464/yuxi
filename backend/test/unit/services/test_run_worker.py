@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yuxi.services.run_worker as run_worker
@@ -1107,7 +1107,11 @@ async def test_process_agent_run_retryable_error_retries_then_completes(monkeypa
 
 @pytest.mark.asyncio
 async def test_finish_run_terminal_loser_does_not_append_end_event(monkeypatch: pytest.MonkeyPatch):
+    """竞争失败者不发布终态事件，单测用量读取不启动真实连接池。"""
     events: list[tuple[str, dict]] = []
+    initialize = Mock(side_effect=AssertionError("单元测试不得初始化数据库"))
+    monkeypatch.setattr(run_worker.pg_manager, "initialize", initialize)
+    monkeypatch.setattr(run_worker, "_read_run_token_usage_from_state", AsyncMock(return_value=None))
 
     async def fake_mark_terminal(run_id: str, status: str, **kwargs):
         del run_id, status, kwargs
@@ -1132,6 +1136,7 @@ async def test_finish_run_terminal_loser_does_not_append_end_event(monkeypatch: 
 
     assert transition == run_worker.TerminalTransition(status="cancelled", changed=False)
     assert events == []
+    initialize.assert_not_called()
 
 
 @pytest.mark.asyncio

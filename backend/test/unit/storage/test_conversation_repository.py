@@ -12,7 +12,15 @@ from yuxi.repositories.conversation_repository import (
     INVOCATION_CONVERSATION_SOURCES,
     MAX_CONVERSATION_TITLE_LENGTH,
 )
-from yuxi.storage.postgres.models_business import AgentRun, Base, Conversation, ConversationStats, Message, ToolCall
+from yuxi.storage.postgres.models_business import (
+    AgentRun,
+    Base,
+    Conversation,
+    ConversationStats,
+    Message,
+    Project,
+    ToolCall,
+)
 from yuxi.utils.datetime_utils import utc_now_naive
 
 pytestmark = pytest.mark.unit
@@ -27,6 +35,20 @@ async def conversation_session():
     async with factory() as db:
         yield db
     await engine.dispose()
+
+
+def _attach_active_projects(conversations):
+    """为查询样本显式建立同一所有者的真实项目关联。"""
+    for conversation in conversations:
+        conversation.project = Project(
+            id=conversation.project_id,
+            uid=conversation.uid,
+            selection_status="selectable",
+            workdir_path=f"projects/{conversation.project_id}",
+            directory_mode="managed",
+            status="active",
+        )
+    return conversations
 
 
 def test_normalize_title_truncates_when_too_long():
@@ -337,7 +359,7 @@ async def test_only_state_proven_terminal_model_audit_keeps_tool_call_visible(co
 @pytest.mark.asyncio
 async def test_list_conversations_excludes_invocation_sources(conversation_session):
     normal, agent_call, agent_eval, _ = _seed_invocation_excluding_conversations()
-    conversation_session.add_all([normal, agent_call, agent_eval])
+    conversation_session.add_all(_attach_active_projects([normal, agent_call, agent_eval]))
     await conversation_session.commit()
 
     repo = ConversationRepository(conversation_session)
@@ -378,7 +400,7 @@ async def test_list_conversations_paginates_only_non_pinned_items(conversation_s
         )
         for index in range(4)
     ]
-    conversation_session.add_all([pinned, *regular])
+    conversation_session.add_all(_attach_active_projects([pinned, *regular]))
     await conversation_session.commit()
 
     repository = ConversationRepository(conversation_session)
@@ -432,7 +454,7 @@ async def test_search_conversations_by_message_content_filters_user_status_and_t
         created_at=now,
         updated_at=now,
     )
-    conversation_session.add_all([active, deleted, other_user, tool_only])
+    conversation_session.add_all(_attach_active_projects([active, deleted, other_user, tool_only]))
     await conversation_session.flush()
     conversation_session.add_all(
         [
@@ -486,7 +508,7 @@ async def test_search_conversations_by_message_content_filters_user_status_and_t
 @pytest.mark.asyncio
 async def test_search_conversations_by_message_content_excludes_invocation_sources(conversation_session):
     normal, agent_call, agent_eval, now = _seed_invocation_excluding_conversations()
-    conversation_session.add_all([normal, agent_call, agent_eval])
+    conversation_session.add_all(_attach_active_projects([normal, agent_call, agent_eval]))
     await conversation_session.flush()
     conversation_session.add_all(
         [
@@ -556,7 +578,7 @@ async def test_search_conversations_by_message_content_filters_agent_and_paginat
         created_at=now,
         updated_at=now,
     )
-    conversation_session.add_all([first, second, other_agent])
+    conversation_session.add_all(_attach_active_projects([first, second, other_agent]))
     await conversation_session.flush()
     conversation_session.add_all(
         [
@@ -605,3 +627,23 @@ async def test_search_conversations_by_message_content_filters_agent_and_paginat
     assert [item["conversation"].thread_id for item in first_page] == ["thread-second"]
     assert second_has_more is False
     assert [item["conversation"].thread_id for item in second_page] == ["thread-first"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("project_status", ["archived", "deleted"])
+async def test_inactive_project_conversation_is_hidden_from_list_and_search(conversation_session, project_status):
+    """项目退出 active 后，普通列表和正文搜索均不能重新暴露其中会话。"""
+    normal, _, _, now = _seed_invocation_excluding_conversations()
+    _attach_active_projects([normal])
+    normal.project.status = project_status
+    conversation_session.add(normal)
+    conversation_session.add(
+        Message(conversation=normal, role="user", content="hidden material", message_type="text", created_at=now)
+    )
+    await conversation_session.commit()
+
+    repository = ConversationRepository(conversation_session)
+    assert await repository.list_conversations(uid="user-a") == []
+    items, has_more = await repository.search_conversations_by_message_content(uid="user-a", query="hidden")
+    assert items == []
+    assert has_more is False
