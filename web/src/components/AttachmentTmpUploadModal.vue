@@ -2,7 +2,7 @@
   <a-modal
     :open="open"
     title="添加附件"
-    ok-text="添加附件"
+    :ok-text="confirmButtonText"
     cancel-text="取消"
     :confirm-loading="confirming"
     :ok-button-props="{ disabled: confirmDisabled }"
@@ -23,6 +23,9 @@
       </p>
     </a-upload-dragger>
 
+    <p v-if="failedItems.length" role="status">
+      {{ failedItems.length }} 个文件上传失败，可逐项重试；添加成功文件不会移除失败项。
+    </p>
     <div v-if="fileItems.length" class="attachment-list">
       <div v-for="item in fileItems" :key="item.localId" class="attachment-item">
         <div class="attachment-file-icon">
@@ -54,6 +57,13 @@
               </a-tag>
               <span>{{ formatFileSize(item.fileSize) }}</span>
               <span v-if="item.error" class="attachment-error">{{ item.error }}</span>
+              <a-button
+                v-if="item.status === 'error'"
+                size="small"
+                :disabled="confirming"
+                @click="retryUpload(item)"
+                >重试上传</a-button
+              >
               <span v-else-if="item.parseError" class="attachment-error">{{
                 item.parseError
               }}</span>
@@ -120,6 +130,10 @@ const busy = computed(() =>
 const confirmableItems = computed(() =>
   fileItems.value.filter((item) => ['uploaded', 'parsed'].includes(item.status))
 )
+const failedItems = computed(() => fileItems.value.filter((item) => item.status === 'error'))
+const confirmButtonText = computed(() =>
+  failedItems.value.length ? `添加成功的 ${confirmableItems.value.length} 个文件` : '添加附件'
+)
 const confirmDisabled = computed(() => busy.value || confirmableItems.value.length === 0)
 
 watch(
@@ -133,7 +147,7 @@ watch(
 )
 
 const getErrorMessage = (error, fallback = '操作失败') => {
-  return error?.response?.data?.detail || error?.message || fallback
+  return error?.status ? error.message : fallback + '，请检查网络后重试。'
 }
 
 const getDefaultParseMethod = (parseMethods) => {
@@ -176,6 +190,7 @@ const uploadFile = async (file) => {
   const localId = `${Date.now()}-${localIdSeed++}`
   const item = {
     localId,
+    file,
     fileName: file.name,
     fileSize: file.size,
     status: 'uploading',
@@ -186,15 +201,17 @@ const uploadFile = async (file) => {
   }
   fileItems.value.push(item)
 
+  await retryUpload(item)
+}
+
+/** 复用原文件重试，避免要求用户重新选择。 */
+const retryUpload = async (item) => {
+  updateItem(item.localId, { status: 'uploading', error: null })
   try {
-    const response = await threadApi.uploadTmpAttachment(file)
-    const normalized = normalizeTmpUpload(response)
-    updateItem(localId, { ...normalized, status: 'uploaded' })
+    const response = await threadApi.uploadTmpAttachment(item.file)
+    updateItem(item.localId, { ...normalizeTmpUpload(response), status: 'uploaded' })
   } catch (error) {
-    updateItem(localId, {
-      status: 'error',
-      error: getErrorMessage(error, '上传失败')
-    })
+    updateItem(item.localId, { status: 'error', error: getErrorMessage(error, '上传失败') })
   }
 }
 
@@ -280,7 +297,8 @@ const removeItem = (localId) => {
 const handleConfirm = async () => {
   if (confirmDisabled.value) return
 
-  const attachments = confirmableItems.value.map((item) => ({
+  const selectedItems = [...confirmableItems.value]
+  const attachments = selectedItems.map((item) => ({
     file_type: item.fileType,
     object_name: item.objectName,
     parsed_object_name: item.parsedObjectName || null
@@ -295,9 +313,11 @@ const handleConfirm = async () => {
     }
 
     const response = await threadApi.confirmTmpThreadAttachments(threadId, attachments)
-    message.success('附件已添加')
+    const addedIds = new Set(selectedItems.map((item) => item.localId))
+    fileItems.value = fileItems.value.filter((item) => !addedIds.has(item.localId))
+    message.success(`已添加 ${selectedItems.length} 个附件`)
     emit('added', response)
-    emit('update:open', false)
+    if (!fileItems.value.length) emit('update:open', false)
   } catch (error) {
     message.error(getErrorMessage(error, '添加附件失败'))
   } finally {

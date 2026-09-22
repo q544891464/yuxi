@@ -175,6 +175,42 @@
                 <span>正在加载消息...</span>
               </div>
 
+              <section v-if="currentFailedSend" class="recovery-notice" role="status">
+                <strong>{{
+                  currentFailedSend.rejected
+                    ? '消息发送失败，内容已保留'
+                    : '消息发送状态待确认，内容已保留'
+                }}</strong>
+                <p class="recovery-query">{{ currentFailedSend.payload.query }}</p>
+                <p>{{ currentFailedSend.error }}</p>
+                <button
+                  v-if="!currentFailedSend.rejected"
+                  type="button"
+                  :disabled="currentFailedSend.busy"
+                  @click="retryFailedSend"
+                >
+                  {{ currentFailedSend.busy ? '正在核对…' : '核对状态并重试' }}
+                </button>
+                <button
+                  v-if="currentFailedSend.rejected"
+                  type="button"
+                  :disabled="currentFailedSend.busy"
+                  @click="editFailedSend"
+                >
+                  恢复到输入框
+                </button>
+                <small v-else>请先核对这条消息，重试沿用原请求编号，不会重复创建任务。</small>
+              </section>
+              <div v-if="attachmentLoadErrors[currentChatId]" class="recovery-notice" role="status">
+                {{ attachmentLoadErrors[currentChatId] }}
+                <button
+                  type="button"
+                  :disabled="attachmentLoading[currentChatId]"
+                  @click="fetchThreadAttachments(currentChatId)"
+                >
+                  {{ attachmentLoading[currentChatId] ? '正在刷新…' : '重试加载附件' }}
+                </button>
+              </div>
               <!-- 打招呼区域 - 在输入框上方 -->
               <div v-if="!conversations.length && !$slots.welcome" class="chat-greeting-input">
                 <h1>{{ randomGreeting }}</h1>
@@ -1031,6 +1067,11 @@ const { getThreadState, resetOnGoingConv, stopThreadStream } = useAgentThreadSta
 const threadMessages = ref({})
 const threadRuns = ref({})
 const threadAttachmentsMap = ref({})
+const attachmentLoadErrors = ref({})
+const attachmentLoading = ref({})
+const attachmentLoadVersions = new Map()
+const failedSends = ref({})
+const currentFailedSend = computed(() => failedSends.value[currentChatId.value])
 const attachmentUploadModalOpen = ref(false)
 const attachmentInitialFiles = ref([])
 const attachmentInitialFilesKey = ref(0)
@@ -2574,6 +2615,7 @@ watch(
 )
 const isSendButtonDisabled = computed(() => {
   return (
+    (Boolean(currentFailedSend.value) && !isProcessing.value) ||
     (activeSkillEntry.value && !activeEntrySkill.value) ||
     sendCooldownActive.value ||
     props.sendDisabled ||
@@ -2991,14 +3033,22 @@ const promoteDraftSelection = (selectionByThread, threadId) => {
 
 const fetchThreadAttachments = async (threadId) => {
   if (!threadId) return
+  const version = (attachmentLoadVersions.get(threadId) || 0) + 1
+  attachmentLoadVersions.set(threadId, version)
+  attachmentLoading.value[threadId] = true
   try {
     const response = await threadApi.getThreadAttachments(threadId)
-    threadAttachmentsMap.value[threadId] = Array.isArray(response?.attachments)
-      ? response.attachments
-      : []
-  } catch (error) {
-    console.warn('Failed to fetch thread attachments:', error)
-    threadAttachmentsMap.value[threadId] = []
+    if (attachmentLoadVersions.get(threadId) !== version) return
+    if (!Array.isArray(response?.attachments)) throw new Error('附件列表响应无效')
+    threadAttachmentsMap.value[threadId] = response.attachments
+    delete attachmentLoadErrors.value[threadId]
+  } catch {
+    if (attachmentLoadVersions.get(threadId) === version) {
+      attachmentLoadErrors.value[threadId] =
+        '附件列表暂未刷新，当前列表保持不变。请重试确认最新列表。'
+    }
+  } finally {
+    if (attachmentLoadVersions.get(threadId) === version) attachmentLoading.value[threadId] = false
   }
 }
 
@@ -3396,6 +3446,7 @@ const selectThreadFromRoute = async (threadId) => {
 }
 
 const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
+  if (currentFailedSend.value) return
   if (activeSkillEntry.value && !activeEntrySkill.value) {
     message.warning('当前技能不可用，请检查权限或智能体配置')
     return
@@ -3495,20 +3546,26 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
     })
   }
 
+  const sendPayload = {
+    query: text,
+    agent_slug: currentAgentId.value,
+    thread_id: threadId,
+    meta: {
+      request_id: requestId,
+      attachment_file_ids: pendingAttachmentFileIds
+    },
+    image_content: imageContent,
+    model_spec: modelSpec,
+    tool_approval_mode: toolApprovalMode,
+    queue_policy: queuePolicy
+  }
+  let intakeAccepted = false
   try {
-    const runResp = await agentApi.createAgentRun({
-      query: text,
-      agent_slug: currentAgentId.value,
-      thread_id: threadId,
-      meta: {
-        request_id: requestId,
-        attachment_file_ids: pendingAttachmentFileIds
-      },
-      image_content: imageContent,
-      model_spec: modelSpec,
-      tool_approval_mode: toolApprovalMode,
-      queue_policy: queuePolicy
-    })
+    const runResp = await agentApi.createAgentRun(sendPayload)
+    if (runResp?.status === 'rejected') {
+      throw Object.assign(new Error('当前任务暂不接受新消息，请稍后重新发送。'), { status: 400 })
+    }
+    intakeAccepted = true
     const status = runResp?.status
     const runId = runResp?.run_id
     const sendingRequest = threadState.queuedRequests.find(
@@ -3562,6 +3619,17 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
       throw new Error('创建 run 失败：缺少 run_id')
     }
   } catch (error) {
+    if (!intakeAccepted && !isRunInterruptedConflict(error)) {
+      failedSends.value[threadId] = {
+        payload: sendPayload,
+        image,
+        busy: false,
+        rejected: [400, 401, 403, 404, 413, 422, 429].includes(error?.status),
+        error: error?.status
+          ? error.message
+          : '网络连接中断，尚未确认是否已发送，请核对状态后重试。'
+      }
+    }
     threadState.queuedRequests = threadState.queuedRequests.filter(
       (request) => request.request_id !== requestId
     )
@@ -3589,8 +3657,54 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
     if (queuePolicy === 'steer' && currentChatId.value === threadId && !userInput.value) {
       userInput.value = text
     }
-    handleChatError(error, 'send')
+    if (failedSends.value[threadId]) message.error('发送未完成，请查看输入框上方的恢复提示')
+    else handleChatError(error, 'send')
   }
+}
+
+/** 先核对服务端接收状态；未找到时以原编号和原参数重试。 */
+const retryFailedSend = async () => {
+  const threadId = currentChatId.value
+  const failed = failedSends.value[threadId]
+  if (!failed || failed.busy) return
+  failed.busy = true
+  try {
+    try {
+      const response = await agentApi.getRequest(failed.payload.meta.request_id)
+      if (response?.request?.status === 'rejected') {
+        failed.rejected = true
+        failed.error = '服务器已拒绝这条消息，请恢复到输入框后重新发送。'
+        return
+      }
+      if (!response?.request) throw new Error('invalid request response')
+    } catch (error) {
+      if (error?.status !== 404) throw error
+      const response = await agentApi.createAgentRun(failed.payload)
+      if (response?.status === 'rejected') {
+        failed.rejected = true
+        failed.error = '服务器已拒绝这条消息，请恢复到输入框后重新发送。'
+        return
+      }
+      if (!response?.run_id && response?.status !== 'queued')
+        throw new Error('invalid intake response', { cause: error })
+    }
+    delete failedSends.value[threadId]
+    if (currentChatId.value === threadId) await selectChat(threadId)
+  } catch (error) {
+    failed.error = error?.status ? error.message : '暂时无法确认发送状态，请检查网络后重试。'
+  } finally {
+    failed.busy = false
+  }
+}
+
+/** 明确拒绝后恢复输入，不覆盖用户后续编辑的草稿。 */
+const editFailedSend = () => {
+  const threadId = currentChatId.value
+  const failed = failedSends.value[threadId]
+  if (!failed || !failed.rejected || failed.busy) return
+  userInput.value = [failed.payload.query, userInput.value].filter(Boolean).join('\n')
+  if (failed.image) agentInputAreaRef.value?.restoreImage?.(failed.image)
+  delete failedSends.value[threadId]
 }
 
 const handleDirectSteer = async () => {
@@ -4071,6 +4185,40 @@ watch(currentChatId, (threadId, oldThreadId) => {
 </script>
 
 <style lang="less" scoped>
+.recovery-notice {
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--color-warning-500);
+  border-radius: 8px;
+  color: var(--color-text);
+  background: var(--color-warning-50);
+  p {
+    margin: 4px 0;
+  }
+  small {
+    display: block;
+    margin-top: 4px;
+  }
+  button {
+    margin-right: 8px;
+    padding: 5px 10px;
+    border: 1px solid var(--main-200);
+    border-radius: 6px;
+    background: var(--gray-0);
+    color: var(--main-color);
+    cursor: pointer;
+    &:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+  }
+}
+.recovery-query {
+  max-height: 72px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 @import '@/assets/css/main.css';
 @import '@/assets/css/animations.less';
 @import '@/components/composerStyles.less';

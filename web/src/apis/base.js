@@ -57,9 +57,33 @@ function safeErrorData(errorData, status, publicMessage) {
   }
 }
 
-function publicErrorMessage(url, status, headers, requiresAuth) {
+const SKILL_ERROR_MESSAGES = Object.freeze({
+  skill_not_accessible: '技能或文件不存在，或当前账号没有访问权限，请刷新列表并联系管理员确认。',
+  skill_invalid_request: '技能操作未完成，请检查导入文件、填写内容和所选技能后重试。',
+  skill_upload_format: '请上传 ZIP 技能包或名为 SKILL.md 的说明文件。',
+  skill_manifest_missing: '技能包缺少 SKILL.md，请补齐说明文件后重新导入。',
+  skill_name_missing: 'SKILL.md 缺少 name，请填写技能名称后重新导入。',
+  skill_description_missing: 'SKILL.md 缺少 description，请补充技能用途说明。',
+  skill_manifest_invalid: 'SKILL.md 的 YAML 配置格式不正确，请检查顶部 --- 包围的配置内容。',
+  skill_draft_expired: '本次导入已过期，请重新选择文件并导入。',
+  skill_name_conflict: '技能标识已被占用，请选择更新原技能，或修改标识后重新导入。',
+  skill_slug_mismatch: '技能目录名和说明文件中的 slug 不一致，请统一后重新导入。',
+  skill_slug_invalid: '技能 slug 请使用小写字母、数字和短横线，长度不超过 128。',
+  skill_selection_required: '请先选择需要安装的技能。',
+  skill_archive_layout: 'ZIP 中必须包含一个技能的 SKILL.md，请将多个技能分开导入。'
+})
+
+function publicErrorMessage(url, status, headers, requiresAuth, errorData) {
   const path = safeRequestMetadata(url, {}).path
-  if (status === 400) return '请求参数错误'
+  const code = errorData?.detail?.code
+  if (
+    [400, 404, 409, 422].includes(status) &&
+    /^\/api\/(system\/)?skills(?:\/|$)/.test(path) &&
+    typeof code === 'string' &&
+    Object.hasOwn(SKILL_ERROR_MESSAGES, code)
+  )
+    return SKILL_ERROR_MESSAGES[code]
+  if (status === 400) return '提交内容不符合要求，请检查填写内容或上传文件后重试。'
   if (status === 401) {
     if (requiresAuth) return '登录已过期，请重新登录'
     return path === '/api/auth/token' ? '用户名或密码错误' : '认证请求失败'
@@ -68,8 +92,8 @@ function publicErrorMessage(url, status, headers, requiresAuth) {
   if (status === 404) return '请求资源不存在'
   if (status === 409) return '请求冲突，请刷新后重试'
   if (status === 410) return '请求已失效'
-  if (status === 413) return '请求内容过大'
-  if (status === 422) return '请求参数验证失败'
+  if (status === 413) return '文件或提交内容超过大小限制，请缩小文件后重试。'
+  if (status === 422) return '提交信息不完整或格式不正确，请检查必填项后重试。'
   if (status === 423) {
     const remaining = Number.parseInt(headers.get('x-lock-remaining') || '', 10)
     return Number.isSafeInteger(remaining) && remaining > 0
@@ -77,7 +101,7 @@ function publicErrorMessage(url, status, headers, requiresAuth) {
       : '账户已锁定，请稍后再试'
   }
   if (status === 429) return '请求过于频繁，请稍后重试'
-  if (status >= 500) return '服务器内部错误，请使用 docker compose logs api 查看详细日志'
+  if (status >= 500) return '服务暂时无法完成操作，请稍后重试；若持续失败，请联系管理员。'
   return `请求失败: ${status}`
 }
 
@@ -122,7 +146,6 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
     // 处理API返回的错误
     if (!response.ok) {
       // 尝试解析错误信息
-      const errorMessage = publicErrorMessage(url, response.status, response.headers, requiresAuth)
       let errorData = null
 
       console.error('API请求失败:', safeRequestMetadata(url, requestOptions, response))
@@ -139,6 +162,13 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
         console.error('API错误响应无法解析:', safeRequestMetadata(url, requestOptions, response))
       }
 
+      const errorMessage = publicErrorMessage(
+        url,
+        response.status,
+        response.headers,
+        requiresAuth,
+        errorData
+      )
       // 特殊处理401和403错误
       const error = new Error(errorMessage)
       error.status = response.status

@@ -421,3 +421,44 @@ def test_sync_builtin_skills_route(monkeypatch):
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"][0]["slug"] == "builtin-demo"
     assert captured == {"created_by": "admin"}
+
+
+def test_skill_upload_errors_expose_only_known_business_code(monkeypatch):
+    async def invalid_upload(*args, **kwargs):
+        raise ValueError("SKILL.md frontmatter YAML 解析失败: /private/secret")
+
+    monkeypatch.setattr("server.routers.skill_router.prepare_skill_upload", invalid_upload)
+    client = TestClient(_build_app())
+    response = client.post(
+        "/api/skills/import/prepare",
+        files={"file": ("SKILL.md", b"invalid", "text/markdown")},
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": {"code": "skill_manifest_invalid"}}
+
+
+def test_skill_upload_unsupported_format_has_actionable_code(monkeypatch):
+    async def invalid_upload(*args, **kwargs):
+        raise ValueError("仅支持上传 .zip 或 SKILL.md 文件")
+
+    monkeypatch.setattr("server.routers.skill_router.prepare_skill_upload", invalid_upload)
+    client = TestClient(_build_app())
+    response = client.post(
+        "/api/skills/import/prepare",
+        files={"file": ("skill.txt", b"invalid", "text/plain")},
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": {"code": "skill_upload_format"}}
+
+
+def test_skill_unknown_error_does_not_expose_private_path(monkeypatch):
+    async def invalid_upload(*args, **kwargs):
+        raise ValueError("技能目录不存在: /private/secret")
+
+    monkeypatch.setattr("server.routers.skill_router.prepare_skill_upload", invalid_upload)
+    response = TestClient(_build_app()).post(
+        "/api/skills/import/prepare",
+        files={"file": ("SKILL.md", b"invalid", "text/markdown")},
+    )
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"code": "skill_not_accessible"}}

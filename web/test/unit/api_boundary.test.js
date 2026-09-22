@@ -209,8 +209,8 @@ test('用户 Store 的普通错误传播链不附着或记录服务端任意响�
         userStore.createUser({ username: 'new-user', password: secretPassword }),
         (error) => {
           assert.equal(error.status, 400)
-          assert.equal(error.message, '请求参数错误')
-          assert.deepEqual(error.response.data, { detail: '请求参数错误' })
+          assert.equal(error.message, '提交内容不符合要求，请检查填写内容或上传文件后重试。')
+          assert.deepEqual(error.response.data, { detail: '提交内容不符合要求，请检查填写内容或上传文件后重试。' })
           return true
         }
       )

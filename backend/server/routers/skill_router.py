@@ -112,7 +112,35 @@ class PersonalSkillDraftConfirmRequest(_DraftConfirmRequestBase):
 def _raise_from_value_error(e: ValueError) -> None:
     message = str(e)
     status_code = 404 if "不存在" in message or "无权" in message else 400
-    raise HTTPException(status_code=status_code, detail=message)
+    public_codes = {
+        "仅支持上传 .zip 或 SKILL.md 文件": "skill_upload_format",
+        "技能目录缺少根级 SKILL.md": "skill_manifest_missing",
+        "个人 Skill 缺少 SKILL.md": "skill_manifest_missing",
+        "Skill 缺少 SKILL.md": "skill_manifest_missing",
+        "SKILL.md frontmatter 缺少 name": "skill_name_missing",
+        "SKILL.md frontmatter 缺少 description": "skill_description_missing",
+        "SKILL.md 缺少有效 frontmatter（--- ... ---）": "skill_manifest_invalid",
+        "SKILL.md frontmatter 必须是对象": "skill_manifest_invalid",
+        "安装草稿不存在或已过期": "skill_draft_expired",
+        "安装草稿已过期": "skill_draft_expired",
+        "Skill slug 已被占用，请重新解析安装": "skill_name_conflict",
+        "目录名必须与 SKILL.md slug 一致": "skill_slug_mismatch",
+        "SKILL.md frontmatter.slug 必须与 skill slug 一致": "skill_slug_mismatch",
+        "至少选择一个 Skill": "skill_selection_required",
+    }
+    code = public_codes.get(message)
+    if message.startswith("ZIP 必须且只能包含一个技能（检测到 "):
+        code = "skill_archive_layout"
+    elif message.startswith("SKILL.md frontmatter YAML 解析失败:"):
+        code = "skill_manifest_invalid"
+    elif message.startswith("个人 Skill 源已存在同名 Skill:"):
+        code = "skill_name_conflict"
+    elif message.startswith("SKILL.md frontmatter.slug "):
+        code = "skill_slug_invalid"
+    raise HTTPException(
+        status_code=status_code,
+        detail={"code": code or ("skill_not_accessible" if status_code == 404 else "skill_invalid_request")},
+    )
 
 
 def _cleanup_export_file(path: str) -> None:
