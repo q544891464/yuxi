@@ -36,6 +36,7 @@ const actionNames = {
   archive: '确认归档'
 }
 let controller
+let loadedQuery = { category: category.value, search: search.value }
 watch(selected, () => {
   confirmed.value = false
 })
@@ -52,13 +53,15 @@ async function perform(work) {
   }
 }
 async function load(more = false) {
+  // 分页属于已显示列表，不能使用搜索框中尚未提交或请求失败的条件。
+  const query = more ? loadedQuery : { category: category.value, search: search.value }
   const result = await formalDocumentApi.list({
-    category: category.value,
-    search: search.value,
+    ...query,
     offset: more ? items.value.length : 0
   })
   items.value = more ? [...items.value, ...result.items] : result.items
   hasMore.value = result.has_more
+  loadedQuery = query
 }
 function applyDetail(value) {
   document.value = value
