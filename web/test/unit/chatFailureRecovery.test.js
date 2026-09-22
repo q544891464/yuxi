@@ -19,6 +19,133 @@ function callback(source, name, env) {
   return new Function(...Object.keys(env), match[0] + '; return ' + name)(...Object.values(env))
 }
 
+test('未添加文件关闭前确认；空列表直接关闭；关联中不能关闭', () => {
+  const fileItems = ref([{ status: 'uploaded' }])
+  const events = []
+  const env = {
+    fileItems,
+    confirming: ref(false),
+    discardOpen: ref(false),
+    emit: (...v) => events.push(v)
+  }
+  const cancel = callback(upload, 'handleCancel', env)
+  cancel()
+  assert.equal(env.discardOpen.value, true)
+  assert.equal(events.length, 0)
+  assert.equal(fileItems.value.length, 1)
+  env.discardOpen.value = false
+  env.confirming.value = true
+  cancel()
+  assert.equal(env.discardOpen.value, false)
+  env.confirming.value = false
+  fileItems.value = []
+  cancel()
+  assert.deepEqual(events, [['update:open', false]])
+})
+
+test('确认放弃终止传输并清空未关联列表', () => {
+  let cancelled = false
+  const env = {
+    cancelAllUploads: () => {
+      cancelled = true
+    },
+    fileItems: ref([{}]),
+    discardOpen: ref(true),
+    emit: () => {}
+  }
+  callback(upload, 'discardAndClose', env)()
+  assert.equal(cancelled, true)
+  assert.equal(env.fileItems.value.length, 0)
+  assert.equal(env.discardOpen.value, false)
+})
+
+test('取消后的迟到成功响应不能恢复待添加状态', async () => {
+  const item = { localId: 'a', file: {}, status: 'uploading' }
+  const uploadControllers = new Map()
+  let finish
+  const env = {
+    uploadControllers,
+    updateItem: (id, patch) => Object.assign(item, patch),
+    AbortController,
+    threadApi: {
+      uploadTmpAttachment: () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    },
+    normalizeTmpUpload: () => assert.fail('cancelled response'),
+    getErrorMessage: () => ''
+  }
+  const pending = callback(upload, 'retryUpload', env)(item)
+  callback(upload, 'cancelUpload', env)('a')
+  finish({ object_name: 'late' })
+  await pending
+  assert.equal(item.status, 'cancelled')
+  assert.equal(uploadControllers.size, 0)
+})
+
+test('取消后立即重试，旧响应不能覆盖新上传或移除新控制器', async () => {
+  const item = { localId: 'a', file: {}, status: 'uploading' }
+  const finishes = []
+  const uploadControllers = new Map()
+  const env = {
+    uploadControllers,
+    updateItem: (id, patch) => Object.assign(item, patch),
+    AbortController,
+    threadApi: { uploadTmpAttachment: () => new Promise((resolve) => finishes.push(resolve)) },
+    normalizeTmpUpload: (response) => ({ objectName: response.object_name }),
+    getErrorMessage: () => ''
+  }
+  const retry = callback(upload, 'retryUpload', env)
+  const old = retry(item)
+  callback(upload, 'cancelUpload', env)('a')
+  const current = retry(item)
+  finishes[0]({ object_name: 'old' })
+  await old
+  assert.equal(item.status, 'uploading')
+  assert.equal(item.objectName, undefined)
+  assert.equal(uploadControllers.size, 1)
+  finishes[1]({ object_name: 'new' })
+  await current
+  assert.equal(item.objectName, 'new')
+  assert.equal(item.status, 'uploaded')
+})
+
+test('解析期间移除文件，迟到成功不能恢复条目或提示成功', async () => {
+  const item = { localId: 'a', objectName: 'a', selectedParseMethod: 'ocr' }
+  const fileItems = ref([item])
+  let finish
+  let successes = 0
+  const env = {
+    fileItems,
+    clearParsedState: {},
+    updateItem() {},
+    threadApi: {
+      parseTmpAttachment: () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    },
+    message: { success: () => successes++ },
+    getErrorMessage: () => ''
+  }
+  const pending = callback(upload, 'handleParse', env)(item)
+  fileItems.value = []
+  finish({ parsed_object_name: 'parsed' })
+  await pending
+  assert.equal(fileItems.value.length, 0)
+  assert.equal(successes, 0)
+})
+
+test('关联正在提交时重复确认不会再发送请求', async () => {
+  await callback(upload, 'handleConfirm', {
+    confirming: ref(true),
+    confirmDisabled: ref(false),
+    confirmableItems: ref([{}]),
+    threadApi: { confirmTmpThreadAttachments: assert.fail }
+  })()
+})
+
 test('发送状态已存在时只恢复历史；不存在时重发原编号和原 payload', async () => {
   for (const exists of [true, false]) {
     const payload = {

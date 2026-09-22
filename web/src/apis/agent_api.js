@@ -418,12 +418,14 @@ export const threadApi = {
    * @param {File} file
    * @returns {Promise}
    */
-  uploadTmpAttachment: (file) => {
+  uploadTmpAttachment: (file, { signal, onUploadProgress } = {}) => {
     const formData = new FormData()
     formData.append('file', file)
     return apiRequest('/api/chat/attachments/tmp', {
       method: 'POST',
-      body: formData
+      body: formData,
+      signal,
+      onUploadProgress
     })
   },
 

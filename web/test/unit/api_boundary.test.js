@@ -210,7 +210,9 @@ test('用户 Store 的普通错误传播链不附着或记录服务端任意响�
         (error) => {
           assert.equal(error.status, 400)
           assert.equal(error.message, '提交内容不符合要求，请检查填写内容或上传文件后重试。')
-          assert.deepEqual(error.response.data, { detail: '提交内容不符合要求，请检查填写内容或上传文件后重试。' })
+          assert.deepEqual(error.response.data, {
+            detail: '提交内容不符合要求，请检查填写内容或上传文件后重试。'
+          })
           return true
         }
       )
@@ -466,5 +468,50 @@ test('工具元数据 API 使用普通用户认证且普通用户可正常请求
     assert.equal(result.success, true)
     assert.equal(result.data.length, 1)
     assert.equal(result.data[0].slug, 'web_search')
+  })
+})
+
+test('上传进度传输复用认证头和安全错误边界', async () => {
+  await withServer(async (server) => {
+    storageValues.set('user_token', 'upload-test-token')
+    setActivePinia(createPinia())
+    let auth
+    const originalXHR = globalThis.XMLHttpRequest
+    globalThis.XMLHttpRequest = class {
+      constructor() {
+        this.upload = {}
+      }
+      open() {}
+      setRequestHeader(name, value) {
+        if (name === 'Authorization') auth = value
+      }
+      getResponseHeader(name) {
+        return name === 'content-type' ? 'application/json' : null
+      }
+      send() {
+        this.status = 413
+        this.responseText = JSON.stringify({ detail: '/private/internal/path' })
+        this.onload()
+      }
+    }
+    try {
+      const { apiRequest } = await server.ssrLoadModule('/src/apis/base.js')
+      await assert.rejects(
+        apiRequest('/api/chat/attachments/tmp', {
+          method: 'POST',
+          body: new FormData(),
+          onUploadProgress() {}
+        }),
+        (error) => {
+          assert.equal(error.status, 413)
+          assert.match(error.message, /超过大小限制/)
+          assert.ok(!JSON.stringify(error.response).includes('/private/'))
+          return true
+        }
+      )
+      assert.equal(auth, 'Bearer upload-test-token')
+    } finally {
+      globalThis.XMLHttpRequest = originalXHR
+    }
   })
 })

@@ -3,7 +3,11 @@
     :open="open"
     title="添加附件"
     :ok-text="confirmButtonText"
-    cancel-text="取消"
+    cancel-text="关闭"
+    :closable="!confirming"
+    :mask-closable="!confirming"
+    :keyboard="!confirming"
+    :cancel-button-props="{ disabled: confirming }"
     :confirm-loading="confirming"
     :ok-button-props="{ disabled: confirmDisabled }"
     @ok="handleConfirm"
@@ -23,6 +27,7 @@
       </p>
     </a-upload-dragger>
 
+    <p role="status">上传完成后，请点击“添加到当前对话”，材料才会关联到对话。</p>
     <p v-if="failedItems.length" role="status">
       {{ failedItems.length }} 个文件上传失败，可逐项重试；添加成功文件不会移除失败项。
     </p>
@@ -40,6 +45,7 @@
               type="text"
               class="lucide-icon-btn remove-btn"
               :disabled="confirming"
+              :aria-label="`移除 ${item.fileName}`"
               @click="removeItem(item.localId)"
             >
               <X :size="16" />
@@ -58,19 +64,26 @@
               <span>{{ formatFileSize(item.fileSize) }}</span>
               <span v-if="item.error" class="attachment-error">{{ item.error }}</span>
               <a-button
-                v-if="item.status === 'error'"
+                v-if="['error', 'cancelled'].includes(item.status)"
                 size="small"
                 :disabled="confirming"
                 @click="retryUpload(item)"
                 >重试上传</a-button
               >
+              <a-button
+                v-if="item.status === 'uploading'"
+                size="small"
+                @click="cancelUpload(item.localId)"
+              >
+                取消上传
+              </a-button>
               <span v-else-if="item.parseError" class="attachment-error">{{
                 item.parseError
               }}</span>
             </div>
 
             <div
-              v-if="item.parseSupported && item.status !== 'uploading' && item.status !== 'error'"
+              v-if="item.parseSupported && ['uploaded', 'parsed', 'parsing'].includes(item.status)"
               class="attachment-parse-controls"
             >
               <OCRSelector
@@ -92,14 +105,30 @@
               </a-button>
             </div>
           </div>
+          <div v-if="item.status === 'uploading'" role="status">
+            <a-progress :percent="item.progress || 0" :status="'active'" size="small" />
+            <span v-if="item.progress === 100">文件传输完成，等待服务器确认…</span>
+          </div>
         </div>
       </div>
     </div>
   </a-modal>
+  <a-modal
+    :open="discardOpen"
+    title="文件尚未添加到对话"
+    :z-index="1100"
+    ok-text="放弃并关闭"
+    cancel-text="继续添加"
+    :ok-button-props="{ danger: true }"
+    @ok="discardAndClose"
+    @cancel="discardOpen = false"
+  >
+    <p>关闭后将清空当前列表，并取消正在上传的文件；这些材料不会添加到对话。是否放弃？</p>
+  </a-modal>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { X } from '@lucide/vue'
 import { threadApi } from '@/apis'
@@ -121,6 +150,8 @@ const DEFAULT_OCR_ENGINE = 'rapid_ocr'
 const configStore = useConfigStore()
 const fileItems = ref([])
 const confirming = ref(false)
+const discardOpen = ref(false)
+const uploadControllers = new Map()
 let localIdSeed = 0
 let consumedInitialFilesKey = 0
 
@@ -132,7 +163,9 @@ const confirmableItems = computed(() =>
 )
 const failedItems = computed(() => fileItems.value.filter((item) => item.status === 'error'))
 const confirmButtonText = computed(() =>
-  failedItems.value.length ? `添加成功的 ${confirmableItems.value.length} 个文件` : '添加附件'
+  failedItems.value.length
+    ? `添加到当前对话（${confirmableItems.value.length} 个文件）`
+    : '添加到当前对话'
 )
 const confirmDisabled = computed(() => busy.value || confirmableItems.value.length === 0)
 
@@ -140,6 +173,8 @@ watch(
   () => props.open,
   (open) => {
     if (!open) {
+      cancelAllUploads()
+      discardOpen.value = false
       fileItems.value = []
       confirming.value = false
     }
@@ -206,14 +241,39 @@ const uploadFile = async (file) => {
 
 /** 复用原文件重试，避免要求用户重新选择。 */
 const retryUpload = async (item) => {
-  updateItem(item.localId, { status: 'uploading', error: null })
+  if (uploadControllers.has(item.localId)) return
+  const controller = new AbortController()
+  uploadControllers.set(item.localId, controller)
+  updateItem(item.localId, { status: 'uploading', progress: 0, error: null })
   try {
-    const response = await threadApi.uploadTmpAttachment(item.file)
+    const response = await threadApi.uploadTmpAttachment(item.file, {
+      signal: controller.signal,
+      onUploadProgress: (progress) => {
+        if (!controller.signal.aborted) updateItem(item.localId, { progress })
+      }
+    })
+    if (controller.signal.aborted) return
     updateItem(item.localId, { ...normalizeTmpUpload(response), status: 'uploaded' })
   } catch (error) {
+    if (controller.signal.aborted) return
     updateItem(item.localId, { status: 'error', error: getErrorMessage(error, '上传失败') })
+  } finally {
+    if (uploadControllers.get(item.localId) === controller) uploadControllers.delete(item.localId)
   }
 }
+
+/** 终止当前传输；取消后的迟到响应不能恢复为待添加状态。 */
+const cancelUpload = (localId) => {
+  uploadControllers.get(localId)?.abort()
+  uploadControllers.delete(localId)
+  updateItem(localId, { status: 'cancelled', error: null })
+}
+
+const cancelAllUploads = () => {
+  for (const controller of uploadControllers.values()) controller.abort()
+  uploadControllers.clear()
+}
+onBeforeUnmount(cancelAllUploads)
 
 const handleBeforeUpload = (file) => {
   void uploadFile(file)
@@ -276,6 +336,7 @@ const handleParse = async (item) => {
       object_name: item.objectName,
       parse_method: item.selectedParseMethod
     })
+    if (!fileItems.value.some((entry) => entry.localId === item.localId)) return
     updateItem(item.localId, {
       status: 'parsed',
       parsedObjectName: response.parsed_object_name
@@ -291,11 +352,12 @@ const handleParse = async (item) => {
 }
 
 const removeItem = (localId) => {
+  cancelUpload(localId)
   fileItems.value = fileItems.value.filter((item) => item.localId !== localId)
 }
 
 const handleConfirm = async () => {
-  if (confirmDisabled.value) return
+  if (confirming.value || confirmDisabled.value) return
 
   const selectedItems = [...confirmableItems.value]
   const attachments = selectedItems.map((item) => ({
@@ -315,7 +377,7 @@ const handleConfirm = async () => {
     const response = await threadApi.confirmTmpThreadAttachments(threadId, attachments)
     const addedIds = new Set(selectedItems.map((item) => item.localId))
     fileItems.value = fileItems.value.filter((item) => !addedIds.has(item.localId))
-    message.success(`已添加 ${selectedItems.length} 个附件`)
+    message.success(`已添加 ${selectedItems.length} 个附件到当前对话`)
     emit('added', response)
     if (!fileItems.value.length) emit('update:open', false)
   } catch (error) {
@@ -326,6 +388,18 @@ const handleConfirm = async () => {
 }
 
 const handleCancel = () => {
+  if (confirming.value) return
+  if (fileItems.value.length) {
+    discardOpen.value = true
+    return
+  }
+  emit('update:open', false)
+}
+
+const discardAndClose = () => {
+  cancelAllUploads()
+  fileItems.value = []
+  discardOpen.value = false
   emit('update:open', false)
 }
 
@@ -343,9 +417,10 @@ const getStatusColor = (status) => {
 const getStatusLabel = (status) => {
   const labelMap = {
     uploading: '上传中',
-    uploaded: '已上传',
+    uploaded: '上传完成，待添加',
     parsing: '解析中',
-    parsed: '已解析',
+    parsed: '解析完成，待添加',
+    cancelled: '已取消',
     error: '失败'
   }
   return labelMap[status] || status
