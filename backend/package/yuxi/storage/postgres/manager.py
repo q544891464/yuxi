@@ -23,7 +23,7 @@ from yuxi.utils import logger
 from yuxi.utils.singleton import SingletonMeta
 
 AGENT_RUN_TERMINAL_STATUS_SQL = ", ".join(f"'{status}'" for status in AGENT_RUN_TERMINAL_STATUSES)
-BUSINESS_SCHEMA_VERSION = 9
+BUSINESS_SCHEMA_VERSION = 10
 KNOWLEDGE_SCHEMA_VERSION = 2
 SCHEMA_VERSION_TABLE = "yuxi_schema_migrations"
 AGENT_RUN_LEASE_SCHEMA_STATEMENTS = (
@@ -518,6 +518,16 @@ class PostgresManager(metaclass=SingletonMeta):
         async with self.async_engine.begin() as conn:
             await conn.run_sync(BusinessBase.metadata.create_all)
         logger.info("PostgreSQL business tables created/checked")
+
+    async def create_formal_document_tables(self):
+        """旧业务库仅新增正式文书表，可重复执行。"""
+        self._check_initialized()
+        tables = [
+            BusinessBase.metadata.tables[name]
+            for name in ("formal_documents", "formal_document_files", "formal_document_events")
+        ]
+        async with self.async_engine.begin() as conn:
+            await conn.run_sync(lambda sync: BusinessBase.metadata.create_all(sync, tables=tables, checkfirst=True))
 
     async def upgrade_knowledge_schema_v1_to_v2(self) -> None:
         """为知识文件处理中间态增加 Durable Task attempt owner。"""

@@ -22,6 +22,14 @@
           <div
             v-if="userStore.isSuperAdmin"
             class="sider-item"
+            :class="{ activesec: activeTab === 'documentWorkflows' }"
+            @click="activeTab = 'documentWorkflows'"
+          >
+            <Settings class="icon" :size="18" /><span>文书流程</span>
+          </div>
+          <div
+            v-if="userStore.isSuperAdmin"
+            class="sider-item"
             :class="{ activesec: activeTab === 'pageAccess' }"
             @click="activeTab = 'pageAccess'"
           >
@@ -106,6 +114,14 @@
         <div
           v-if="userStore.isSuperAdmin"
           class="nav-item"
+          :class="{ active: activeTab === 'documentWorkflows' }"
+          @click="activeTab = 'documentWorkflows'"
+        >
+          文书流程
+        </div>
+        <div
+          v-if="userStore.isSuperAdmin"
+          class="nav-item"
           :class="{ active: activeTab === 'pageAccess' }"
           @click="activeTab = 'pageAccess'"
         >
@@ -181,6 +197,12 @@
       <div class="settings-content-wrapper">
         <div class="settings-content">
           <div
+            v-if="userStore.isSuperAdmin && loadedTabs.has('documentWorkflows')"
+            v-show="activeTab === 'documentWorkflows'"
+          >
+            <DocumentWorkflowSettings />
+          </div>
+          <div
             v-if="userStore.isSuperAdmin && loadedTabs.has('pageAccess')"
             v-show="activeTab === 'pageAccess'"
           >
@@ -251,6 +273,9 @@ import { createAsyncPanel } from '@/utils/asyncPanel'
 const AccountSettingsComponent = createAsyncPanel(
   () => import('@/components/AccountSettingsComponent.vue')
 )
+const DocumentWorkflowSettings = createAsyncPanel(
+  () => import('@/components/DocumentWorkflowSettings.vue')
+)
 const RolePageAccessSettings = createAsyncPanel(
   () => import('@/components/RolePageAccessSettings.vue')
 )
@@ -296,7 +321,7 @@ const availableTabs = computed(() => {
   const tabs = []
   if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv', 'skillNavigation')
   if (userStore.isAdmin) tabs.push('base', 'ocr', 'user')
-  if (userStore.isSuperAdmin) tabs.push('department', 'pageAccess')
+  if (userStore.isSuperAdmin) tabs.push('department', 'pageAccess', 'documentWorkflows')
   return tabs
 })
 

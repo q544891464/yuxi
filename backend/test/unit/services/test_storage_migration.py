@@ -35,6 +35,7 @@ async def test_storage_migration_reads_legacy_schema_before_cutover(monkeypatch)
         yield sessions.pop(0)
 
     manager = SimpleNamespace(
+        create_formal_document_tables=lambda: _record(calls, "formal_document_tables"),
         initialize=lambda: calls.append("initialize"),
         schema_migration_lock=lambda: _async_context(calls, "schema_lock"),
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),
@@ -105,6 +106,7 @@ async def test_storage_migration_rejects_v071_schema_without_quiescence_proof(mo
         yield _Session()
 
     manager = SimpleNamespace(
+        create_formal_document_tables=lambda: _record(calls, "formal_document_tables"),
         initialize=lambda: None,
         schema_migration_lock=lambda: _async_context(calls, "schema_lock"),
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),
@@ -146,6 +148,7 @@ async def test_current_schema_skips_schema_ddl(monkeypatch):
         yield sessions.pop(0)
 
     manager = SimpleNamespace(
+        create_formal_document_tables=lambda: _record(calls, "formal_document_tables"),
         initialize=lambda: calls.append("initialize"),
         schema_migration_lock=lambda: _async_context(calls, "schema_lock"),
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),
@@ -206,6 +209,7 @@ async def test_main_rejects_unsupported_business_schema_before_ddl(monkeypatch, 
         yield _Session()
 
     manager = SimpleNamespace(
+        create_formal_document_tables=lambda: _record(calls, "formal_document_tables"),
         initialize=lambda: calls.append("initialize"),
         schema_migration_lock=lambda: _async_context(calls, "schema_lock"),
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),
@@ -241,6 +245,7 @@ async def test_main_v2_business_schema_is_converged_and_versioned_as_current(mon
         yield sessions.pop(0)
 
     manager = SimpleNamespace(
+        create_formal_document_tables=lambda: _record(calls, "formal_document_tables"),
         initialize=lambda: calls.append("initialize"),
         schema_migration_lock=lambda: _async_context(calls, "schema_lock"),
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),
@@ -282,8 +287,9 @@ async def test_main_v2_business_schema_is_converged_and_versioned_as_current(mon
 
 
 @pytest.mark.asyncio
-async def test_main_v7_business_schema_is_converged_and_versioned_as_current(monkeypatch):
-    """发布版 v7 数据库会执行新增分享登录表的迁移。"""
+@pytest.mark.parametrize("previous_version", [7, 8, 9])
+async def test_previous_business_schema_is_converged_and_versioned_as_current(monkeypatch, previous_version):
+    """发布版数据库先新增文书表，再记录当前版本。"""
 
     calls: list[str] = []
     sessions = [_Session(), _Session(), _Session()]
@@ -293,11 +299,12 @@ async def test_main_v7_business_schema_is_converged_and_versioned_as_current(mon
         yield sessions.pop(0)
 
     manager = SimpleNamespace(
+        create_formal_document_tables=lambda: _record(calls, "formal_document_tables"),
         initialize=lambda: calls.append("initialize"),
         schema_migration_lock=lambda: _async_context(calls, "schema_lock"),
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),
         get_schema_versions=lambda: _async_value(
-            {"business": 7, "knowledge": storage_migration.KNOWLEDGE_SCHEMA_VERSION}
+            {"business": previous_version, "knowledge": storage_migration.KNOWLEDGE_SCHEMA_VERSION}
         ),
         record_schema_version=lambda domain, version: _record(calls, f"version:{domain}:{version}"),
         ensure_business_schema=lambda: _record(calls, "business_schema"),
@@ -325,6 +332,9 @@ async def test_main_v7_business_schema_is_converged_and_versioned_as_current(mon
     await storage_migration.main()
 
     assert "business_schema" in calls
+    assert calls.index("formal_document_tables") < calls.index(
+        f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
+    )
     assert f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}" in calls
 
 
@@ -341,6 +351,7 @@ async def test_failed_business_migration_does_not_record_version(monkeypatch):
         raise RuntimeError("broken checkpoint migration")
 
     manager = SimpleNamespace(
+        create_formal_document_tables=lambda: _record(calls, "formal_document_tables"),
         initialize=lambda: calls.append("initialize"),
         schema_migration_lock=lambda: _async_context(calls, "schema_lock"),
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),
@@ -383,6 +394,7 @@ async def test_current_schema_does_not_rewrite_workdir_data(monkeypatch):
         yield sessions.pop(0)
 
     manager = SimpleNamespace(
+        create_formal_document_tables=lambda: _record(calls, "formal_document_tables"),
         initialize=lambda: calls.append("initialize"),
         schema_migration_lock=lambda: _async_context(calls, "schema_lock"),
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),

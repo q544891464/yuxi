@@ -277,7 +277,7 @@ async def ensure_options_in_db(db: AsyncSession) -> list[ConfigOption]:
 async def list_options(db: AsyncSession) -> list[ConfigOption]:
     result = await db.execute(
         select(ConfigOption)
-        .where(ConfigOption.key.not_in([system_options.key, "role_page_access"]))
+        .where(ConfigOption.key.not_in([system_options.key, "role_page_access", "document_workflows"]))
         .order_by(ConfigOption.id)
     )
     return list(result.scalars().all())
@@ -334,6 +334,9 @@ async def update_option_value(
     record = await db.scalar(select(ConfigOption).where(ConfigOption.key == key).with_for_update())
     if record is None:
         return None
+
+    if (record.params or {}).get("internal"):
+        raise ValueError("内部配置须通过专用管理入口修改")
 
     fields = {field["key"]: field for field in _fields(record)}
     unknown = set(value) - set(fields)

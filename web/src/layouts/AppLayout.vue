@@ -30,6 +30,7 @@ import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
 import ArchivedItemsDrawer from '@/components/ArchivedItemsDrawer.vue'
+import FormalDocumentCenter from '@/components/FormalDocumentCenter.vue'
 import SkillEntryMenu from '@/components/SkillEntryMenu.vue'
 import { useSkillNavigationStore } from '@/stores/skillNavigation'
 import { INSPECTION_KB_ID, SKILL_CREATOR_ENTRY } from '@/utils/skillEntries'
@@ -55,6 +56,7 @@ const { threads, currentThreadId, hasMoreThreads, isLoadingMoreThreads, threadCr
 
 // Add state for settings modal
 const showSettingsModal = ref(false)
+const showDocumentCenter = ref(false)
 const settingsInitialTab = ref('')
 
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
@@ -670,6 +672,9 @@ provide('settingsModal', {
                   @select="openSkillEntry($event)"
                 />
               </div>
+              <button type="button" class="consumer-nav-link" @click="showDocumentCenter = true">
+                <ClipboardList :size="17" />文书中心
+              </button>
               <RouterLink
                 v-if="userStore.canVisitPage('/extensions')"
                 class="consumer-nav-link"
@@ -738,6 +743,7 @@ provide('settingsModal', {
       @select-file="handleSearchSelectFile"
     />
 
+    <FormalDocumentCenter v-model:open="showDocumentCenter" />
     <ArchivedItemsDrawer
       :open="archiveOpen"
       :loading="archiveLoading"

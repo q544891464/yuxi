@@ -28,6 +28,64 @@ from yuxi.utils.datetime_utils import duration_ms, format_utc_datetime, utc_now_
 
 Base = declarative_base()
 
+# 文书查询使用 PostgreSQL JSONB 运算；SQLite 变体仅供现有纯配置测试建表。
+DOCUMENT_JSON = JSONB().with_variant(JSON(), "sqlite")
+
+
+class FormalDocument(Base):
+    """正式文书及提交时固化的流程、接收范围。"""
+
+    __tablename__ = "formal_documents"
+    id = Column(String(36), primary_key=True)
+    title = Column(String(200), nullable=False)
+    case_number = Column(String(128), nullable=False, default="")
+    creator_uid = Column(String(64), nullable=False, index=True)
+    status = Column(String(24), nullable=False, default="draft")
+    step_index = Column(Integer, nullable=False, default=-1)
+    revision = Column(Integer, nullable=False, default=0)
+    workflow = Column(DOCUMENT_JSON, nullable=False)
+    readers = Column(DOCUMENT_JSON, nullable=False)
+    assignees = Column(DOCUMENT_JSON, nullable=False)
+    previous_assignees = Column(DOCUMENT_JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'in_progress', 'returned', 'archived')"),
+        CheckConstraint("revision >= 0 AND step_index >= -1"),
+        Index("ix_formal_documents_readers", "readers", postgresql_using="gin"),
+    )
+
+
+class FormalDocumentFile(Base):
+    """不可覆盖的正式文件版本。"""
+
+    __tablename__ = "formal_document_files"
+    id = Column(String(36), primary_key=True)
+    document_id = Column(String(36), ForeignKey("formal_documents.id"), nullable=False, index=True)
+    sequence = Column(Integer, nullable=False)
+    filename = Column(String(255), nullable=False)
+    size = Column(BigInteger, nullable=False)
+    sha256 = Column(String(64), nullable=False)
+    object_key = Column(String(128), nullable=False, unique=True)
+    uploaded_by = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    __table_args__ = (UniqueConstraint("document_id", "sequence"),)
+
+
+class FormalDocumentEvent(Base):
+    """追加式办理记录及本次确认的文件清单。"""
+
+    __tablename__ = "formal_document_events"
+    id = Column(String(36), primary_key=True)
+    document_id = Column(String(36), ForeignKey("formal_documents.id"), nullable=False, index=True)
+    revision = Column(Integer, nullable=False)
+    action = Column(String(32), nullable=False)
+    actor_uid = Column(String(64), nullable=False)
+    actor_name = Column(String(128), nullable=False)
+    detail = Column(DOCUMENT_JSON, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    __table_args__ = (UniqueConstraint("document_id", "revision"),)
+
 JSON_VALUE = JSON().with_variant(JSONB, "postgresql")
 
 MAX_LOGIN_FAILED_ATTEMPTS = 5
