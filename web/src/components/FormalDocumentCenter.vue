@@ -110,7 +110,9 @@ async function upload(event) {
           }
         }
       )
-      applyDetail(result)
+      // 上传只刷新文件版本，不能用历史提交清单覆盖用户正在编辑的选择和意见。
+      document.value = result
+      confirmed.value = false
       selected.value = [...new Set([...selected.value, result.files.at(-1).id])]
       message.success('已保存新版本，请勾选正式文件后确认提交')
     } finally {
