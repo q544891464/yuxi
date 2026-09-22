@@ -3137,7 +3137,6 @@ const handleTmpAttachmentsAdded = async () => {
     fetchAgentState(currentAgentId.value, threadId),
     fetchThreadAttachments(threadId)
   ])
-  showFileTreePanel()
 }
 
 const handleAttachmentRemove = async (attachment) => {
