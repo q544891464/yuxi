@@ -37,6 +37,52 @@ from yuxi.utils.auth_utils import AuthUtils
 TEST_BUCKET = "document-verify-" + uuid4().hex
 
 
+def test_internal_document_guard_preserves_system_settings(document_server, monkeypatch):
+    """内部文书保护不能阻断管理员单项及批量保存系统配置。"""
+    from yuxi.config.options import ensure_options_in_db
+    import server.routers.system_router as system_router
+
+    client, tokens, engine = document_server
+
+    async def initialize_options():
+        """为隔离数据库初始化正式配置定义。"""
+        async_engine = create_async_engine(os.environ["TEST_NAV_DATABASE_URL"], poolclass=NullPool)
+        try:
+            async with async_sessionmaker(async_engine)() as session:
+                await ensure_options_in_db(session)
+                await session.commit()
+        finally:
+            await async_engine.dispose()
+
+    async def invalidate_cache(key):
+        """本例验证持久化，不连接共享 Redis。"""
+        assert key == "system_options"
+
+    asyncio.run(initialize_options())
+    monkeypatch.setattr(system_router, "invalidate_option_cache", invalidate_cache)
+    for endpoint, payload, expected in [
+        ("/config", {"key": "default_model", "value": "fixture:single"}, {"default_model": "fixture:single"}),
+        (
+            "/config/update",
+            {"default_model": "fixture:batch", "fast_model": "fixture:fast"},
+            {"default_model": "fixture:batch", "fast_model": "fixture:fast"},
+        ),
+    ]:
+        assert client.post("/api/system" + endpoint, json=payload, headers=tokens["user"]).status_code == 403
+        response = client.post("/api/system" + endpoint, json=payload, headers=tokens["admin"])
+        assert response.status_code == 200, response.text
+        with engine.connect() as connection:
+            value = connection.execute(
+                select(ConfigOption.value).where(ConfigOption.key == "system_options")
+            ).scalar_one()
+        for key, expected_value in expected.items():
+            assert value[key] == expected_value
+
+    assert (
+        client.post("/api/system/config/update", json={"unknown": "value"}, headers=tokens["admin"]).status_code == 400
+    )
+
+
 @pytest.fixture(scope="module")
 def document_server():
     """只在专用 nav_verify 数据库启动真实路由和认证依赖。"""

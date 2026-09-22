@@ -335,7 +335,8 @@ async def update_option_value(
     if record is None:
         return None
 
-    if (record.params or {}).get("internal"):
+    # 系统设置隐藏通用表单，但专用路由仍使用此函数和代码定义的字段校验。
+    if (record.params or {}).get("internal") and key != system_options.key:
         raise ValueError("内部配置须通过专用管理入口修改")
 
     fields = {field["key"]: field for field in _fields(record)}
