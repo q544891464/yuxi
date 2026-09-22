@@ -197,3 +197,36 @@ def test_ducha_role_and_navigation_http(navigation_server):
     assert client.get(page, headers=tokens["user"]).status_code == 200
     assert client.put(user_path, headers=tokens["admin"], json={"role": "user"}).status_code == 200
     assert client.get(page, headers=tokens["user"]).status_code == 403
+
+
+def test_page_access_config_permissions_persistence_and_revision(navigation_server):
+    """真实认证、HTTP 与 PostgreSQL 验证角色页面配置。"""
+    client, tokens, engine = navigation_server
+    path = "/api/system/page-access"
+    assert client.get(path, params={"path": "/chat"}).status_code == 401
+    for role in ["user", "ducha", "admin"]:
+        assert client.get(path + "/manage", headers=tokens[role]).status_code == 403
+    config = client.get(path + "/manage", headers=tokens["superadmin"]).json()
+    config.pop("catalog")
+    for role in ["user", "ducha", "admin"]:
+        assert client.put(path, headers=tokens[role], json=config).status_code == 403
+    for target in ["/chat", "/agent", "/extensions", "/chat/knowledge/k"]:
+        data = client.get(path, params={"path": target}, headers=tokens["ducha"]).json()
+        assert data["allowed"] is False and data["home"] == "/chat/ducha"
+    assert client.get(path, params={"path": "/chat/ducha/t"}, headers=tokens["ducha"]).json()["allowed"]
+    invalid = copy.deepcopy(config)
+    invalid["rules"]["user"]["pages"] = []
+    assert client.put(path, headers=tokens["superadmin"], json=invalid).status_code == 422
+    config["rules"]["admin"] = {"pages": ["/chat"], "home": "/chat"}
+    saved = client.put(path, headers=tokens["superadmin"], json=config)
+    assert saved.status_code == 200
+    with engine.connect() as conn:
+        stored = conn.execute(select(ConfigOption.value).where(ConfigOption.key == "role_page_access")).scalar_one()
+        assert stored == saved.json()
+    assert client.get(path, params={"path": "/agent"}, headers=tokens["admin"]).json()["allowed"] is False
+    assert client.get("/api/system/chat/ducha", headers=tokens["admin"]).status_code == 403
+    assert client.get(path, params={"path": "/agent"}, headers=tokens["superadmin"]).json()["allowed"]
+    assert client.put(path, headers=tokens["superadmin"], json=config).status_code == 409
+    options = client.get("/api/system/config/options", headers=tokens["admin"])
+    assert options.status_code == 200
+    assert "role_page_access" not in {item["key"] for item in options.json()["options"]}

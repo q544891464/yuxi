@@ -2,12 +2,19 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getDuchaPage } from '@/apis/system_api'
 import { sanitizeRedirect } from '@/utils/oidcAutoStart'
+import { pageAccessApi } from '@/apis/page_access_api'
 
 const AppLayout = () => import('@/layouts/AppLayout.vue')
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/access-unavailable',
+      name: 'AccessUnavailable',
+      component: () => import('../views/PageAccessUnavailable.vue'),
+      meta: { public: true }
+    },
     {
       path: '/',
       name: 'Home',
@@ -190,7 +197,8 @@ const router = createRouter({
 })
 
 // 全局前置守卫
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
+  if (to.meta.public) return true
   // 检查路由是否需要认证
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth === true)
   const requiresAdmin = to.matched.some((record) => record.meta.requiresAdmin)
@@ -212,6 +220,33 @@ router.beforeEach(async (to) => {
   const isLoggedIn = userStore.isLoggedIn
   const isAdmin = userStore.isAdmin
   const isSuperAdmin = userStore.isSuperAdmin
+  const shareLoginHash =
+    to.path === '/login' &&
+    typeof to.hash === 'string' &&
+    new URLSearchParams(to.hash.slice(1)).has('key')
+
+  if (isLoggedIn && !shareLoginHash) {
+    try {
+      const target =
+        to.path === '/login' && to.query.redirect
+          ? sanitizeRedirect(to.query.redirect).split(/[?#]/)[0]
+          : to.path
+      const access = await pageAccessApi.resolve(target)
+      if (typeof access.allowed !== 'boolean' || !access.home?.startsWith('/'))
+        throw new Error('invalid page policy')
+      userStore.allowedPages = access.pages
+      const defaultEntry =
+        to.redirectedFrom?.path === '/' ||
+        (from.path === '/login' && sanitizeRedirect(from.query.redirect) === '/')
+      if (defaultEntry && to.path !== access.home) return { path: access.home, replace: true }
+      if (!access.allowed) return { path: access.home, replace: true }
+    } catch (error) {
+      if (error.status === 401 || !userStore.isLoggedIn) {
+        return { path: '/login', query: { redirect: to.fullPath }, replace: true }
+      }
+      return { path: '/access-unavailable', query: { redirect: to.fullPath }, replace: true }
+    }
+  }
 
   // 如果路由需要认证但用户未登录
   if (requiresAuth && !isLoggedIn) {
@@ -223,7 +258,7 @@ router.beforeEach(async (to) => {
     try {
       await getDuchaPage()
     } catch {
-      return '/chat'
+      return { path: '/access-unavailable', query: { redirect: to.fullPath }, replace: true }
     }
   }
 
@@ -232,8 +267,6 @@ router.beforeEach(async (to) => {
   if (requiresSuperAdmin && !isSuperAdmin) return isAdmin ? '/agent' : '/chat'
 
   // 如果用户已登录但访问登录页，按 redirect 参数跳转
-  const shareLoginHash =
-    typeof to.hash === 'string' && new URLSearchParams(to.hash.slice(1)).has('key')
   if (to.path === '/login' && isLoggedIn && !shareLoginHash) {
     return sanitizeRedirect(to.query.redirect)
   }

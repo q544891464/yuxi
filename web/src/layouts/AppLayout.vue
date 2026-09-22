@@ -217,11 +217,11 @@ const mainList = computed(() => {
     })
   }
 
-  return items
+  return items.filter((item) => userStore.canVisitPage(item.path))
 })
 
-const primaryNavItem = computed(() => mainList.value[0] || null)
-const secondaryNavItems = computed(() => mainList.value.slice(1))
+const primaryNavItem = computed(() => mainList.value.find((item) => item.action) || null)
+const secondaryNavItems = computed(() => mainList.value.filter((item) => !item.action))
 
 const isNavItemActive = (item) => {
   const activePaths = item.activePaths || [item.path]
@@ -671,6 +671,7 @@ provide('settingsModal', {
                 />
               </div>
               <RouterLink
+                v-if="userStore.canVisitPage('/extensions')"
                 class="consumer-nav-link"
                 :to="{
                   name: 'ConsumerKnowledgeBaseDetail',
@@ -680,7 +681,7 @@ provide('settingsModal', {
                 ><LibraryBig :size="17" />知识库</RouterLink
               >
               <RouterLink
-                v-if="userStore.isAdmin"
+                v-if="userStore.isAdmin && userStore.canVisitPage('/dashboard')"
                 class="consumer-nav-link"
                 :to="{ name: 'ConsumerDashboard', query: { returnTo: route.fullPath } }"
                 ><BarChart3 :size="17" />数据总览</RouterLink

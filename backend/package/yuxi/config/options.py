@@ -276,7 +276,9 @@ async def ensure_options_in_db(db: AsyncSession) -> list[ConfigOption]:
 
 async def list_options(db: AsyncSession) -> list[ConfigOption]:
     result = await db.execute(
-        select(ConfigOption).where(ConfigOption.key != system_options.key).order_by(ConfigOption.id)
+        select(ConfigOption)
+        .where(ConfigOption.key.not_in([system_options.key, "role_page_access"]))
+        .order_by(ConfigOption.id)
     )
     return list(result.scalars().all())
 

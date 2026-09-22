@@ -20,6 +20,14 @@
       <div class="settings-sider">
         <div class="settings-sider-nav">
           <div
+            v-if="userStore.isSuperAdmin"
+            class="sider-item"
+            :class="{ activesec: activeTab === 'pageAccess' }"
+            @click="activeTab = 'pageAccess'"
+          >
+            <Settings class="icon" :size="18" /><span>角色页面权限</span>
+          </div>
+          <div
             class="sider-item"
             :class="{ activesec: activeTab === 'account' }"
             @click="activeTab = 'account'"
@@ -96,6 +104,14 @@
       <!-- 顶部导航 (Mobile) -->
       <div class="settings-mobile-nav">
         <div
+          v-if="userStore.isSuperAdmin"
+          class="nav-item"
+          :class="{ active: activeTab === 'pageAccess' }"
+          @click="activeTab = 'pageAccess'"
+        >
+          角色页面权限
+        </div>
+        <div
           v-if="userStore.isLoggedIn"
           class="nav-item"
           :class="{ active: activeTab === 'skillNavigation' }"
@@ -165,6 +181,12 @@
       <div class="settings-content-wrapper">
         <div class="settings-content">
           <div
+            v-if="userStore.isSuperAdmin && loadedTabs.has('pageAccess')"
+            v-show="activeTab === 'pageAccess'"
+          >
+            <RolePageAccessSettings />
+          </div>
+          <div
             v-show="activeTab === 'account'"
             v-if="userStore.isLoggedIn && loadedTabs.has('account')"
           >
@@ -229,14 +251,15 @@ import { createAsyncPanel } from '@/utils/asyncPanel'
 const AccountSettingsComponent = createAsyncPanel(
   () => import('@/components/AccountSettingsComponent.vue')
 )
+const RolePageAccessSettings = createAsyncPanel(
+  () => import('@/components/RolePageAccessSettings.vue')
+)
 const AgentEnvSettingsCard = createAsyncPanel(() => import('@/components/AgentEnvSettingsCard.vue'))
 const BasicSettingsSection = createAsyncPanel(() => import('@/components/BasicSettingsSection.vue'))
 const SkillNavigationSettings = createAsyncPanel(
   () => import('@/components/SkillNavigationSettings.vue')
 )
-const SkillCardList = createAsyncPanel(
-  () => import('@/components/extensions/SkillCardList.vue')
-)
+const SkillCardList = createAsyncPanel(() => import('@/components/extensions/SkillCardList.vue'))
 const OCRSettingsSection = createAsyncPanel(() => import('@/components/OCRSettingsSection.vue'))
 const ApiKeyManagementComponent = createAsyncPanel(
   () => import('@/components/ApiKeyManagementComponent.vue')
@@ -273,7 +296,7 @@ const availableTabs = computed(() => {
   const tabs = []
   if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv', 'skillNavigation')
   if (userStore.isAdmin) tabs.push('base', 'ocr', 'user')
-  if (userStore.isSuperAdmin) tabs.push('department')
+  if (userStore.isSuperAdmin) tabs.push('department', 'pageAccess')
   return tabs
 })
 

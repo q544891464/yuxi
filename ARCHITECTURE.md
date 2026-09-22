@@ -123,3 +123,7 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 - **状态与存储**：PostgreSQL 保存请求、Run、消息、Conversation 的 `project_id` 与 Project 的 `workdir_path`、业务和知识库元数据，也是 LangGraph checkpoint 的唯一 Owner。Redis 保存短期事件、取消信号、ARQ 和跨进程缓存；每个用户的 UserWorkspace 拥有 Workdir 与个人 Skill 字节，MinIO 继续拥有知识库与临时上传对象。
 - **文档处理**：Agent 附件确认后进入实时 Project Workdir；知识库上传仍先进入对象存储和文件元数据边界，再经过解析、分块和知识库实现。解析器、分块策略和知识库连接器保持可替换。
 - **观测与调试**：优先通过 Compose service 查看 `api`、`worker` 和相关依赖日志；Langfuse 集中在服务层和 AgentRun 上下文；SSE 问题同时检查 Redis 事件与 PostgreSQL 终态。
+
+## 角色页面入口配置
+
+`yuxi.services.page_access_service` 计算角色页面范围与默认首页，`page_access_repository` 使用 PostgreSQL ConfigOption 和版本锁持久化。超级管理员在设置中维护页面规则；督查角色默认仅进入 `/chat/ducha` 及其对话详情。前端导航每次读取服务端决策并过滤菜单，认证过期回登录，决策或督查入口加载失败显示重试页面。页面限制是体验约束，不替代各 API 与 repository 的资源授权，也不授予额外数据权限。

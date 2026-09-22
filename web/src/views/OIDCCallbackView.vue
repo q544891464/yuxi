@@ -98,10 +98,10 @@ const handleCallback = async () => {
       if (redirectPath === '/') {
         try {
           await agentStore.initialize()
-          router.push('/agent')
+          router.push('/')
         } catch (err) {
           console.error('获取智能体信息失败:', err)
-          router.push('/agent')
+          router.push('/')
         }
       } else {
         router.push(redirectPath)

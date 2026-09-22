@@ -21,9 +21,40 @@ from yuxi.storage.postgres.models_business import User
 from yuxi.services.ducha_service import get_ducha_page
 from yuxi.utils.logging_config import LOG_FILE, logger
 
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from server.utils.auth_middleware import get_admin_user, get_db, get_required_user, get_superadmin_user
+from yuxi.services.page_access_service import (
+    PAGES,
+    PageAccessConfig,
+    PageAccessConflict,
+    get_page_config,
+    resolve_page_access,
+    save_page_config,
+)
 
 system = APIRouter(prefix="/system", tags=["system"])
+
+
+@system.get("/page-access")
+async def read_page_access(path: str, user: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)):
+    """为当前身份计算页面范围，角色不接受客户端传入。"""
+    return resolve_page_access(await get_page_config(db), user.role, path)
+
+
+@system.get("/page-access/manage")
+async def manage_page_access(user: User = Depends(get_superadmin_user), db: AsyncSession = Depends(get_db)):
+    """超级管理员读取完整规则及可选页面。"""
+    return {**await get_page_config(db), "catalog": PAGES}
+
+
+@system.put("/page-access")
+async def write_page_access(
+    payload: PageAccessConfig, user: User = Depends(get_superadmin_user), db: AsyncSession = Depends(get_db)
+):
+    """保存角色页面配置，拒绝旧版本覆盖。"""
+    try:
+        return await save_page_config(db, payload, user)
+    except PageAccessConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @system.get("/skill-navigation")
@@ -45,9 +76,11 @@ async def manage_skill_navigation(
 
 
 @system.get("/chat/ducha")
-async def read_ducha_page(current_user: User = Depends(get_required_user)):
+async def read_ducha_page(current_user: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)):
     """校验督查工作区访问身份。"""
     try:
+        if not resolve_page_access(await get_page_config(db), current_user.role, "/chat/ducha")["allowed"]:
+            raise PermissionError("当前角色未开放督查页面")
         return get_ducha_page(current_user)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
