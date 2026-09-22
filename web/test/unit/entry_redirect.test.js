@@ -1,3 +1,4 @@
+import { availableAssistants, assistantEntry } from '../../src/utils/digitalAssistants.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -17,7 +18,7 @@ function createTestRouter(
     resolve: async () => ({
       allowed: true,
       home: userStore.isAdmin ? '/agent' : '/chat',
-      pages: null
+      pages: userStore.isAdmin ? null : ['/chat']
     })
   },
   getDuchaPage = async () => ({})
@@ -36,6 +37,8 @@ function createTestRouter(
     'sanitizeRedirect',
     'pageAccessApi',
     'getDuchaPage',
+    'availableAssistants',
+    'assistantEntry',
     'document',
     source
   )
@@ -49,6 +52,8 @@ function createTestRouter(
     sanitizeRedirect,
     pageAccess,
     getDuchaPage,
+    availableAssistants,
+    assistantEntry,
     { title: '' }
   )
 }
@@ -105,7 +110,7 @@ test('首页按认证状态进入登录页或智能体，过期会话不能停�
         userId: 1,
         isLoggedIn: true,
         isAdmin: true,
-        expected: '/agent'
+        expected: '/choose-assistant'
       },
       { name: '过期会话', token: 'expired', userId: null, isLoggedIn: true, expected: '/login' }
     ]) {
@@ -140,7 +145,7 @@ test('已登录访问登录页默认进入智能体，同时保留合法的深�
     isAdmin: true
   })
   await router.push('/login')
-  assert.equal(router.currentRoute.value.path, '/agent')
+  assert.equal(router.currentRoute.value.path, '/choose-assistant')
   await router.push('/login?redirect=/workspace')
   assert.equal(router.currentRoute.value.path, '/workspace')
 
@@ -306,4 +311,45 @@ test('配置首页覆盖默认角色入口，但保留允许的显式深链接',
   assert.equal(router.currentRoute.value.path, '/workspace')
   await router.push('/login?redirect=/agent/thread-1')
   assert.equal(router.currentRoute.value.path, '/agent/thread-1')
+})
+
+test('两个数字人入口在登录时选择，选择后刷新不再拦截', async () => {
+  const router = createTestRouter({ token: 'test', userId: 1, isLoggedIn: true, isAdmin: true })
+  await router.push('/login')
+  assert.equal(router.currentRoute.value.path, '/choose-assistant')
+  await router.push('/chat/ducha')
+  assert.equal(router.currentRoute.value.path, '/chat/ducha')
+  await router.push('/chat/ducha/thread-1')
+  assert.equal(router.currentRoute.value.path, '/chat/ducha/thread-1')
+})
+
+test('选择页不能向单入口或无业务入口角色增加权限', async () => {
+  for (const scenario of [
+    { pages: ['/chat/ducha'], home: '/chat/ducha', expected: '/chat/ducha' },
+    { pages: ['/workspace'], home: '/workspace', expected: '/workspace' }
+  ]) {
+    const router = createTestRouter(
+      { token: 'test', userId: 1, isLoggedIn: true },
+      {
+        resolve: async (path) => ({ ...scenario, allowed: scenario.pages.includes(path) })
+      }
+    )
+    await router.push('/choose-assistant')
+    assert.equal(router.currentRoute.value.path, scenario.expected)
+  }
+  const router = createTestRouter({ token: '', isLoggedIn: false })
+  await router.push('/choose-assistant')
+  assert.equal(router.currentRoute.value.path, '/login')
+})
+
+test('从普通业务首页发起密码或 OIDC 登录也显示多入口选择', async () => {
+  const router = createTestRouter({ token: 'test', userId: 1, isLoggedIn: true, isAdmin: true })
+  await router.push('/login?redirect=/chat')
+  assert.equal(router.currentRoute.value.path, '/choose-assistant')
+  await router.push('/auth/oidc/callback')
+  await router.push('/chat')
+  assert.equal(router.currentRoute.value.path, '/choose-assistant')
+  await router.push('/auth/oidc/callback')
+  await router.push('/chat/thread-1')
+  assert.equal(router.currentRoute.value.path, '/chat/thread-1')
 })

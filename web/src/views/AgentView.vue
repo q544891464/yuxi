@@ -28,7 +28,15 @@
           </template>
           <template v-if="consumerChat" #input-decoration="{ isStartScreen }">
             <div v-if="!isStartScreen" class="composer-mascot" aria-hidden="true">
-              <img src="/cydx/assistant-cutout.png" alt="" draggable="false" />
+              <img
+                :src="
+                  route.meta.ducha
+                    ? '/cydx/ducha-assistant-cutout.png'
+                    : '/cydx/assistant-cutout.png'
+                "
+                alt=""
+                draggable="false"
+              />
             </div>
           </template>
           <template #input-actions-left="{ hasActiveThread, isCreatingThread }">

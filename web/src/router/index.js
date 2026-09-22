@@ -1,3 +1,4 @@
+import { availableAssistants, assistantEntry } from '@/utils/digitalAssistants'
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getDuchaPage } from '@/apis/system_api'
@@ -9,6 +10,12 @@ const AppLayout = () => import('@/layouts/AppLayout.vue')
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/choose-assistant',
+      name: 'ChooseAssistant',
+      component: () => import('../views/AssistantSelectionView.vue'),
+      meta: { requiresAuth: true }
+    },
     {
       path: '/access-unavailable',
       name: 'AccessUnavailable',
@@ -235,10 +242,19 @@ router.beforeEach(async (to, from) => {
       if (typeof access.allowed !== 'boolean' || !access.home?.startsWith('/'))
         throw new Error('invalid page policy')
       userStore.allowedPages = access.pages
+      if (to.path === '/choose-assistant') {
+        return availableAssistants(access.pages).length > 1
+          ? true
+          : { path: assistantEntry(access), replace: true }
+      }
+      const entryTargets = ['/', '/agent', '/chat', '/chat/ducha']
       const defaultEntry =
         to.redirectedFrom?.path === '/' ||
-        (from.path === '/login' && sanitizeRedirect(from.query.redirect) === '/')
-      if (defaultEntry && to.path !== access.home) return { path: access.home, replace: true }
+        (from.path === '/login' && entryTargets.includes(sanitizeRedirect(from.query.redirect))) ||
+        (to.path === '/login' && entryTargets.includes(sanitizeRedirect(to.query.redirect))) ||
+        (from.name === 'OIDCCallback' && entryTargets.includes(to.fullPath))
+      if (defaultEntry && to.path !== assistantEntry(access))
+        return { path: assistantEntry(access), replace: true }
       if (!access.allowed) return { path: access.home, replace: true }
     } catch (error) {
       if (error.status === 401 || !userStore.isLoggedIn) {
@@ -276,7 +292,12 @@ router.beforeEach(async (to, from) => {
 })
 
 router.afterEach((to) => {
-  document.title = to.meta.ducha ? '智能辅助督查数字人' : '智能辅助稽查数字人'
+  document.title =
+    to.path === '/choose-assistant'
+      ? '选择数字人 · 智能辅助工作平台'
+      : to.meta.ducha
+        ? '智能辅助督查数字人'
+        : '智能辅助稽查数字人'
 })
 
 export default router

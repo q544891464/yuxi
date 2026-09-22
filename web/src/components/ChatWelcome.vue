@@ -7,6 +7,7 @@
     <div class="welcome-hero">
       <div
         class="assistant-portrait"
+        :class="{ 'ducha-portrait': ducha }"
         role="img"
         :aria-label="`智能辅助${ducha ? '督查' : '稽查'}数字人形象`"
       ></div>
@@ -114,6 +115,10 @@ onMounted(() => {
   margin: -24px 24px 0 16px;
   align-self: flex-end;
   background: url('/cydx/assistant-cutout.png') center bottom / contain no-repeat;
+}
+
+.assistant-portrait.ducha-portrait {
+  background-image: url('/cydx/ducha-assistant-cutout.png');
 }
 
 .welcome-copy {

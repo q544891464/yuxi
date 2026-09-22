@@ -127,3 +127,5 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 ## 角色页面入口配置
 
 `yuxi.services.page_access_service` 计算角色页面范围与默认首页，`page_access_repository` 使用 PostgreSQL ConfigOption 和版本锁持久化。超级管理员在设置中维护页面规则；督查角色默认仅进入 `/chat/ducha` 及其对话详情。前端导航每次读取服务端决策并过滤菜单，认证过期回登录，决策或督查入口加载失败显示重试页面。页面限制是体验约束，不替代各 API 与 repository 的资源授权，也不授予额外数据权限。
+
+登录进入普通业务首页时，前端根据服务端页面范围分流：稽查与督查均可用则进入 `/choose-assistant`，仅一个可用则直接进入该数字人，没有可用业务入口则保留配置首页。显式对话与 CLI 授权链接保留原目标。数字人选择仅改变入口体验，不改变角色或资源授权。
