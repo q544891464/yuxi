@@ -7,12 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from yuxi.repositories.page_access_repository import PageAccessRepository
 
 PAGES = [
-    {"path": "/chat", "label": "稽查工作区", "roles": ["user", "ducha", "admin"]},
+    {"path": "/chat", "label": "稽查工作区", "roles": ["user", "inspector", "reviewer", "ducha", "admin"]},
     {"path": "/chat/ducha", "label": "督查工作区", "roles": ["ducha", "admin"]},
     {"path": "/agent", "label": "智能体工作台", "roles": ["admin"]},
-    {"path": "/workspace", "label": "个人空间", "roles": ["user", "ducha", "admin"]},
-    {"path": "/extensions", "label": "知识库与技能", "roles": ["user", "ducha", "admin"]},
-    {"path": "/agent-manage", "label": "智能体管理", "roles": ["user", "ducha", "admin"]},
+    {"path": "/workspace", "label": "个人空间", "roles": ["user", "inspector", "reviewer", "ducha", "admin"]},
+    {"path": "/extensions", "label": "知识库与技能", "roles": ["user", "inspector", "reviewer", "ducha", "admin"]},
+    {"path": "/agent-manage", "label": "智能体管理", "roles": ["user", "inspector", "reviewer", "ducha", "admin"]},
     {"path": "/dashboard", "label": "数据总览", "roles": ["admin"]},
 ]
 
@@ -30,12 +30,12 @@ class PageAccessConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     revision: int = Field(ge=0, strict=True)
-    rules: dict[Literal["user", "ducha", "admin"], PageRule]
+    rules: dict[Literal["user", "inspector", "reviewer", "ducha", "admin"], PageRule]
 
     @model_validator(mode="after")
     def validate_rules(self):
         """拒绝空范围、越权页面和不能到达的默认入口。"""
-        if set(self.rules) != {"user", "ducha", "admin"}:
+        if set(self.rules) != {"user", "inspector", "reviewer", "ducha", "admin"}:
             raise ValueError("必须配置全部业务角色")
         for role, rule in self.rules.items():
             available = {page["path"] for page in PAGES if role in page["roles"]}
@@ -59,10 +59,16 @@ async def get_page_config(db):
             "revision": 0,
             "rules": {
                 "user": {"pages": None, "home": "/chat"},
+                "inspector": {"pages": None, "home": "/chat"},
+                "reviewer": {"pages": None, "home": "/chat"},
                 "ducha": {"pages": ["/chat/ducha"], "home": "/chat/ducha"},
                 "admin": {"pages": None, "home": "/agent"},
             },
         }
+    else:
+        stored = {**stored, "rules": {**stored["rules"]}}
+        for role in ("inspector", "reviewer"):
+            stored["rules"].setdefault(role, {"pages": None, "home": "/chat"})
     return PageAccessConfig.model_validate(stored).model_dump()
 
 

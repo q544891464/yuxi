@@ -119,7 +119,7 @@ def document_server():
     asyncio.run(migrate_formal_tables())
     with engine.begin() as conn:
         conn.execute(Department.__table__.insert().values(id=1, name="验证部门"))
-        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha")]:
+        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha"), (7, "inspector"), (8, "reviewer")]:
             conn.execute(
                 User.__table__.insert().values(
                     id=id,
@@ -154,7 +154,7 @@ def document_server():
     assert server.started
     tokens = {
         role: {"Authorization": "Bearer " + AuthUtils.create_access_token({"sub": str(id)})}
-        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha")]
+        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha"), (7, "inspector"), (8, "reviewer")]
     }
     try:
         with httpx.Client(base_url=f"http://127.0.0.1:{sock.getsockname()[1]}") as client:
@@ -392,3 +392,50 @@ def test_department_intersection_and_extra_archive_readers(document_server):
     assert client.post(path + "/actions", headers=tokens["ducha"], json=action).status_code == 200
     assert client.get(path + "/files/" + file_id, headers=reader).content == b"confirmed"
     assert client.get(path, headers=other).status_code == 404
+
+
+def test_inspector_to_reviewer_role_recipient(document_server):
+    """按新角色匹配文书发起和接收人，未匹配人员不可读取。"""
+    client, tokens, engine = document_server
+    root = "/api/formal-documents"
+    current = client.get(root + "/workflows?manage=true", headers=tokens["superadmin"]).json()
+    candidate = {
+        "revision": current["revision"],
+        "workflows": [{
+            "id": "inspection-review",
+            "name": "稽查移交审理",
+            "starters": {"roles": ["inspector"]},
+            "steps": [{"name": "审理", "recipients": {"roles": ["reviewer"]}}],
+            "archive_readers": {"roles": ["inspector"]},
+        }],
+    }
+    saved = client.put(root + "/workflows", json=candidate, headers=tokens["superadmin"])
+    assert saved.status_code == 200, saved.text
+    with engine.connect() as conn:
+        stored = conn.scalar(select(ConfigOption.value).where(ConfigOption.key == "document_workflows"))
+    assert stored["workflows"][0]["steps"][0]["recipients"]["roles"] == ["reviewer"]
+    inspector_workflows = client.get(root + "/workflows", headers=tokens["inspector"]).json()["workflows"]
+    assert inspector_workflows[0]["id"] == "inspection-review"
+    assert client.get(root + "/workflows", headers=tokens["reviewer"]).json()["workflows"] == []
+    request = {"request_id": str(uuid4()), "title": "稽查审理交接", "workflow_id": "inspection-review"}
+    assert client.post(root, json=request, headers=tokens["user"]).status_code == 403
+    created = client.post(root, json=request, headers=tokens["inspector"])
+    assert created.status_code == 200, created.text
+    path = root + "/" + created.json()["id"]
+    assert client.get(path, headers=tokens["reviewer"]).status_code == 404
+    upload = client.post(
+        path + "/files",
+        headers=tokens["inspector"],
+        data={"revision": 0},
+        files={"file": ("报告.txt", b"review-me")},
+    )
+    assert upload.status_code == 200, upload.text
+    file_id = upload.json()["files"][0]["id"]
+    submitted = client.post(
+        path + "/actions",
+        headers=tokens["inspector"],
+        json={"revision": 1, "action": "submit", "confirmed": True, "file_ids": [file_id]},
+    )
+    assert submitted.status_code == 200, submitted.text
+    assert client.get(path, headers=tokens["reviewer"]).json()["can_edit"]
+    assert client.get(path, headers=tokens["user"]).status_code == 404

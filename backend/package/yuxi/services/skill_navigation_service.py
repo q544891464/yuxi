@@ -22,8 +22,8 @@ class NavigationNode(BaseModel):
     inputHint: str = Field(min_length=1, max_length=2000)
     outputHint: str = Field(min_length=1, max_length=2000)
     presetPrompt: str = Field(min_length=1, max_length=10000)
-    visibleRoles: list[Literal["user", "ducha", "admin", "superadmin"]] = Field(
-        default_factory=lambda: ["user", "ducha", "admin", "superadmin"], max_length=4
+    visibleRoles: list[Literal["user", "inspector", "reviewer", "ducha", "admin", "superadmin"]] = Field(
+        default_factory=lambda: ["user", "inspector", "reviewer", "ducha", "admin", "superadmin"], max_length=6
     )
     visibleWorkspaces: list[Literal["inspection", "ducha"]] = Field(
         default_factory=lambda: ["inspection", "ducha"], max_length=2

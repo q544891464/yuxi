@@ -45,7 +45,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { pageAccessApi } from '@/apis/page_access_api'
-const roles = { user: '普通用户', ducha: '督查人员', admin: '管理员' }
+const roles = {
+  user: '普通用户',
+  inspector: '稽查人员',
+  reviewer: '审理人员',
+  ducha: '督查人员',
+  admin: '管理员'
+}
 const config = ref(null)
 const loading = ref(false)
 const saving = ref(false)

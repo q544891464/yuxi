@@ -108,6 +108,10 @@ const userRoleText = computed(() => {
       return '管理员'
     case 'ducha':
       return '督查人员'
+    case 'inspector':
+      return '稽查人员'
+    case 'reviewer':
+      return '审理人员'
     case 'user':
       return '普通用户'
     default:

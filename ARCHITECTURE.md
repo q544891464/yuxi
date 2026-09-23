@@ -76,7 +76,7 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 
 业务技能导航由 `yuxi.services.skill_navigation_service` 校验，`yuxi.repositories.skill_navigation_repository` 使用 PostgreSQL 配置记录与版本锁持久化。管理员通过设置维护入口，前端 `skillNavigation` Store 为侧栏和项目新会话提供同一份树；导航绑定不改变运行时 Skill 权限。节点的 `visibleRoles` 由服务端过滤，父节点不可见时隐藏整个子树；管理接口独立返回完整配置。
 
-`/` 是公开首页；登录后的核心工作区是 `/agent`，业务入口为 `/chat`。`/chat/ducha` 为督查品牌入口，只允许 `ducha`、`admin` 和 `superadmin` 访问，复用用户原有会话与资源权限，不展示欢迎页资源统计。管理员可在用户管理中切换普通用户与督查人员身份，部门管理员仍受部门边界约束。`/extensions` 对所有登录用户开放，其中 Skills 对普通用户可见；知识库详情允许拥有资源读取权限的登录用户只读访问，知识库写入、工具和 MCP 管理能力仅管理员可见；Dashboard 对管理员和超级管理员开放。后端权限检查始终是最终边界，前端守卫只负责页面体验。
+`/` 是公开首页；登录后的核心工作区是 `/agent`，业务入口为 `/chat`。`/chat/ducha` 为督查品牌入口，只允许 `ducha`、`admin` 和 `superadmin` 访问，复用用户原有会话与资源权限，不展示欢迎页资源统计。管理员可在用户管理中设置普通用户、稽查人员、审理人员与督查人员身份，部门管理员仍受部门边界约束。`/extensions` 对所有登录用户开放，其中 Skills 对普通用户可见；知识库详情允许拥有资源读取权限的登录用户只读访问，知识库写入、工具和 MCP 管理能力仅管理员可见；Dashboard 对管理员和超级管理员开放。后端权限检查始终是最终边界，前端守卫只负责页面体验。
 
 ## 智能体运行链路
 
@@ -126,6 +126,6 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 
 ## 角色页面入口配置
 
-`yuxi.services.page_access_service` 计算角色页面范围与默认首页，`page_access_repository` 使用 PostgreSQL ConfigOption 和版本锁持久化。超级管理员在设置中维护页面规则；督查角色默认仅进入 `/chat/ducha` 及其对话详情。前端导航每次读取服务端决策并过滤菜单，认证过期回登录，决策或督查入口加载失败显示重试页面。页面限制是体验约束，不替代各 API 与 repository 的资源授权，也不授予额外数据权限。
+`yuxi.services.page_access_service` 计算角色页面范围与默认首页，`page_access_repository` 使用 PostgreSQL ConfigOption 和版本锁持久化。超级管理员在设置中维护页面规则；稽查和审理角色默认进入 `/chat`，督查角色默认仅进入 `/chat/ducha` 及其对话详情。读取旧页面配置时会为缺失的新角色补入默认规则，保存时才持久化。前端导航每次读取服务端决策并过滤菜单，认证过期回登录，决策或督查入口加载失败显示重试页面。页面限制是体验约束，不替代各 API 与 repository 的资源授权，也不授予额外数据权限。
 
 登录进入普通业务首页时，前端根据服务端页面范围分流：稽查与督查均可用则进入 `/choose-assistant`，仅一个可用则直接进入该数字人，没有可用业务入口则保留配置首页。显式对话与 CLI 授权链接保留原目标。数字人选择仅改变入口体验，不改变角色或资源授权。

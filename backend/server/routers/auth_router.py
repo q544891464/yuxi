@@ -83,7 +83,7 @@ class Token(BaseModel):
 class UserCreate(BaseModel):
     username: str
     password: str = Field(min_length=8)
-    role: Literal["user", "ducha", "admin", "superadmin"] = "user"
+    role: Literal["user", "inspector", "reviewer", "ducha", "admin", "superadmin"] = "user"
     phone_number: str | None = None
     department_id: int | None = None
 
@@ -91,7 +91,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    role: Literal["user", "ducha"] | None = None
+    role: Literal["user", "inspector", "reviewer", "ducha"] | None = None
 
     username: str | None = None
     password: str | None = Field(default=None, min_length=8)
@@ -665,11 +665,11 @@ async def create_user(
             detail="不能创建超级管理员账户",
         )
 
-    # 管理员只能创建普通用户
-    if current_user.role == "admin" and user_data.role not in {"user", "ducha"}:
+    # 管理员只能创建业务人员
+    if current_user.role == "admin" and user_data.role not in {"user", "inspector", "reviewer", "ducha"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="管理员只能创建普通用户或督查人员账户",
+            detail="管理员只能创建业务人员账户",
         )
 
     # 部门分配逻辑
@@ -723,7 +723,7 @@ async def read_users_page(
     limit: int = Query(50, ge=1, le=100),
     search: str | None = Query(None, max_length=100),
     department_id: int | None = Query(None, ge=1),
-    role: Literal["superadmin", "admin", "user", "ducha"] | None = None,
+    role: Literal["superadmin", "admin", "user", "inspector", "reviewer", "ducha"] | None = None,
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -848,10 +848,10 @@ async def update_user(
         )
 
     if current_user.role == "admin":
-        if user.role not in {"user", "ducha"}:
+        if user.role not in {"user", "inspector", "reviewer", "ducha"}:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="管理员只能修改普通用户或督查人员账户",
+                detail="管理员只能修改业务人员账户",
             )
 
     # 更新信息
@@ -942,10 +942,10 @@ async def delete_user(
             detail="不能删除超级管理员账户",
         )
 
-    if current_user.role == "admin" and user.role not in {"user", "ducha"}:
+    if current_user.role == "admin" and user.role not in {"user", "inspector", "reviewer", "ducha"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="管理员只能删除普通用户账户",
+            detail="管理员只能删除业务人员账户",
         )
 
     # 检查是否是部门的唯一管理员

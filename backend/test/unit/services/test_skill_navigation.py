@@ -76,6 +76,18 @@ def test_unknown_visible_role_is_rejected():
         NavigationConfig(revision=0, nodes=[node(visibleRoles=["typo"])])
 
 
+@pytest.mark.parametrize("role", ["inspector", "reviewer"])
+def test_new_role_visibility_is_explicit(role):
+    """新角色只看管理员授予的入口，且可保存在配置里。"""
+    from yuxi.services.skill_navigation_service import filter_navigation_for_role
+
+    config = NavigationConfig(
+        revision=0,
+        nodes=[node("granted", visibleRoles=[role]), node("old", visibleRoles=["user"])],
+    ).model_dump()
+    assert [n["id"] for n in filter_navigation_for_role(config, role)["nodes"]] == ["granted"]
+
+
 def test_workspace_and_children_visibility_intersect_with_role():
     """父级、下级工作区和角色约束不能互相绕过。"""
     from yuxi.services.skill_navigation_service import filter_navigation_for_role

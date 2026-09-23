@@ -35,7 +35,7 @@ def navigation_server():
         table.create(engine)
     with engine.begin() as conn:
         conn.execute(Department.__table__.insert().values(id=1, name="验证部门"))
-        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha")]:
+        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha"), (5, "inspector"), (6, "reviewer")]:
             conn.execute(
                 User.__table__.insert().values(
                     id=id,
@@ -46,6 +46,7 @@ def navigation_server():
                     password_hash="not-a-login-password",
                 )
             )
+        conn.exec_driver_sql("SELECT setval(pg_get_serial_sequence('users', 'id'), 6)")
         conn.execute(
             Skill.__table__.insert().values(
                 slug="navigation-test",
@@ -84,7 +85,7 @@ def navigation_server():
     assert server.started
     tokens = {
         role: {"Authorization": "Bearer " + AuthUtils.create_access_token({"sub": str(id)})}
-        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha")]
+        for id, role in [(1, "admin"), (2, "user"), (3, "superadmin"), (4, "ducha"), (5, "inspector"), (6, "reviewer")]
     }
     try:
         with httpx.Client(base_url=f"http://127.0.0.1:{sock.getsockname()[1]}") as client:
@@ -184,6 +185,8 @@ def test_ducha_role_and_navigation_http(navigation_server):
     assert result.status_code == 200, result.text
     assert client.get(path, headers=tokens["user"]).json()["nodes"] == []
     assert client.get(path, headers=tokens["admin"]).json()["nodes"] == []
+    for role in ["inspector", "reviewer"]:
+        assert client.get(path, headers=tokens[role]).json()["nodes"] == []
     assert (
         client.get(path, params={"workspace": "ducha"}, headers=tokens["ducha"]).json()["nodes"][0]["children"][0]["id"]
         == "child"
@@ -211,10 +214,38 @@ def test_page_access_config_permissions_persistence_and_revision(navigation_serv
     client, tokens, engine = navigation_server
     path = "/api/system/page-access"
     assert client.get(path, params={"path": "/chat"}).status_code == 401
+    with engine.begin() as conn:
+        conn.execute(
+            ConfigOption.__table__.insert().values(
+                key="role_page_access",
+                name="旧页面权限",
+                description="旧三角色配置",
+                params={"internal": True, "fields": []},
+                value={
+                    "revision": 7,
+                    "rules": {
+                        "user": {"pages": None, "home": "/chat"},
+                        "ducha": {"pages": ["/chat/ducha"], "home": "/chat/ducha"},
+                        "admin": {"pages": None, "home": "/agent"},
+                    },
+                },
+                created_by="nav-superadmin",
+            )
+        )
     for role in ["user", "ducha", "admin"]:
         assert client.get(path + "/manage", headers=tokens[role]).status_code == 403
     config = client.get(path + "/manage", headers=tokens["superadmin"]).json()
     config.pop("catalog")
+    assert config["revision"] == 7
+    assert config["rules"]["inspector"] == {"pages": None, "home": "/chat"}
+    assert config["rules"]["reviewer"] == {"pages": None, "home": "/chat"}
+    with engine.connect() as conn:
+        assert len(conn.scalar(select(ConfigOption.value).where(ConfigOption.key == "role_page_access"))["rules"]) == 3
+    for role in ["inspector", "reviewer"]:
+        assert client.get(path, params={"path": "/chat/thread"}, headers=tokens[role]).json()["allowed"]
+        for target in ["/chat/ducha", "/agent", "/dashboard"]:
+            assert not client.get(path, params={"path": target}, headers=tokens[role]).json()["allowed"]
+        assert client.get("/api/system/chat/ducha", headers=tokens[role]).status_code == 403
     for role in ["user", "ducha", "admin"]:
         assert client.put(path, headers=tokens[role], json=config).status_code == 403
     for target in ["/chat", "/agent", "/extensions", "/chat/knowledge/k"]:
@@ -237,6 +268,33 @@ def test_page_access_config_permissions_persistence_and_revision(navigation_serv
     options = client.get("/api/system/config/options", headers=tokens["admin"])
     assert options.status_code == 200
     assert "role_page_access" not in {item["key"] for item in options.json()["options"]}
+
+
+def test_admin_creates_and_changes_new_business_roles(navigation_server):
+    """真实 HTTP 创建、筛选和改角色后回读持久化身份。"""
+    client, tokens, engine = navigation_server
+    created = []
+    for role in ["inspector", "reviewer"]:
+        response = client.post(
+            "/api/auth/users",
+            headers=tokens["admin"],
+            json={"username": f"nav_new_{role}", "password": "TestPass123!", "role": role},
+        )
+        assert response.status_code == 200, response.text
+        created.append(response.json())
+    for user, role in zip(created, ["inspector", "reviewer"]):
+        assert user["role"] == role and user["department_id"] == 1
+        result = client.get("/api/auth/users/page", headers=tokens["admin"], params={"role": role}).json()
+        assert user["id"] in {item["id"] for item in result["items"]}
+        with engine.connect() as conn:
+            assert conn.scalar(select(User.role).where(User.id == user["id"])) == role
+    path = f"/api/auth/users/{created[0]['id']}"
+    assert client.put(path, headers=tokens["user"], json={"role": "reviewer"}).status_code == 403
+    assert client.put(path, headers=tokens["admin"], json={"role": "admin"}).status_code == 422
+    changed = client.put(path, headers=tokens["admin"], json={"role": "reviewer"})
+    assert changed.status_code == 200 and changed.json()["role"] == "reviewer"
+    with engine.connect() as conn:
+        assert conn.scalar(select(User.role).where(User.id == created[0]["id"])) == "reviewer"
 
 
 def test_workspace_navigation_settings_http(navigation_server):
@@ -269,3 +327,8 @@ def test_workspace_navigation_settings_http(navigation_server):
     assert client.put(path, headers=tokens["superadmin"], json=saved).status_code == 200
     assert client.get(path, params={"workspace": "ducha"}, headers=tokens["superadmin"]).json()["nodes"] == []
     assert len(client.get(path + "/manage", headers=tokens["superadmin"]).json()["nodes"]) == 1
+    granted = client.get(path + "/manage", headers=tokens["superadmin"]).json()
+    granted["nodes"][0]["visibleRoles"] = ["inspector"]
+    assert client.put(path, headers=tokens["superadmin"], json=granted).status_code == 200
+    assert client.get(path, headers=tokens["inspector"]).json()["nodes"][0]["id"] == root["id"]
+    assert client.get(path, headers=tokens["reviewer"]).json()["nodes"] == []

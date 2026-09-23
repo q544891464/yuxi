@@ -133,6 +133,8 @@ import {
 
 const roleOptions = [
   { value: 'user', label: '普通用户' },
+  { value: 'inspector', label: '稽查人员' },
+  { value: 'reviewer', label: '审理人员' },
   { value: 'ducha', label: '督查人员' },
   { value: 'admin', label: '管理员' },
   { value: 'superadmin', label: '超级管理员' }

@@ -22,7 +22,9 @@ class DocumentScope(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     user_uids: list[str] = Field(default_factory=list, max_length=500)
-    roles: list[Literal["user", "admin", "ducha", "superadmin"]] = Field(default_factory=list, max_length=4)
+    roles: list[Literal["user", "inspector", "reviewer", "admin", "ducha", "superadmin"]] = Field(
+        default_factory=list, max_length=6
+    )
     department_ids: list[int] = Field(default_factory=list, max_length=500)
 
 

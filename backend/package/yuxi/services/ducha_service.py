@@ -13,11 +13,12 @@ def get_ducha_page(user):
 
 
 def change_business_role(actor, target, role):
-    """在现有用户编辑事务内切换普通用户与督查人员。"""
+    """在现有用户编辑事务内切换业务人员角色。"""
     if actor.role not in {"admin", "superadmin"}:
-        raise PermissionError("仅管理员可分配督查角色")
+        raise PermissionError("仅管理员可分配业务人员角色")
     if actor.role == "admin" and (actor.department_id is None or actor.department_id != target.department_id):
         raise PermissionError("只能管理本部门用户")
-    if role not in {"user", "ducha"} or target.role not in {"user", "ducha"}:
-        raise PermissionError("仅支持普通用户与督查人员之间切换")
+    business_roles = {"user", "inspector", "reviewer", "ducha"}
+    if role not in business_roles or target.role not in business_roles:
+        raise PermissionError("仅支持业务人员角色之间切换")
     target.role = role
