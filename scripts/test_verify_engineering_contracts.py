@@ -143,6 +143,7 @@ jobs:
           docker compose exec -T -e TEST_USERNAME="$E2E_USERNAME" -e TEST_PASSWORD="$E2E_PASSWORD" api uv run --no-sync --no-dev pytest \\
           test/integration/services/test_workdir_user_workspace.py \\
           test/integration/services/test_user_skill_projection.py \\
+          test/integration/api/test_agent_config_resource_authorization.py \\
           test/integration/api/test_skill_artifact_authorization.py -q
       - run: docker compose exec -T api uv run --no-sync --no-dev pytest test/integration/services/test_project_workdir_provisioner.py -q
 """,
@@ -484,6 +485,7 @@ jobs:
                 for test_file in (
                     "test_agent_run_result_causality.py",
                     "test_apikey_router.py",
+                    "test_agent_config_resource_authorization.py",
                     "test_skill_artifact_authorization.py",
                 ):
                     self.assertTrue(

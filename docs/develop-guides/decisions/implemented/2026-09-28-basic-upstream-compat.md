@@ -35,7 +35,7 @@ Basic 的文档分支推送只执行 VitePress 构建；Pages 配置和 artifact
 | 上游更新与 Basic 修改并存 | Git ancestry、Basic 路由和产品文案 | 合并祖先检查、行业入口负向搜索 | 不涉及部署 |
 | 发送失败恢复兼容多图片 | `AgentChatComponent.vue`、`AgentInputArea.vue` | 前端构建、相关单测和两图恢复负向案例通过 | 未在真实后端跑浏览器发送链路 |
 | v10/v11 数据库可升级至 v12 | `storage_migration.py`、`PostgresManager` | 版本迁移单测与 PostgreSQL 集成案例已写入 | 本地无 Docker，真实 PostgreSQL 测试尚未执行 |
-| 个人 Skill 自动可用且共享 Skill 不越权 | `skills/runtime.py`、`agents/context.py`、Skill repository | 上游隔离单测与 HTTP 集成负向案例已合入 | 本轮 Linux CI 待复核 |
+| 个人 Skill 自动可用且共享 Skill 不越权 | `skills/runtime.py`、`agents/context.py`、Skill repository | 上游隔离单测与 HTTP 集成负向案例已合入，HTTP 案例接入运行链 CI | 外部模型 E2E 未执行 |
 | 通用运行链保持授权和结果绑定 | Agent request、manifest、repository | 工程契约、Ruff 和定向单测通过；此前合并版本的 Linux CI 运行链通过 | 本轮新增变更仍待 Linux CI 复核 |
 
 上一个合入点 `796ca5a5` 的 Linux CI 已通过 backend unit、PostgreSQL 迁移 integration、Agent/worker 运行链、Web 质量和文档构建；本轮新增个人 Skill 变更仍待 CI 复核。本机 Windows 无 Docker，POSIX 文件与符号链接测试无法提供有效通过证据。

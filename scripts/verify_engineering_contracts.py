@@ -141,7 +141,7 @@ WORKFLOW_CONTRACTS = (
             "docker compose exec -T -e E2E_USERNAME -e E2E_PASSWORD api uv run --no-sync --no-dev pytest test/e2e/test_deterministic_agent_path_e2e.py -q -m e2e_lifecycle --durations=10",
             "docker compose exec -T -e E2E_USERNAME -e E2E_PASSWORD api uv run --no-sync --no-dev pytest test/e2e/test_deterministic_agent_path_e2e.py -q -m e2e_boundaries --durations=10",
             'docker compose exec -T -e TEST_USERNAME="$E2E_USERNAME" -e TEST_PASSWORD="$E2E_PASSWORD" api uv run --no-sync --no-dev pytest test/integration/services/test_identity_admin_service.py test/integration/services/test_api_key_schema_migration.py test/integration/services/test_api_key_user_lifecycle.py test/integration/api/test_apikey_router.py -q',
-            'docker compose exec -T -e TEST_USERNAME="$E2E_USERNAME" -e TEST_PASSWORD="$E2E_PASSWORD" api uv run --no-sync --no-dev pytest test/integration/services/test_workdir_user_workspace.py test/integration/services/test_user_skill_projection.py test/integration/api/test_skill_artifact_authorization.py -q',
+            'docker compose exec -T -e TEST_USERNAME="$E2E_USERNAME" -e TEST_PASSWORD="$E2E_PASSWORD" api uv run --no-sync --no-dev pytest test/integration/services/test_workdir_user_workspace.py test/integration/services/test_user_skill_projection.py test/integration/api/test_agent_config_resource_authorization.py test/integration/api/test_skill_artifact_authorization.py -q',
             "docker compose exec -T api uv run --no-sync --no-dev pytest test/integration/services/test_project_workdir_provisioner.py -q",
         ),
         required_paths=(
