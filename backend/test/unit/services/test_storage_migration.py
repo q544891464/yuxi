@@ -236,7 +236,8 @@ async def test_main_rejects_unsupported_business_schema_before_ddl(monkeypatch, 
 
 
 @pytest.mark.asyncio
-async def test_main_v2_business_schema_is_converged_and_versioned_as_current(monkeypatch):
+@pytest.mark.parametrize("business_version", [2, 7])
+async def test_supported_legacy_business_schema_is_converged_and_versioned_as_current(monkeypatch, business_version):
     calls: list[str] = []
     sessions = [_Session(), _Session(), _Session()]
 
@@ -250,7 +251,7 @@ async def test_main_v2_business_schema_is_converged_and_versioned_as_current(mon
         schema_migration_lock=lambda: _async_context(calls, "schema_lock"),
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),
         get_schema_versions=lambda: _async_value(
-            {"business": 2, "knowledge": storage_migration.KNOWLEDGE_SCHEMA_VERSION}
+            {"business": business_version, "knowledge": storage_migration.KNOWLEDGE_SCHEMA_VERSION}
         ),
         record_schema_version=lambda domain, version: _record(calls, f"version:{domain}:{version}"),
         create_business_tables=lambda: _record(calls, "create_business"),
@@ -287,9 +288,9 @@ async def test_main_v2_business_schema_is_converged_and_versioned_as_current(mon
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("previous_version", [7, 8, 9])
+@pytest.mark.parametrize("previous_version", [7, 8, 9, 10])
 async def test_previous_business_schema_is_converged_and_versioned_as_current(monkeypatch, previous_version):
-    """发布版数据库先新增文书表，再记录当前版本。"""
+    """旧版数据库补齐缺失列；仅旧于 v10 的数据库需要新增文书表。"""
 
     calls: list[str] = []
     sessions = [_Session(), _Session(), _Session()]
@@ -332,9 +333,12 @@ async def test_previous_business_schema_is_converged_and_versioned_as_current(mo
     await storage_migration.main()
 
     assert "business_schema" in calls
-    assert calls.index("formal_document_tables") < calls.index(
-        f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
-    )
+    if previous_version < 10:
+        assert calls.index("formal_document_tables") < calls.index(
+            f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
+        )
+    else:
+        assert "formal_document_tables" not in calls
     assert f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}" in calls
 
 

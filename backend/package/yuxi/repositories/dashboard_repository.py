@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import BigInteger, Integer, String, case, cast, distinct, func, literal, or_, select, text
+from sqlalchemy import Integer, String, case, cast, distinct, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.repositories.agent_repository import AgentRepository
@@ -19,7 +19,7 @@ from yuxi.storage.postgres.models_business import (
     ToolCall,
     User,
 )
-from yuxi.utils.datetime_utils import UTC, ensure_shanghai, shanghai_now, utc_now
+from yuxi.utils.datetime_utils import UTC, ensure_shanghai, format_utc_datetime, shanghai_now, utc_now
 
 
 class DashboardRepository:
@@ -27,22 +27,6 @@ class DashboardRepository:
 
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
-
-    @staticmethod
-    def _run_token_total() -> Any:
-        """读取 AgentRun 中由运行终态持久化的可靠 Token 总量。"""
-        return cast(AgentRun.token_usage["total"]["total_tokens"].as_string(), BigInteger)
-
-    def _conversation_run_tokens(self, conversation_ids: list[int] | None = None) -> Any:
-        """按会话聚合运行用量，避免依赖未更新的旧统计表。"""
-        token_total = self._run_token_total()
-        query = select(
-            AgentRun.conversation_id.label("conversation_id"),
-            func.sum(token_total).label("total_tokens"),
-        ).where(AgentRun.conversation_id.isnot(None), token_total.isnot(None))
-        if conversation_ids is not None:
-            query = query.where(AgentRun.conversation_id.in_(conversation_ids))
-        return query.group_by(AgentRun.conversation_id).subquery()
 
     @staticmethod
     def _time_group_format(column: Any, time_range: str) -> Any:
@@ -59,6 +43,46 @@ class DashboardRepository:
         if bind is not None and bind.dialect.name == "sqlite":
             return func.date(column, "+8 hours")
         return func.date(column + text("INTERVAL '8 hours'"))
+
+    @staticmethod
+    def _conversation_token_totals(conversation_ids: list[int] | None = None):
+        """按会话汇总 Run 实测用量，保留缺失标记和无 Run 历史汇总。"""
+        reported = AgentRun.token_usage["usage_reported_call_count"].as_integer() > 0
+        complete = AgentRun.token_usage["complete"].as_boolean().is_(True)
+        value = AgentRun.token_usage["total"]["total_tokens"].as_integer()
+        run_totals = (
+            select(
+                AgentRun.conversation_id,
+                func.sum(case((reported | complete, value), else_=None)).label("total_tokens"),
+                func.min(case((complete & value.isnot(None), 1), else_=0)).label("complete"),
+            )
+            .where(AgentRun.conversation_id.in_(conversation_ids) if conversation_ids is not None else True)
+            .group_by(AgentRun.conversation_id)
+            .subquery()
+        )
+        has_runs = run_totals.c.conversation_id.isnot(None)
+        legacy_tokens = func.nullif(ConversationStats.total_tokens, 0)
+        return (
+            select(
+                Conversation.id.label("conversation_id"),
+                case((has_runs, run_totals.c.total_tokens), else_=legacy_tokens).label("total_tokens"),
+                case((has_runs, run_totals.c.complete == 1), else_=legacy_tokens.isnot(None)).label("complete"),
+            )
+            .where(Conversation.id.in_(conversation_ids) if conversation_ids is not None else True)
+            .outerjoin(run_totals, Conversation.id == run_totals.c.conversation_id)
+            .outerjoin(ConversationStats, Conversation.id == ConversationStats.conversation_id)
+            .subquery()
+        )
+
+    async def get_conversation_token_usage(self, conversation_id: int) -> dict[str, Any]:
+        """读取与会话列表一致的实测 Token 汇总。"""
+        totals = self._conversation_token_totals([conversation_id])
+        row = (
+            await self.db_session.execute(
+                select(totals.c.total_tokens, totals.c.complete).where(totals.c.conversation_id == conversation_id)
+            )
+        ).one()
+        return {"total_tokens": row.total_tokens, "token_usage_complete": bool(row.complete)}
 
     async def list_conversations(
         self,
@@ -97,42 +121,31 @@ class DashboardRepository:
             .outerjoin(User, Conversation.uid == User.uid)
             .where(*filters)
         )
-        page_ids = list(
-            (
-                await self.db_session.execute(
-                    select(Conversation.id)
-                    .select_from(Conversation)
-                    .outerjoin(User, Conversation.uid == User.uid)
-                    .where(*filters)
-                    .order_by(Conversation.updated_at.desc())
-                    .limit(limit)
-                    .offset(offset)
-                )
-            ).scalars()
-        )
-        if not page_ids:
-            return {"items": [], "total": int(total_result.scalar() or 0), "limit": limit, "offset": offset}
-
-        run_tokens = self._conversation_run_tokens(page_ids)
         rows = (
             await self.db_session.execute(
-                select(Conversation, ConversationStats, User, run_tokens.c.total_tokens)
+                select(Conversation, ConversationStats, User)
                 .outerjoin(ConversationStats, Conversation.id == ConversationStats.conversation_id)
                 .outerjoin(User, Conversation.uid == User.uid)
-                .outerjoin(run_tokens, Conversation.id == run_tokens.c.conversation_id)
-                .where(Conversation.id.in_(page_ids))
+                .where(*filters)
                 .order_by(Conversation.updated_at.desc())
+                .limit(limit)
+                .offset(offset)
             )
         ).all()
 
-        agent_slugs = {conversation.agent_id for conversation, _, _, _ in rows if conversation.agent_id}
+        token_totals = self._conversation_token_totals([conversation.id for conversation, _, _ in rows])
+        usage_by_conversation = {
+            row.conversation_id: row for row in (await self.db_session.execute(select(token_totals))).all()
+        }
+        agent_slugs = {conversation.agent_id for conversation, _, _ in rows if conversation.agent_id}
         agents_by_slug: dict[str, Agent] = {}
         if agent_slugs:
             agents = await AgentRepository(self.db_session).list_by_slugs(list(agent_slugs))
             agents_by_slug = {agent.slug: agent for agent in agents}
 
         items = []
-        for conversation, stats, user, run_total_tokens in rows:
+        for conversation, stats, user in rows:
+            usage = usage_by_conversation[conversation.id]
             agent = agents_by_slug.get(conversation.agent_id)
             items.append(
                 {
@@ -149,15 +162,10 @@ class DashboardRepository:
                     "status": conversation.status,
                     "is_pinned": bool(conversation.is_pinned),
                     "message_count": stats.message_count if stats else 0,
-                    "total_tokens": (
-                        int(run_total_tokens)
-                        if run_total_tokens is not None
-                        else int(stats.total_tokens or 0)
-                        if stats
-                        else 0
-                    ),
-                    "created_at": conversation.created_at.isoformat() if conversation.created_at else "",
-                    "updated_at": conversation.updated_at.isoformat() if conversation.updated_at else "",
+                    "total_tokens": usage.total_tokens,
+                    "token_usage_complete": bool(usage.complete),
+                    "created_at": format_utc_datetime(conversation.created_at) or "",
+                    "updated_at": format_utc_datetime(conversation.updated_at) or "",
                 }
             )
         return {
@@ -228,18 +236,6 @@ class DashboardRepository:
             "agent_avatar": normalize_public_minio_url(agent.icon) if agent and agent.icon else None,
             "agent_deleted": agent is None,
         }
-
-    async def get_conversation_total_tokens(self, conversation_id: int, *, legacy_total: int = 0) -> int:
-        """读取单个会话的运行用量；没有运行用量时兼容历史统计值。"""
-        token_total = self._run_token_total()
-        result = await self.db_session.execute(
-            select(func.sum(token_total)).where(
-                AgentRun.conversation_id == conversation_id,
-                token_total.isnot(None),
-            )
-        )
-        total = result.scalar()
-        return int(total) if total is not None else int(legacy_total or 0)
 
     async def get_user_activity_stats(self, *, now: datetime | None = None) -> dict[str, Any]:
         """统计用户总量与近期开启对话的活跃用户。"""
@@ -784,16 +780,11 @@ class DashboardRepository:
         )
         message_summary_row = message_summary_result.one()
 
-        run_tokens = self._conversation_run_tokens()
-        resolved_tokens = case(
-            (run_tokens.c.conversation_id.isnot(None), run_tokens.c.total_tokens),
-            else_=func.coalesce(ConversationStats.total_tokens, 0),
-        )
+        token_totals = self._conversation_token_totals()
         tokens_query = (
-            select(func.coalesce(func.sum(resolved_tokens), 0))
-            .select_from(Conversation)
-            .outerjoin(ConversationStats, ConversationStats.conversation_id == Conversation.id)
-            .outerjoin(run_tokens, run_tokens.c.conversation_id == Conversation.id)
+            select(func.coalesce(func.sum(token_totals.c.total_tokens), 0))
+            .select_from(token_totals)
+            .join(Conversation, token_totals.c.conversation_id == Conversation.id)
             .join(User, Conversation.uid == User.uid)
             .join(Agent, Conversation.agent_id == Agent.slug)
             .where(*conversation_filters)
@@ -930,11 +921,11 @@ class DashboardRepository:
                 Conversation.agent_id,
                 func.count(Conversation.id).label("thread_count"),
                 func.coalesce(func.sum(ConversationStats.message_count), 0).label("message_count"),
-                func.coalesce(func.sum(resolved_tokens), 0).label("token_count"),
+                func.coalesce(func.sum(token_totals.c.total_tokens), 0).label("token_count"),
             )
             .select_from(Conversation)
+            .join(token_totals, Conversation.id == token_totals.c.conversation_id)
             .outerjoin(ConversationStats, Conversation.id == ConversationStats.conversation_id)
-            .outerjoin(run_tokens, run_tokens.c.conversation_id == Conversation.id)
             .join(User, Conversation.uid == User.uid)
             .join(Agent, Conversation.agent_id == Agent.slug)
             .where(*conversation_filters)
@@ -990,7 +981,7 @@ class DashboardRepository:
                 "avatar": normalize_public_minio_url(row.avatar) if row.avatar else None,
                 "thread_count": int(row.thread_count or 0),
                 "message_count": int(row.message_count or 0),
-                "last_active_at": row.last_active_at.isoformat() if row.last_active_at else None,
+                "last_active_at": format_utc_datetime(row.last_active_at),
             }
             for row in user_rows
         ]

@@ -129,6 +129,7 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
             # v0.7.2 tag 没有这些字段，不能用当前 ORM 预建它们来证明迁移。
             for column in ("prepared_at", "first_output_at", "first_model_request_at"):
                 await connection.execute(text(f"ALTER TABLE agent_runs DROP COLUMN {column}"))
+            await connection.execute(text("ALTER TABLE model_providers DROP COLUMN include_user_uid"))
             await connection.execute(text("ALTER TABLE agent_runs ADD COLUMN last_event_id VARCHAR(64)"))
             await connection.execute(text("DROP TABLE scheduled_agent_runs"))
             await connection.execute(text("DROP TABLE scheduled_agent_jobs"))
@@ -162,6 +163,17 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
                         text(
                             "SELECT column_name FROM information_schema.columns "
                             "WHERE table_schema = :schema AND table_name = 'agent_runs'"
+                        ),
+                        {"schema": schema},
+                    )
+                ).scalars()
+            )
+            provider_columns = set(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = :schema AND table_name = 'model_providers'"
                         ),
                         {"schema": schema},
                     )
@@ -244,6 +256,7 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
             "timeout_seconds",
         } <= task_columns
         assert {"prepared_at", "first_output_at", "first_model_request_at"} <= run_columns
+        assert {"include_user_uid"} <= provider_columns
         assert "last_event_id" not in run_columns
         assert tuple(row) == ("running", None, 0, 0)
         assert scheduled_tables == {"scheduled_agent_jobs", "scheduled_agent_runs"}
@@ -268,7 +281,39 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
             "ix_scheduled_agent_runs_job_created",
             "ix_scheduled_agent_runs_dispatching",
         }.issubset(scheduled_indexes)
-        assert BUSINESS_SCHEMA_VERSION == 9
+        assert BUSINESS_SCHEMA_VERSION == 11
+    finally:
+        await _drop_isolated_schema(schema, admin_engine, scoped_engine)
+
+
+async def test_basic_v10_upgrade_restores_model_provider_uid_column() -> None:
+    """现有 Basic v10 数据库升级时补齐上游新增字段，保留供应商记录。"""
+    schema, admin_engine, scoped_engine, manager = await _create_isolated_manager("pytest_basic_v10")
+    try:
+        await manager.create_business_tables()
+        async with scoped_engine.begin() as connection:
+            await connection.execute(text("ALTER TABLE model_providers DROP COLUMN include_user_uid"))
+            await connection.execute(
+                text(
+                    "INSERT INTO model_providers "
+                    "(provider_id, provider_type, display_name, base_url, is_enabled, is_builtin) "
+                    "VALUES ('existing-provider', 'openai', 'Existing', 'https://example.invalid', TRUE, FALSE)"
+                )
+            )
+
+        await manager.ensure_business_schema()
+        await manager.ensure_business_schema()
+
+        async with scoped_engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT provider_id, include_user_uid FROM model_providers "
+                        "WHERE provider_id = 'existing-provider'"
+                    )
+                )
+            ).one()
+        assert tuple(row) == ("existing-provider", False)
     finally:
         await _drop_isolated_schema(schema, admin_engine, scoped_engine)
 
