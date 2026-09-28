@@ -296,8 +296,10 @@ async def test_basic_v10_upgrade_restores_model_provider_uid_column() -> None:
             await connection.execute(
                 text(
                     "INSERT INTO model_providers "
-                    "(provider_id, provider_type, display_name, base_url, is_enabled, is_builtin) "
-                    "VALUES ('existing-provider', 'openai', 'Existing', 'https://example.invalid', TRUE, FALSE)"
+                    "(provider_id, provider_type, display_name, base_url, "
+                    "capabilities, enabled_models, is_enabled, is_builtin) "
+                    "VALUES ('existing-provider', 'openai', 'Existing', 'https://example.invalid', "
+                    "'[]'::json, '[]'::json, TRUE, FALSE)"
                 )
             )
 

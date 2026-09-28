@@ -16,6 +16,8 @@ Basic 合入上游 `main`。`agent_request_service.py` 统一接收并持久化�
 
 Basic 的 System Tests 在合并后必须构建 Compose 的 `sandbox-runtime-image`，其默认镜像名仅存在本地，不能作为远程镜像执行 `docker pull`。合并后的后端单测 fixture 按可信持久配置与真实用户字段补齐，保持原有权限边界。
 
+Basic 的文档分支推送只执行 VitePress 构建；Pages 配置和 artifact 上传仅在 `main` 推送时运行，避免未启用 Pages 的 fork 阻断 Basic 验证。
+
 ## 替代方案
 
 - 只挑选少数修复：短期冲突少，但请求、前端与持久化契约相互依赖，容易漏改。
