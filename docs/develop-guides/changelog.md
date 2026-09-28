@@ -19,7 +19,6 @@
 
 ### 功能与修复
 
-- 新增稽查人员和审理人员角色，可在用户管理中分配身份，并在页面入口、侧栏技能及文书流程范围中分别配置；两者默认进入 `/chat`，不开放督查或管理入口。旧页面配置读取时自动补齐新角色默认规则，详见[角色决策](./decisions/implemented/2026-09-23-inspection-review-roles.md)。
 - 新增用户定时智能体任务（Beta），支持 cron、时区、独立 Project 和立即运行；重叠执行跳过，错过的触发合并处理。边界见[定时任务决策](./decisions/implemented/2026-08-26-user-agent-scheduled-tasks.md)。
 - 支持空闲线程主动压缩上下文；达到预算 85% 时提示操作。自动压缩统一使用一个阈值，大工具结果保留完整文件及模型可读摘要，检索预览保留来源信息。
 - 完善 Model/Tool 增量审计和按 Run 分组的调试时间线，收紧审计与普通聊天记录的隔离；审计接口返回最新 500 条并明确标记截断，详见[审计接口决策](./decisions/implemented/2026-09-03-unify-message-audit-read-api.md)。

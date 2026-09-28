@@ -2,6 +2,8 @@
 
 Yuxi 是一个可私有部署的多租户知识智能体平台。它把知识库检索、知识图谱、LangGraph 多智能体编排、MCP/Skills、沙盒工具和权限管理放进同一个工作区。
 
+`basic` 分支提供通用版本：登录后进入 `/chat`，保留项目、附件、知识库、通用 Skills 与智能体管理；不预置税务数字人、税务角色、业务技能树或文书移交流程。请为 Basic 使用独立配置和数据库，避免继承 `cydx` 部署中已保存的品牌、用户技能与业务资料。
+
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=ffffff)](https://github.com/xerrors/Yuxi/blob/main/docker-compose.yml)
 [![Release](https://img.shields.io/github/v/release/xerrors/Yuxi?color=046A82)](https://github.com/xerrors/Yuxi/releases/latest)
 [![License](https://img.shields.io/github/license/xerrors/Yuxi.svg?logo=github)](https://github.com/xerrors/Yuxi/blob/main/LICENSE)

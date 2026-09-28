@@ -146,13 +146,6 @@ test('设置仅挂载访问页，切换保留表单，关闭重开只挂载当�
 
     useUserStore().userRole = 'user'
     await nextTick()
-    await select('侧栏技能')
-    assert.ok(find(host, (node) => node.props.panel === 'SkillCardList'))
-    assert.equal(
-      find(host, (node) => node.props.panel === 'SkillNavigationSettings'),
-      undefined
-    )
-
     visible.value = false
     await nextTick()
     visible.value = true
@@ -169,14 +162,11 @@ test('设置仅挂载访问页，切换保留表单，关闭重开只挂载当�
   }
 })
 
-test('普通用户可打开侧栏技能且个人管理面板替代全局导航编辑器', () => {
+test('Basic 设置保留通用账户选项，不加载业务技能导航编辑器', () => {
   const source = readFileSync(
     new URL('../../src/components/SettingsModal.vue', import.meta.url),
     'utf8'
   )
-  assert.match(source, /v-if="userStore\.isLoggedIn"[\s\S]*?<span>侧栏技能<\/span>/)
-  assert.match(source, /<SkillNavigationSettings v-if="userStore\.isAdmin" \/>/)
-  assert.match(source, /<SkillCardList \/>/)
-  assert.match(source, /平台共享技能仅供查看，无法修改/)
-  assert.match(source, /tabs\.push\('account', 'apiKeys', 'agentEnv', 'skillNavigation'\)/)
+  assert.match(source, /tabs\.push\('account', 'apiKeys', 'agentEnv'\)/)
+  assert.doesNotMatch(source, /SkillNavigationSettings|DocumentWorkflowSettings|RolePageAccessSettings/)
 })

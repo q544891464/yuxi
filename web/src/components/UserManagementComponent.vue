@@ -51,9 +51,6 @@
           <a-select-option value="superadmin">超级管理员</a-select-option>
           <a-select-option value="admin">管理员</a-select-option>
           <a-select-option value="user">普通用户</a-select-option>
-          <a-select-option value="inspector">稽查人员</a-select-option>
-          <a-select-option value="reviewer">审理人员</a-select-option>
-          <a-select-option value="ducha">督查人员</a-select-option>
         </a-select>
       </div>
     </div>
@@ -243,15 +240,12 @@
         </template>
 
         <a-form-item
-          v-if="!userManagement.editMode || ['user', 'inspector', 'reviewer', 'ducha'].includes(userManagement.form.role)"
+          v-if="!userManagement.editMode || userManagement.form.role === 'user'"
           label="角色"
           class="form-item"
         >
           <a-select v-model:value="userManagement.form.role">
             <a-select-option value="user">普通用户</a-select-option>
-            <a-select-option value="inspector">稽查人员</a-select-option>
-            <a-select-option value="reviewer">审理人员</a-select-option>
-            <a-select-option value="ducha">督查人员</a-select-option>
             <a-select-option value="admin" v-if="userStore.isSuperAdmin && !userManagement.editMode"
               >管理员</a-select-option
             >
@@ -328,9 +322,6 @@ const columns = [
 
 const getRoleDisplayName = (role) => {
   const map = {
-    inspector: '稽查人员',
-    reviewer: '审理人员',
-    ducha: '督查人员',
     superadmin: '超级管理员',
     admin: '管理员',
     user: '普通用户'
@@ -711,7 +702,7 @@ const handleUserFormSubmit = async () => {
         username: userManagement.form.username.trim()
       }
 
-      if (['user', 'inspector', 'reviewer', 'ducha'].includes(userManagement.form.role)) {
+      if (userManagement.form.role === 'user') {
         updateData.role = userManagement.form.role
       }
 

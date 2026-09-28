@@ -11,8 +11,7 @@ import {
   PanelLeft,
   PanelLeftOpen,
   MessageCirclePlus,
-  Search,
-  WandSparkles
+  Search
 } from '@lucide/vue'
 
 import { useConfigStore } from '@/stores/config'
@@ -30,15 +29,10 @@ import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
 import ArchivedItemsDrawer from '@/components/ArchivedItemsDrawer.vue'
-import FormalDocumentCenter from '@/components/FormalDocumentCenter.vue'
-import SkillEntryMenu from '@/components/SkillEntryMenu.vue'
-import { useSkillNavigationStore } from '@/stores/skillNavigation'
-import { INSPECTION_KB_ID, SKILL_CREATOR_ENTRY } from '@/utils/skillEntries'
 import GlobalSearchModal from '@/components/GlobalSearchModal.vue'
 import { searchWorkspaceFiles } from '@/apis/workspace_api'
 import { projectApi } from '@/apis/project_api'
 import { threadApi } from '@/apis/agent_api'
-import { resolveConsumerChatReturnTarget } from '@/utils/consumerWorkspace'
 
 const configStore = useConfigStore()
 const agentStore = useAgentStore()
@@ -56,36 +50,16 @@ const { threads, currentThreadId, hasMoreThreads, isLoadingMoreThreads, threadCr
 
 // Add state for settings modal
 const showSettingsModal = ref(false)
-const showDocumentCenter = ref(false)
 const settingsInitialTab = ref('')
 
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
 const conversationSearchOpen = ref(false)
 const projectPendingId = ref(null)
-const skillsExpanded = ref(true)
-const skillNavigation = useSkillNavigationStore()
-const skillEntryTree = computed(() => skillNavigation.nodes)
-const loadSkillNavigation = () => skillNavigation.load(true).catch(() => {})
-onMounted(loadSkillNavigation)
-const projectSkillPickerId = ref('')
 const archiveOpen = ref(false)
 const archiveLoading = ref(false)
 const archiveError = ref('')
 const archivedProjects = ref([])
 const archivedThreads = ref([])
-
-/** 技能入口只准备草稿，上传或发送沿用对话组件的线程创建。 */
-const openSkillEntry = async (skillId, projectId = '') => {
-  if (threadCreationInFlight.value) return
-  await router.push({
-    name: entryRoute.value,
-    query: {
-      ...(projectId ? { project_id: projectId } : {}),
-      ...(skillId ? { skill: skillId } : {})
-    }
-  })
-  projectSkillPickerId.value = ''
-}
 
 // Provide settings modal methods to child components
 const openSettingsModal = (tab) => {
@@ -159,22 +133,9 @@ onUnmounted(() => {
 })
 
 const route = useRoute()
-watch(
-  () => !!route.meta.ducha,
-  (ducha) => skillNavigation.setWorkspace(ducha ? 'ducha' : 'inspection'),
-  { immediate: true, flush: 'sync' }
-)
 const router = useRouter()
 const consumerChat = computed(() => route.meta.consumerChat === true)
-const consumerBrandTarget = computed(() => {
-  if (route.name === 'ConsumerKnowledgeBaseDetail' || route.name === 'ConsumerDashboard') {
-    return resolveConsumerChatReturnTarget(route.query.returnTo)
-  }
-  return route.meta.ducha ? '/chat/ducha' : '/chat'
-})
-const entryRoute = computed(() =>
-  route.meta.ducha ? 'DuchaChatComp' : consumerChat.value ? 'ChatComp' : 'AgentComp'
-)
+const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
 
 const activeTaskCount = computed(() => activeCountRef.value || 0)
 const activeConversationThreadId = computed(() => {
@@ -185,7 +146,7 @@ const mainList = computed(() => {
   const items = [
     {
       name: '新建对话',
-      path: '/agent',
+      path: '/chat',
       icon: MessageCirclePlus,
       activeIcon: MessageCirclePlus,
       action: true,
@@ -224,7 +185,7 @@ const mainList = computed(() => {
     })
   }
 
-  return items.filter((item) => userStore.canVisitPage(item.path))
+  return items
 })
 
 const primaryNavItem = computed(() => mainList.value.find((item) => item.action) || null)
@@ -244,15 +205,6 @@ const setSidebarCollapsed = (collapsed) => {
 
 const toggleSidebar = () => {
   setSidebarCollapsed(!sidebarCollapsed.value)
-}
-
-const openSkillsMenu = () => {
-  setSidebarCollapsed(false)
-  skillsExpanded.value = true
-}
-
-const handleProjectExpanded = (expanded) => {
-  if (expanded) skillsExpanded.value = false
 }
 
 const openConversationSearch = () => {
@@ -281,7 +233,6 @@ const loadProjects = async () => {
 const handleSelectChat = (threadId) => {
   if (!threadId) return
   if (!chatThreadsStore.setCurrentThreadId(threadId)) return
-  projectSkillPickerId.value = ''
   router.push({ name: `${entryRoute.value}WithThreadId`, params: { thread_id: threadId } })
 }
 
@@ -297,16 +248,11 @@ const handleSearchSelectThread = (thread) => {
 
 const handleCreateConversationFromSearch = () => {
   if (!chatThreadsStore.setCurrentThreadId(null)) return
-  projectSkillPickerId.value = ''
   router.push({ name: entryRoute.value })
 }
 
 const handleCreateProjectChat = async (projectId) => {
   if (!projectId || projectPendingId.value || threadCreationInFlight.value) return
-  if (consumerChat.value) {
-    projectSkillPickerId.value = projectSkillPickerId.value === projectId ? '' : projectId
-    return
-  }
   await router.push({ name: entryRoute.value, query: { project_id: projectId } })
   chatThreadsStore.setCurrentThreadId(null)
 }
@@ -495,12 +441,9 @@ provide('settingsModal', {
     }"
   >
     <header v-if="consumerChat" class="consumer-topbar">
-      <RouterLink :to="consumerBrandTarget" class="consumer-brand">
+      <RouterLink to="/chat" class="consumer-brand">
         <span class="consumer-logo" aria-hidden="true"></span>
-        <span
-          ><strong>智能辅助{{ route.meta.ducha ? '督查' : '稽查' }}数字人</strong
-          ><small>税务{{ route.meta.ducha ? '督查' : '稽查' }}智能助手</small></span
-        >
+        <span><strong>Yuxi 智能助手</strong><small>知识与智能体工作台</small></span>
       </RouterLink>
     </header>
     <div class="header" :class="{ 'consumer-history': consumerChat }">
@@ -536,17 +479,7 @@ provide('settingsModal', {
           </button>
         </div>
       </div>
-      <button
-        v-if="consumerChat"
-        class="consumer-new-chat"
-        type="button"
-        :disabled="threadCreationInFlight"
-        @click="handleCreateConversationFromSearch"
-        aria-label="新建对话"
-      >
-        <MessageCirclePlus :size="18" /><span v-if="!sidebarCollapsed">新建对话</span>
-      </button>
-      <div v-if="!consumerChat" class="nav">
+      <div class="nav">
         <RouterLink
           v-if="primaryNavItem"
           :to="primaryNavItem.path"
@@ -603,15 +536,6 @@ provide('settingsModal', {
         </RouterLink>
       </div>
       <div class="fill">
-        <button
-          v-if="consumerChat && sidebarCollapsed"
-          class="consumer-nav-link"
-          type="button"
-          aria-label="打开技能菜单"
-          @click="openSkillsMenu"
-        >
-          <WandSparkles :size="18" />
-        </button>
         <ConversationNavSection
           v-if="!sidebarCollapsed"
           class="sidebar-conversations"
@@ -623,10 +547,6 @@ provide('settingsModal', {
           :project-pending-id="projectPendingId"
           :has-more-chats="hasMoreThreads"
           :is-loading-more="isLoadingMoreThreads"
-          :skill-picker-project-id="projectSkillPickerId"
-          :skill-entries="consumerChat ? skillEntryTree : []"
-          :skill-selection-disabled="threadCreationInFlight"
-          @select-project-skill="({ skillId, projectId }) => openSkillEntry(skillId, projectId)"
           @select-chat="handleSelectChat"
           @delete-chat="handleDeleteChat"
           @archive-chat="handleArchiveChat"
@@ -638,67 +558,9 @@ provide('settingsModal', {
           @archive-project="handleArchiveProject"
           @open-archive="openArchive"
           @create-project-chat="handleCreateProjectChat"
-          @project-expanded="handleProjectExpanded"
           @retry-projects="loadProjects"
           @load-more-chats="() => chatThreadsStore.loadMoreThreads()"
-        >
-          <template #after-projects>
-            <div v-if="consumerChat" class="consumer-skills-nav sidebar-skill-module">
-              <button
-                type="button"
-                class="consumer-nav-link"
-                :aria-expanded="skillsExpanded"
-                @click="skillsExpanded = !skillsExpanded"
-              >
-                <WandSparkles :size="17" />技能
-                <span class="skill-expand-hint">{{ skillsExpanded ? '收起' : '展开' }}</span>
-              </button>
-              <div v-if="skillsExpanded">
-                <button
-                  type="button"
-                  class="consumer-nav-link"
-                  :disabled="threadCreationInFlight"
-                  @click="openSkillEntry(SKILL_CREATOR_ENTRY.id)"
-                >
-                  添加技能
-                </button>
-                <button
-                  v-if="skillNavigation.error"
-                  type="button"
-                  class="consumer-nav-link"
-                  @click="loadSkillNavigation"
-                >
-                  {{ skillNavigation.error }}
-                </button>
-                <SkillEntryMenu
-                  :nodes="skillEntryTree"
-                  :selected-id="String(route.query.skill || '')"
-                  :disabled="threadCreationInFlight"
-                  @select="openSkillEntry($event)"
-                />
-              </div>
-              <button type="button" class="consumer-nav-link" @click="showDocumentCenter = true">
-                <ClipboardList :size="17" />文书中心
-              </button>
-              <RouterLink
-                v-if="userStore.canVisitPage('/extensions')"
-                class="consumer-nav-link"
-                :to="{
-                  name: 'ConsumerKnowledgeBaseDetail',
-                  params: { kbId: INSPECTION_KB_ID },
-                  query: { returnTo: route.fullPath }
-                }"
-                ><LibraryBig :size="17" />知识库</RouterLink
-              >
-              <RouterLink
-                v-if="userStore.isAdmin && userStore.canVisitPage('/dashboard')"
-                class="consumer-nav-link"
-                :to="{ name: 'ConsumerDashboard', query: { returnTo: route.fullPath } }"
-                ><BarChart3 :size="17" />数据总览</RouterLink
-              >
-            </div>
-          </template>
-        </ConversationNavSection>
+        />
       </div>
       <div class="foo">
         <!-- 用户信息组件 -->
@@ -748,7 +610,6 @@ provide('settingsModal', {
       @select-file="handleSearchSelectFile"
     />
 
-    <FormalDocumentCenter v-model:open="showDocumentCenter" />
     <ArchivedItemsDrawer
       :open="archiveOpen"
       :loading="archiveLoading"
@@ -771,31 +632,6 @@ provide('settingsModal', {
 </template>
 
 <style lang="less" scoped>
-.consumer-skills-nav {
-  padding: 8px 10px;
-}
-.consumer-nav-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--color-text);
-  text-align: left;
-  cursor: pointer;
-  font-size: 14px;
-}
-.consumer-nav-link:hover {
-  background: var(--main-10);
-}
-.skill-expand-hint {
-  margin-left: auto;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
 .consumer-layout .header > .fill {
   overflow-y: auto;
 }
@@ -850,7 +686,7 @@ provide('settingsModal', {
     width: 48px;
     height: 48px;
     flex-shrink: 0;
-    background: url('/cydx/ai-logo.png') center / contain no-repeat;
+    background: url('/favicon.svg') center / contain no-repeat;
   }
   .consumer-history {
     grid-column: 1;

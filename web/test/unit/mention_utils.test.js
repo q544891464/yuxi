@@ -53,10 +53,9 @@ test('没有 chip 边界时仍按文本 mention 解析删除', () => {
   })
 })
 
-test('历史技能引用显示中文而不是英文名称或 slug', () => {
-  assert.equal(mentionUtils.getMentionDisplayLabel('skill', 'audit-report-writer', {
-    'skill:audit-report-writer': 'Audit Report Writer'
-  }), '撰写稽查报告')
-  assert.equal(mentionUtils.getMentionDisplayLabel('skill', 'ai-assisted-review'), '撰写审理文书')
-  assert.equal(mentionUtils.getMentionDisplayLabel('skill', 'vat-surtax-recalc'), '申报数据处理')
+test('技能引用使用配置的名称，缺失时显示 slug', () => {
+  assert.equal(mentionUtils.getMentionDisplayLabel('skill', 'data-summary', {
+    'skill:data-summary': '数据汇总'
+  }), '数据汇总')
+  assert.equal(mentionUtils.getMentionDisplayLabel('skill', 'data-summary'), 'data-summary')
 })

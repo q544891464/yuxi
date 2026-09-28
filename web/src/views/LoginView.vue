@@ -31,7 +31,7 @@
               ></span>
               <span class="brand-main">{{ brandName }}</span>
             </h1>
-            <small class="brand-subtitle">税务稽查智能助手</small>
+            <small class="brand-subtitle">知识与智能体工作台</small>
           </div>
         </div>
       </div>
@@ -47,7 +47,7 @@
               <h2 v-if="isFirstRun" class="init-title">系统初始化，请创建超级管理员</h2>
               <template v-else>
                 <h2 class="welcome-text">欢迎登录</h2>
-                <p class="welcome-description">登录后开启您的智能辅助稽查工作</p>
+                <p class="welcome-description">登录后继续您的智能工作</p>
               </template>
             </header>
 
@@ -310,7 +310,7 @@ const brandOrgName = computed(() => {
 })
 const brandName = computed(() => {
   const orgName = brandOrgName.value
-  const brandNameRaw = infoStore.branding?.name?.trim() || '智能辅助稽查数字人'
+  const brandNameRaw = infoStore.branding?.name?.trim() || 'Yuxi 智能助手'
 
   if (orgName && brandNameRaw && orgName !== brandNameRaw) {
     return brandNameRaw
@@ -487,7 +487,7 @@ const handleLogin = async () => {
 
     // 根据用户角色决定重定向目标
     if (redirectPath === '/') {
-      router.push(userStore.isAdmin ? '/agent' : '/chat')
+      router.push('/chat')
     } else {
       // 跳转到其他预设的路径
       router.push(redirectPath)
@@ -762,7 +762,7 @@ onUnmounted(() => {
   width: 48px;
   height: 48px;
   flex-shrink: 0;
-  background: url('/cydx/ai-logo.png') center / contain no-repeat;
+  background: url('/favicon.svg') center / contain no-repeat;
 }
 
 .brand-subtitle {

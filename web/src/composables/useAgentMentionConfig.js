@@ -1,6 +1,3 @@
-import { useSkillNavigationStore } from '@/stores/skillNavigation'
-import { flattenSkillEntries } from '@/utils/skillEntries'
-import { getSkillDisplayName } from '@/utils/skillDisplayName'
 import { computed } from 'vue'
 import {
   getAgentConfigOptionDescription,
@@ -50,7 +47,7 @@ const normalizeMentionResource = (option, kind) => {
 
   return {
     slug: value,
-    name: kind === 'skills' ? getSkillDisplayName(value, getSkillDisplayName(name)) : name,
+    name,
     description
   }
 }
@@ -61,7 +58,6 @@ export function useAgentMentionConfig({
   configurableItems,
   agentConfig
 }) {
-  const navigation = useSkillNavigationStore()
   const mentionConfig = computed(() => {
     const rawFiles = currentAgentState.value?.files || {}
     const files = []
@@ -129,12 +125,6 @@ export function useAgentMentionConfig({
 
         const normalized = normalizeMentionResource(option, kind)
         if (normalized) {
-          if (kind === 'skills') {
-            const entry = flattenSkillEntries(navigation.nodes).find(
-              (node) => node.skillSlug === value
-            )
-            if (entry) normalized.name = entry.skillDisplayName
-          }
           optionsByKind[kind].set(value, normalized)
         }
       })

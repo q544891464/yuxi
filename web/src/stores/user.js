@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/apis/auth_api'
 import { useAgentStore } from './agent'
-import { canVisitPage as allowsPage } from '@/utils/pageAccess'
 
 export const useUserStore = defineStore('user', () => {
   // 状态
@@ -15,8 +14,6 @@ export const useUserStore = defineStore('user', () => {
   const userRole = ref('')
   const departmentId = ref(null)
   const departmentName = ref('')
-  const allowedPages = ref(undefined)
-  const canVisitPage = (path) => isSuperAdmin.value || allowsPage(allowedPages.value, path)
 
   // 计算属性
   const isLoggedIn = computed(() => !!token.value)
@@ -25,7 +22,6 @@ export const useUserStore = defineStore('user', () => {
 
   // 动作
   function applySession(data) {
-    allowedPages.value = undefined
     token.value = data.access_token
     userId.value = data.user_id
     username.value = data.username
@@ -50,7 +46,6 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function logout() {
-    allowedPages.value = undefined
     // 清除状态
     token.value = ''
     userId.value = null
@@ -185,7 +180,6 @@ export const useUserStore = defineStore('user', () => {
       uid.value = userData.uid
       phoneNumber.value = userData.phone_number || ''
       avatar.value = userData.avatar || ''
-      if (userRole.value !== userData.role) allowedPages.value = undefined
       userRole.value = userData.role
       departmentId.value = userData.department_id || null
       departmentName.value = userData.department_name || ''
@@ -228,8 +222,6 @@ export const useUserStore = defineStore('user', () => {
     userRole,
     departmentId,
     departmentName,
-    allowedPages,
-    canVisitPage,
 
     // 计算属性
     isLoggedIn,

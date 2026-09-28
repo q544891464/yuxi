@@ -51,9 +51,8 @@
           </div>
         </div>
 
-        <EvidenceReviewResult v-if="evidenceReview" :result="evidenceReview" />
         <MarkdownPreview
-          v-else-if="resultText"
+          v-if="resultText"
           compact
           :content="resultText"
           class="md-preview-wrapper"
@@ -69,8 +68,6 @@
 import { computed } from 'vue'
 import BaseToolCall from '../BaseToolCall.vue'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
-import EvidenceReviewResult from './EvidenceReviewResult.vue'
-import { parseEvidenceReview } from '@/utils/evidence_review'
 import {
   getToolCallId,
   parseToolCallArgs,
@@ -244,7 +241,6 @@ const fallbackResult = computed(() => {
     return ''
   return JSON.stringify(parsedResult.value, null, 2)
 })
-const evidenceReview = computed(() => parseEvidenceReview(resultText.value))
 </script>
 
 <style lang="less" scoped>

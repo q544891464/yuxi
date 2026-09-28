@@ -20,22 +20,6 @@
       <div class="settings-sider">
         <div class="settings-sider-nav">
           <div
-            v-if="userStore.isSuperAdmin"
-            class="sider-item"
-            :class="{ activesec: activeTab === 'documentWorkflows' }"
-            @click="activeTab = 'documentWorkflows'"
-          >
-            <Settings class="icon" :size="18" /><span>文书流程</span>
-          </div>
-          <div
-            v-if="userStore.isSuperAdmin"
-            class="sider-item"
-            :class="{ activesec: activeTab === 'pageAccess' }"
-            @click="activeTab = 'pageAccess'"
-          >
-            <Settings class="icon" :size="18" /><span>角色页面权限</span>
-          </div>
-          <div
             class="sider-item"
             :class="{ activesec: activeTab === 'account' }"
             @click="activeTab = 'account'"
@@ -61,14 +45,6 @@
           >
             <Settings class="icon" :size="18" />
             <span>基本设置</span>
-          </div>
-          <div
-            v-if="userStore.isLoggedIn"
-            class="sider-item"
-            :class="{ activesec: activeTab === 'skillNavigation' }"
-            @click="activeTab = 'skillNavigation'"
-          >
-            <Settings class="icon" :size="18" /><span>侧栏技能</span>
           </div>
           <div
             class="sider-item"
@@ -111,30 +87,6 @@
 
       <!-- 顶部导航 (Mobile) -->
       <div class="settings-mobile-nav">
-        <div
-          v-if="userStore.isSuperAdmin"
-          class="nav-item"
-          :class="{ active: activeTab === 'documentWorkflows' }"
-          @click="activeTab = 'documentWorkflows'"
-        >
-          文书流程
-        </div>
-        <div
-          v-if="userStore.isSuperAdmin"
-          class="nav-item"
-          :class="{ active: activeTab === 'pageAccess' }"
-          @click="activeTab = 'pageAccess'"
-        >
-          角色页面权限
-        </div>
-        <div
-          v-if="userStore.isLoggedIn"
-          class="nav-item"
-          :class="{ active: activeTab === 'skillNavigation' }"
-          @click="activeTab = 'skillNavigation'"
-        >
-          侧栏技能
-        </div>
         <div
           class="nav-item"
           :class="{ active: activeTab === 'account' }"
@@ -197,18 +149,6 @@
       <div class="settings-content-wrapper">
         <div class="settings-content">
           <div
-            v-if="userStore.isSuperAdmin && loadedTabs.has('documentWorkflows')"
-            v-show="activeTab === 'documentWorkflows'"
-          >
-            <DocumentWorkflowSettings />
-          </div>
-          <div
-            v-if="userStore.isSuperAdmin && loadedTabs.has('pageAccess')"
-            v-show="activeTab === 'pageAccess'"
-          >
-            <RolePageAccessSettings />
-          </div>
-          <div
             v-show="activeTab === 'account'"
             v-if="userStore.isLoggedIn && loadedTabs.has('account')"
           >
@@ -233,17 +173,6 @@
             <BasicSettingsSection />
           </div>
 
-          <div
-            v-if="userStore.isLoggedIn && loadedTabs.has('skillNavigation')"
-            v-show="activeTab === 'skillNavigation'"
-          >
-            <SkillNavigationSettings v-if="userStore.isAdmin" />
-            <div v-else class="personal-skill-settings">
-              <h2>侧栏技能</h2>
-              <p>添加和管理您的个人技能；平台共享技能仅供查看，无法修改。</p>
-              <SkillCardList />
-            </div>
-          </div>
           <div v-show="activeTab === 'ocr'" v-if="userStore.isAdmin && loadedTabs.has('ocr')">
             <OCRSettingsSection />
           </div>
@@ -273,18 +202,8 @@ import { createAsyncPanel } from '@/utils/asyncPanel'
 const AccountSettingsComponent = createAsyncPanel(
   () => import('@/components/AccountSettingsComponent.vue')
 )
-const DocumentWorkflowSettings = createAsyncPanel(
-  () => import('@/components/DocumentWorkflowSettings.vue')
-)
-const RolePageAccessSettings = createAsyncPanel(
-  () => import('@/components/RolePageAccessSettings.vue')
-)
 const AgentEnvSettingsCard = createAsyncPanel(() => import('@/components/AgentEnvSettingsCard.vue'))
 const BasicSettingsSection = createAsyncPanel(() => import('@/components/BasicSettingsSection.vue'))
-const SkillNavigationSettings = createAsyncPanel(
-  () => import('@/components/SkillNavigationSettings.vue')
-)
-const SkillCardList = createAsyncPanel(() => import('@/components/extensions/SkillCardList.vue'))
 const OCRSettingsSection = createAsyncPanel(() => import('@/components/OCRSettingsSection.vue'))
 const ApiKeyManagementComponent = createAsyncPanel(
   () => import('@/components/ApiKeyManagementComponent.vue')
@@ -319,9 +238,9 @@ const visible = computed({
 
 const availableTabs = computed(() => {
   const tabs = []
-  if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv', 'skillNavigation')
+  if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
   if (userStore.isAdmin) tabs.push('base', 'ocr', 'user')
-  if (userStore.isSuperAdmin) tabs.push('department', 'pageAccess', 'documentWorkflows')
+  if (userStore.isSuperAdmin) tabs.push('department')
   return tabs
 })
 

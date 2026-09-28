@@ -19,9 +19,7 @@
 
     <template #result>
       <div class="task-result">
-        <EvidenceReviewResult v-if="evidenceReview" :result="evidenceReview" />
         <MarkdownPreview
-          v-else
           compact
           :content="String(displayResult)"
           class="md-preview-wrapper"
@@ -35,8 +33,6 @@
 import { computed, inject } from 'vue'
 import BaseToolCall from '../BaseToolCall.vue'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
-import EvidenceReviewResult from './EvidenceReviewResult.vue'
-import { parseEvidenceReview } from '@/utils/evidence_review'
 import { MessageProcessor } from '@/utils/messageProcessor'
 import { getToolCallDisplayStatus, parseToolCallArgs } from '../toolRegistry'
 
@@ -89,7 +85,6 @@ const displayResult = computed(() => {
   return props.toolCall.tool_call_result?.content ?? props.toolCall.result ?? ''
 })
 const hasDisplayResult = computed(() => displayResult.value !== '')
-const evidenceReview = computed(() => parseEvidenceReview(displayResult.value))
 const shortDescription = computed(() => {
   const desc = description.value
   if (!desc) return ''

@@ -115,32 +115,6 @@
                       </button>
                     </a-dropdown>
                   </div>
-                  <div
-                    v-if="skillPickerProjectId === group.project.id && skillEntries.length"
-                    class="project-skill-picker"
-                    aria-label="新建会话：选择技能"
-                  >
-                    <span>新建会话：选择技能</span>
-                    <button
-                      type="button"
-                      :disabled="skillSelectionDisabled"
-                      @click="
-                        $emit('select-project-skill', { projectId: group.project.id, skillId: '' })
-                      "
-                    >
-                      不使用技能，直接对话
-                    </button>
-                    <SkillEntryMenu
-                      :nodes="skillEntries"
-                      :disabled="skillSelectionDisabled"
-                      @select="
-                        $emit('select-project-skill', {
-                          projectId: group.project.id,
-                          skillId: $event
-                        })
-                      "
-                    />
-                  </div>
                   <CollapseTransition>
                     <div v-if="isProjectExpanded(group.project.id)" class="project-conversations">
                       <ConversationNavItem
@@ -220,7 +194,7 @@
 </template>
 
 <script setup>
-import { computed, h, ref, watch } from 'vue'
+import { computed, h, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import {
   ChevronDown,
@@ -234,7 +208,6 @@ import {
   Trash2
 } from '@lucide/vue'
 import ConversationNavItem from '@/components/ConversationNavItem.vue'
-import SkillEntryMenu from '@/components/SkillEntryMenu.vue'
 import CollapseTransition from '@/components/common/CollapseTransition.vue'
 import { buildProjectConversationGroups } from '@/utils/projectConversationGroups'
 
@@ -248,10 +221,7 @@ const props = defineProps({
   hasMoreChats: { type: Boolean, default: false },
   isLoadingMore: { type: Boolean, default: false },
   collapsed: { type: Boolean, default: false },
-  showHistory: { type: Boolean, default: true },
-  skillPickerProjectId: { type: String, default: '' },
-  skillEntries: { type: Array, default: () => [] },
-  skillSelectionDisabled: Boolean
+  showHistory: { type: Boolean, default: true }
 })
 
 const emit = defineEmits([
@@ -267,22 +237,11 @@ const emit = defineEmits([
   'archive-project',
   'open-archive',
   'create-project-chat',
-  'project-expanded',
-  'select-project-skill',
   'retry-projects'
 ])
 const projectsExpanded = ref(true)
 const recentExpanded = ref(true)
 const expandedProjects = ref(new Set())
-watch(
-  () => props.skillPickerProjectId,
-  (projectId) => {
-    if (!projectId) return
-    projectsExpanded.value = true
-    expandedProjects.value = new Set([...expandedProjects.value, projectId])
-    emit('project-expanded', true)
-  }
-)
 const groupedNavigation = computed(() =>
   buildProjectConversationGroups(props.projects, props.chatsList)
 )
@@ -295,7 +254,6 @@ const toggleProject = (projectId) => {
   if (next.has(projectId)) next.delete(projectId)
   else next.add(projectId)
   expandedProjects.value = next
-  emit('project-expanded', next.has(projectId))
 }
 
 const renameProject = (project) => {
@@ -352,27 +310,6 @@ const confirmArchiveProject = (project) => {
 </script>
 
 <style lang="less" scoped>
-.project-skill-picker {
-  margin: 6px 4px 10px 12px;
-  padding: 8px;
-  border: 1px solid var(--gray-150);
-  border-radius: 10px;
-  > span {
-    display: block;
-    color: var(--color-text-secondary);
-    font-size: 12px;
-    margin-bottom: 6px;
-  }
-  > button {
-    background: var(--main-10);
-    color: var(--main-color);
-    padding: 8px;
-    border: 0;
-    border-radius: 6px;
-    cursor: pointer;
-    text-align: left;
-  }
-}
 .conversation-nav-section {
   display: flex;
   min-height: 0;

@@ -156,11 +156,6 @@
             <slot
               name="welcome"
               :set-prompt="(text) => (userInput = text)"
-              :skill-entry="activeSkillEntry"
-              :skill-available="!!activeEntrySkill"
-              :upload="handleAttachmentUpload"
-              :upload-disabled="threadCreationInFlight || !supportsFileUpload"
-              :project-name="starterProjectName"
             ></slot>
           </div>
           <div
@@ -289,7 +284,6 @@
               </div>
 
               <div class="composer-shell">
-                <slot name="input-decoration" :is-start-screen="!conversations.length"></slot>
                 <div class="input-container">
                   <div
                     class="message-input-stage"
@@ -893,11 +887,7 @@ import {
   onActivated,
   onDeactivated
 } from 'vue'
-import { message, Modal } from 'ant-design-vue'
-import { useSkillNavigationStore } from '@/stores/skillNavigation'
-import { findSkillEntry, resolveEntrySkill, buildSkillEntryPrompt } from '@/utils/skillEntries'
-import { formatMentionToken } from '@/utils/mention_token'
-import { useProjectsStore } from '@/stores/projects'
+import { message } from 'ant-design-vue'
 import {
   Bug,
   ChevronDown,
@@ -999,7 +989,7 @@ const props = defineProps({
   singleMode: { type: Boolean, default: true },
   sendDisabled: { type: Boolean, default: false }
 })
-const emit = defineEmits(['thread-change', 'skill-entry-cleared'])
+const emit = defineEmits(['thread-change'])
 
 // ==================== STORE MANAGEMENT ====================
 const agentStore = useAgentStore()
@@ -1008,7 +998,6 @@ const chatUIStore = useChatUIStore()
 const configStore = useConfigStore()
 const infoStore = useInfoStore()
 const userStore = useUserStore()
-const projectsStore = useProjectsStore()
 const messageDebugEnabled = computed(() => infoStore.debugMode && userStore.isSuperAdmin)
 const { agents, selectedAgentId, agentConfig, configurableItems, availableKnowledgeBases } =
   storeToRefs(agentStore)
@@ -1990,87 +1979,6 @@ const { mentionConfig } = useAgentMentionConfig({
 })
 
 const currentThreadMessages = computed(() => threadMessages.value[currentChatId.value] || [])
-const activeSkillEntry = ref(null)
-const skillNavigation = useSkillNavigationStore()
-const activeEntrySkill = computed(() =>
-  resolveEntrySkill(activeSkillEntry.value, mentionConfig.value.skills)
-)
-const starterProjectName = computed(
-  () =>
-    projectsStore.projects.find(
-      (p) => p.id === (currentThread.value?.project_id || selectedProjectId.value)
-    )?.name || ''
-)
-let starterVersion = 0
-let generatedStarterText = ''
-let generatedSkillToken = ''
-
-/** 替换预设前保护人工编辑；异步确认不能写入另一个草稿。 */
-const prepareSkillEntry = async (id) => {
-  try {
-    await skillNavigation.load()
-  } catch {
-    message.error('技能菜单加载失败，请重试')
-    return { accepted: false }
-  }
-  const entry = findSkillEntry(id, skillNavigation.nodes)
-  if (!entry) {
-    message.warning('该技能入口已删除，请重新选择')
-    return { accepted: false }
-  }
-  if (conversations.value.length) return
-  if (activeSkillEntry.value?.id === id) return { accepted: true }
-  const version = ++starterVersion
-  const context = `${currentChatId.value || ''}:${selectedProjectId.value}:${currentAgentId.value}`
-  const skill = resolveEntrySkill(entry, mentionConfig.value.skills)
-  const nextText = skill ? buildSkillEntryPrompt(entry, skill) : ''
-  if (userInput.value && userInput.value !== generatedStarterText && userInput.value !== nextText) {
-    const accepted = await new Promise((resolve) =>
-      Modal.confirm({
-        title: '替换为技能预设提示词？',
-        content: '输入框已有编辑内容。确认后替换提示词，已上传附件保留；取消将保留当前草稿。',
-        okText: '替换提示词',
-        cancelText: '保留当前草稿',
-        onOk: () => resolve(true),
-        onCancel: () => resolve(false)
-      })
-    )
-    if (!accepted) return { accepted: false, activeId: activeSkillEntry.value?.id }
-  }
-  if (
-    version !== starterVersion ||
-    context !== `${currentChatId.value || ''}:${selectedProjectId.value}:${currentAgentId.value}`
-  )
-    return
-  activeSkillEntry.value = entry
-  generatedStarterText = nextText
-  generatedSkillToken = skill ? formatMentionToken('skill', skill.slug) : ''
-  userInput.value = nextText
-  return { accepted: true }
-}
-
-/** 无技能入口只移除本入口自动填入的内容。 */
-const clearSkillEntry = (preserveInput = false) => {
-  starterVersion += 1
-  activeSkillEntry.value = null
-  if (!preserveInput) {
-    if (userInput.value === generatedStarterText) userInput.value = ''
-    else if (generatedSkillToken)
-      userInput.value = userInput.value.replace(generatedSkillToken, '').trim()
-  }
-  generatedStarterText = ''
-  generatedSkillToken = ''
-}
-
-watch(userInput, (text) => {
-  if (generatedSkillToken && !text.includes(generatedSkillToken)) {
-    activeSkillEntry.value = null
-    generatedSkillToken = ''
-    generatedStarterText = ''
-    if (!currentChatId.value) emit('skill-entry-cleared')
-  }
-})
-
 watch(
   [selectedProjectId, currentAgentId],
   ([projectId, agentId]) => {
@@ -2079,7 +1987,6 @@ watch(
       draftContextKey(projectId, agentId),
       userInput.value
     )
-    clearSkillEntry()
     userInput.value = restored
   },
   { flush: 'sync' }
@@ -2616,7 +2523,6 @@ watch(
 const isSendButtonDisabled = computed(() => {
   return (
     (Boolean(currentFailedSend.value) && !isProcessing.value) ||
-    (activeSkillEntry.value && !activeEntrySkill.value) ||
     sendCooldownActive.value ||
     props.sendDisabled ||
     isWaitingForUserAction.value ||
@@ -3444,10 +3350,6 @@ const selectThreadFromRoute = async (threadId) => {
 
 const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
   if (currentFailedSend.value) return
-  if (activeSkillEntry.value && !activeEntrySkill.value) {
-    message.warning('当前技能不可用，请检查权限或智能体配置')
-    return
-  }
   const text = userInput.value.trim()
   const imageContent = image?.imageContent || null
   if (
@@ -3849,8 +3751,6 @@ const buildExportPayload = () => {
 defineExpose({
   getExportPayload: buildExportPayload,
   selectThreadFromRoute,
-  prepareSkillEntry,
-  clearSkillEntry
 })
 
 const handleAgentStateRefresh = async (threadId = null) => {
@@ -4156,7 +4056,6 @@ watch(
 
 watch(currentChatId, (threadId, oldThreadId) => {
   if (threadId === oldThreadId) return
-  if (oldThreadId) clearSkillEntry(true)
   // 旧线程已被删除时丢弃输入草稿，避免写入无法再次访问的孤儿缓存
   const keepInput = !oldThreadId || threads.value.some((thread) => thread.id === oldThreadId)
   // 切换线程：保存旧线程的输入草稿，并还原新线程（或新建对话）的草稿

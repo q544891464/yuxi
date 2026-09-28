@@ -123,7 +123,6 @@ test('项目默认折叠且提供完整名称提示', () => {
     /const isProjectExpanded = \(projectId\) => expandedProjects\.value\.has\(projectId\)/
   )
   assert.match(source, /class="project-name" :title="group\.project\.name"/)
-  assert.match(source, /emit\('project-expanded', next\.has\(projectId\)\)/)
 })
 
 test('项目运行状态仅在折叠时展示', () => {
@@ -152,7 +151,7 @@ test('页面内创建的 Project 会写入共享侧边栏导航 Owner', () => {
   assert.match(selectionSource, /projectsStore\.upsertProject\(project\)/)
 })
 
-test('技能、知识库和数据总览位于项目分组之后且项目展开会收起技能列表', () => {
+test('Basic 导航保留通用扩展入口，不再加载业务技能树', () => {
   const navigationSource = readFileSync(
     new URL('../../src/components/ConversationNavSection.vue', import.meta.url),
     'utf8'
@@ -161,20 +160,10 @@ test('技能、知识库和数据总览位于项目分组之后且项目展开�
     new URL('../../src/layouts/AppLayout.vue', import.meta.url),
     'utf8'
   )
-  assert.match(layoutSource, /import \{[\s\S]*WandSparkles[\s\S]*\} from '@lucide\/vue'/)
-  assert.match(layoutSource, /<WandSparkles :size="17" \/>技能/)
-  assert.match(layoutSource, /@click="openSkillEntry\(SKILL_CREATOR_ENTRY\.id\)"/)
-  assert.doesNotMatch(layoutSource, /to="\/extensions\?tab=skills">添加技能/)
-  assert.match(layoutSource, /<LibraryBig :size="17" \/>知识库/)
-
-  assert.match(layoutSource, /#after-projects/)
-  assert.match(layoutSource, /@project-expanded="handleProjectExpanded"/)
-  assert.match(layoutSource, /const handleProjectExpanded = \(expanded\) =>/)
-  assert.match(navigationSource, /emit\('project-expanded', true\)/)
-  assert.doesNotMatch(
-    layoutSource,
-    /<div v-if="consumerChat && !sidebarCollapsed" class="consumer-skills-nav">/
-  )
+  assert.match(layoutSource, /path: '\/extensions'/)
+  assert.match(layoutSource, /path: '\/dashboard'/)
+  assert.doesNotMatch(layoutSource, /SkillEntryMenu|SKILL_CREATOR_ENTRY|skillEntryTree/)
+  assert.doesNotMatch(navigationSource, /SkillEntryMenu|skillPickerProjectId/)
 })
 
 test('对话选择与操作菜单使用并列按钮语义', () => {

@@ -43,7 +43,6 @@ from yuxi.services.identity_admin_service import (
     list_managed_users_page,
 )
 from yuxi.services.operation_log_service import log_operation
-from yuxi.services.ducha_service import change_business_role
 from yuxi.services.user_identity_service import generate_unique_uid, is_valid_phone_number, validate_username
 from yuxi.storage.minio import upload_image_to_minio
 from yuxi.storage.minio.client import normalize_public_minio_url
@@ -83,7 +82,7 @@ class Token(BaseModel):
 class UserCreate(BaseModel):
     username: str
     password: str = Field(min_length=8)
-    role: Literal["user", "inspector", "reviewer", "ducha", "admin", "superadmin"] = "user"
+    role: Literal["user", "admin", "superadmin"] = "user"
     phone_number: str | None = None
     department_id: int | None = None
 
@@ -91,7 +90,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    role: Literal["user", "inspector", "reviewer", "ducha"] | None = None
+    role: Literal["user"] | None = None
 
     username: str | None = None
     password: str | None = Field(default=None, min_length=8)
@@ -665,11 +664,11 @@ async def create_user(
             detail="不能创建超级管理员账户",
         )
 
-    # 管理员只能创建业务人员
-    if current_user.role == "admin" and user_data.role not in {"user", "inspector", "reviewer", "ducha"}:
+    # 管理员只能创建普通用户
+    if current_user.role == "admin" and user_data.role != "user":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="管理员只能创建业务人员账户",
+            detail="管理员只能创建普通用户账户",
         )
 
     # 部门分配逻辑
@@ -723,7 +722,7 @@ async def read_users_page(
     limit: int = Query(50, ge=1, le=100),
     search: str | None = Query(None, max_length=100),
     department_id: int | None = Query(None, ge=1),
-    role: Literal["superadmin", "admin", "user", "inspector", "reviewer", "ducha"] | None = None,
+    role: Literal["superadmin", "admin", "user"] | None = None,
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -848,19 +847,18 @@ async def update_user(
         )
 
     if current_user.role == "admin":
-        if user.role not in {"user", "inspector", "reviewer", "ducha"}:
+        if user.role != "user":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="管理员只能修改业务人员账户",
+                detail="管理员只能修改普通用户账户",
             )
 
     # 更新信息
     update_details = []
     if user_data.role is not None:
-        try:
-            change_business_role(current_user, user, user_data.role)
-        except PermissionError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        if user.role != "user":
+            raise HTTPException(status_code=403, detail="仅支持普通用户角色编辑")
+        user.role = user_data.role
         update_details.append(f"角色: {user_data.role}")
 
     if user_data.username is not None:
@@ -942,10 +940,10 @@ async def delete_user(
             detail="不能删除超级管理员账户",
         )
 
-    if current_user.role == "admin" and user.role not in {"user", "inspector", "reviewer", "ducha"}:
+    if current_user.role == "admin" and user.role != "user":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="管理员只能删除业务人员账户",
+            detail="管理员只能删除普通用户账户",
         )
 
     # 检查是否是部门的唯一管理员

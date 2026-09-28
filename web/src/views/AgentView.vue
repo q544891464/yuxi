@@ -8,37 +8,8 @@
           :single-mode="false"
           :initial-project-id="routeDraftProjectId"
           @thread-change="handleThreadChange"
-          @skill-entry-cleared="handleSkillEntryCleared"
         >
-          <template
-            v-if="consumerChat"
-            #welcome="{ skillEntry, skillAvailable, upload, projectName, uploadDisabled }"
-          >
-            <ChatWelcome :skill-selected="!!skillEntry" :ducha="!!route.meta.ducha">
-              <template #skill-description>
-                <SkillStartPanel
-                  :entry="skillEntry"
-                  :available="skillAvailable"
-                  :disabled="uploadDisabled"
-                  :project-name="projectName"
-                  @upload="upload"
-                />
-              </template>
-            </ChatWelcome>
-          </template>
-          <template v-if="consumerChat" #input-decoration="{ isStartScreen }">
-            <div v-if="!isStartScreen" class="composer-mascot" aria-hidden="true">
-              <img
-                :src="
-                  route.meta.ducha
-                    ? '/cydx/ducha-assistant-cutout.png'
-                    : '/cydx/assistant-cutout.png'
-                "
-                alt=""
-                draggable="false"
-              />
-            </div>
-          </template>
+          <template v-if="consumerChat" #welcome><ChatWelcome /></template>
           <template #input-actions-left="{ hasActiveThread, isCreatingThread }">
             <a-dropdown
               v-if="selectedAgentId"
@@ -152,7 +123,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { agentApi } from '@/apis/agent_api'
 import { useOutsidePointerdown } from '@/composables/useOutsidePointerdown'
 import ChatWelcome from '@/components/ChatWelcome.vue'
-import SkillStartPanel from '@/components/SkillStartPanel.vue'
 import AgentChatComponent from '@/components/AgentChatComponent.vue'
 import AgentEditModal from '@/components/model-management/AgentEditModal.vue'
 import { isBuiltinAgent, useAgentStore } from '@/stores/agent'
@@ -172,9 +142,7 @@ const agentStore = useAgentStore()
 const route = useRoute()
 const router = useRouter()
 const consumerChat = computed(() => route.meta.consumerChat === true)
-const entryRoute = computed(() =>
-  route.meta.ducha ? 'DuchaChatComp' : consumerChat.value ? 'ChatComp' : 'AgentComp'
-)
+const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
 
 // 从 agentStore 中获取响应式状态
 const { agents, selectedAgentId, isLoadingConfig } = storeToRefs(agentStore)
@@ -204,7 +172,6 @@ const syncSelectedThreadFromRoute = async () => {
 
   const threadId = getRouteThreadId()
   const version = ++routeSyncVersion
-  const requestedSkill = route.query.skill
   syncingRouteThread.value = true
   try {
     if (!threadId && !agentStore.isInitialized) {
@@ -215,17 +182,6 @@ const syncSelectedThreadFromRoute = async () => {
 
     const ok = await chatComponent.selectThreadFromRoute(threadId)
     if (ok === null || version !== routeSyncVersion) return
-    if (!threadId && requestedSkill) {
-      const selection = await chatComponent.prepareSkillEntry(String(requestedSkill))
-      if (selection?.accepted === false && version === routeSyncVersion) {
-        await router.replace({
-          name: entryRoute.value,
-          query: { ...route.query, skill: selection.activeId || undefined }
-        })
-      }
-    } else if (!threadId) {
-      chatComponent.clearSkillEntry()
-    }
     if (threadId && !ok) {
       await router.replace({ name: entryRoute.value })
     }
@@ -261,7 +217,6 @@ const consumeRouteAgentSelection = async () => {
 watch(
   () => [
     route.params.thread_id,
-    route.query.skill,
     route.query.project_id,
     agentStore.isInitialized
   ],
@@ -295,11 +250,6 @@ const handleThreadChange = (threadId) => {
   } else {
     router.replace({ name: entryRoute.value })
   }
-}
-
-const handleSkillEntryCleared = () => {
-  if (getRouteThreadId() || !route.query.skill) return
-  router.replace({ name: entryRoute.value, query: { ...route.query, skill: undefined } })
 }
 
 const agentQuickSwitchOptions = computed(() =>
@@ -475,23 +425,6 @@ useOutsidePointerdown(agentDropdownOpen, [agentDropdownTriggerRef, agentDropdown
 @media (max-width: 520px) {
   .config-dropdown-trigger {
     max-width: calc(100vw - 112px);
-  }
-}
-.composer-mascot {
-  position: absolute;
-  left: 18px;
-  bottom: 100%;
-  width: 150px;
-  height: 157px;
-  pointer-events: none;
-  z-index: 20;
-  img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    object-position: left bottom;
-    pointer-events: none;
   }
 }
 </style>

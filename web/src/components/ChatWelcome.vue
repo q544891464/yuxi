@@ -1,31 +1,23 @@
 <template>
   <section
     class="chat-welcome"
-    :class="{ 'skill-selected': skillSelected }"
-    :aria-label="`智能辅助${ducha ? '督查' : '稽查'}数字人欢迎页`"
+    aria-label="Yuxi 智能助手欢迎页"
   >
     <div class="welcome-hero">
-      <div
-        class="assistant-portrait"
-        :class="{ 'ducha-portrait': ducha }"
-        role="img"
-        :aria-label="`智能辅助${ducha ? '督查' : '稽查'}数字人形象`"
-      ></div>
       <div class="welcome-copy">
-        <span class="welcome-eyebrow">专业 · 规范 · 智能 · 高效</span>
-        <h1>您好！</h1>
+        <span class="welcome-eyebrow">Yuxi · 知识与智能体工作台</span>
+        <h1>您好，欢迎使用 Yuxi</h1>
         <div class="welcome-rule"></div>
-        <p>我是您的智能辅助{{ ducha ? '督查' : '稽查' }}数字人，<br />请问需要协助什么？</p>
+        <p>可以直接提问，或引用文件、知识库和技能开始工作。</p>
       </div>
-      <span class="welcome-motto">以数治税<br />以智助查</span>
     </div>
     <div class="welcome-role">
       <div class="role-symbol"><ShieldCheck :size="30" /></div>
       <div class="role-description">
-        <h2>辅助{{ ducha ? '督查' : '稽查' }}专员</h2>
-        <p>协助政策检索、风险核查、案卷整理与流程问答</p>
+        <h2>智能助手</h2>
+        <p>支持资料检索、文件处理和多智能体协作</p>
       </div>
-      <dl v-if="!ducha" class="resource-stats" aria-label="当前可访问资源" :aria-busy="loading">
+      <dl class="resource-stats" aria-label="当前可访问资源" :aria-busy="loading">
         <div
           v-for="stat in stats"
           :key="stat.label"
@@ -36,8 +28,7 @@
         </div>
       </dl>
     </div>
-    <slot name="skill-description"></slot>
-    <div v-if="!ducha && !loading && loadFailed" class="welcome-data-note" role="status">
+    <div v-if="!loading && loadFailed" class="welcome-data-note" role="status">
       部分资源暂未加载 <button type="button" @click="loadResources">重试</button>
     </div>
   </section>
@@ -50,8 +41,6 @@ import { databaseApi } from '@/apis/knowledge_api'
 import { agentApi } from '@/apis/agent_api'
 import { listAccessibleSkills } from '@/apis/skill_api'
 import { summarizeChatWelcome } from '@/utils/chatWelcome'
-
-const props = defineProps({ skillSelected: Boolean, ducha: Boolean })
 
 const loading = ref(true)
 const summary = ref({ questions: [], fileCount: null, subagentCount: null, skillCount: null })
@@ -78,7 +67,7 @@ async function loadResources() {
   }
 }
 onMounted(() => {
-  if (!props.ducha) loadResources()
+  loadResources()
 })
 </script>
 
@@ -93,6 +82,7 @@ onMounted(() => {
   align-items: center;
   min-height: clamp(164px, 23vh, 230px);
   margin-top: 24px;
+  padding: 22px clamp(24px, 5vw, 64px);
   border: 1px solid white;
   border-radius: 26px;
   overflow: visible;
@@ -109,18 +99,6 @@ onMounted(() => {
   background: #bddbff66;
   pointer-events: none;
 }
-.assistant-portrait {
-  flex: 0 0 clamp(170px, 20vw, 240px);
-  height: clamp(188px, calc(23vh + 24px), 254px);
-  margin: -24px 24px 0 16px;
-  align-self: flex-end;
-  background: url('/cydx/assistant-cutout.png') center bottom / contain no-repeat;
-}
-
-.assistant-portrait.ducha-portrait {
-  background-image: url('/cydx/ducha-assistant-cutout.png');
-}
-
 .welcome-copy {
   position: relative;
   z-index: 1;
@@ -148,16 +126,6 @@ onMounted(() => {
   font-size: clamp(15px, 1.25vw, 18px);
   line-height: 1.7;
   margin: 0;
-}
-.welcome-motto {
-  margin-left: auto;
-  padding: 24px;
-  font-size: 23px;
-  line-height: 1.8;
-  color: #799de4;
-  font-style: italic;
-  white-space: nowrap;
-  transform: rotate(-8deg);
 }
 .welcome-role {
   display: flex;
@@ -232,9 +200,6 @@ onMounted(() => {
   cursor: pointer;
 }
 @media (max-width: 1280px) {
-  .welcome-motto {
-    display: none;
-  }
   .resource-stats > div {
     min-width: 82px;
     padding-inline: 10px;
@@ -243,10 +208,6 @@ onMounted(() => {
 @media (max-height: 760px) and (min-width: 761px) {
   .welcome-hero {
     min-height: 140px;
-  }
-  .assistant-portrait {
-    height: 164px;
-    flex-basis: 160px;
   }
   .welcome-copy {
     padding: 8px 0;
@@ -280,11 +241,6 @@ onMounted(() => {
 @media (max-width: 640px) {
   .welcome-hero {
     min-height: 180px;
-  }
-  .assistant-portrait {
-    flex-basis: 130px;
-    height: 140px;
-    margin: 0 8px 0 0;
   }
   .welcome-eyebrow {
     display: none;
