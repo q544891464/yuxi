@@ -158,6 +158,8 @@ curl --fail http://localhost/api/system/ready
 - `/api/system/health` 只表示 API 进程存活；
 - `/api/system/ready` 表示启动完成、PostgreSQL/Redis 可用，并且兼容 worker 正在提供健康租约。
 
+worker 的 Compose 健康检查通过 `python -m yuxi.services.worker_health` 轻量读取 `REDIS_URL` 中的 ARQ 心跳，不加载业务执行依赖。心跳缺失、过期、没有 TTL、TTL 超过约定上界或 Redis 连接失败时检查失败。该心跳表达共享队列的消费健康，多副本部署不能用它判断单个 worker 进程是否失活。
+
 就绪接口返回 `ready` 后，再用浏览器完成登录和一次真实对话。健康或就绪状态不能证明知识库、模型、沙盒或外部服务的业务链路正确。
 
 公开头像和智能体图片通过同源 `/minio/public/...` 只读代理访问。不要把 MinIO 的 9000 对象 API 或 9001 控制台暴露到公网；知识库等私有 bucket 不经过该代理。需要单独的静态资源域名时，设置 `MINIO_PUBLIC_URL`，并在域名侧保持同样的只读限制。
@@ -257,3 +259,9 @@ NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
 ```
 
 同时按 Neo4j 官方订阅协议确认许可范围；替换镜像不会自动迁移或改变现有数据卷。以上是工程侧边界，不构成法律意见；再分发、修改组件或对外托管前请让法务按具体版本和交付方式确认。
+
+### 资源选择配置升级
+
+Basic 的 Business schema 12 由 `storage-migrator` 接受现有 Basic v10/v11 和上游 v8/v9。Basic v10/v11 与上游 v8 的旧配置中，工具、知识库、Skill、子智能体 `null` 转为 `"all"`，子智能体空数组也转为 `"all"`；MCP 和预加载 Skill 的 `null` 转为空数组。上游 v9 已采用新协议，升级时保留其空数组，不重新解释为全部。省略字段与固定列表保持原样。配置与版本标记在同一事务提交，后续启动保留新写入的空数组。
+
+升级前停止旧 API 和 worker 写入，按本页的迁移流程运行迁移器后再启动新进程。API 客户端按[资源选择契约](../agents/agents-config.md)发送 `"all"` 或数组，新写入不接受 `null`。降级需要恢复升级前数据库备份并使用对应旧代码，不能只回退代码或修改版本标记。

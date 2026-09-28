@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import uuid
 
@@ -281,7 +282,7 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
             "ix_scheduled_agent_runs_job_created",
             "ix_scheduled_agent_runs_dispatching",
         }.issubset(scheduled_indexes)
-        assert BUSINESS_SCHEMA_VERSION == 11
+        assert BUSINESS_SCHEMA_VERSION == 12
     finally:
         await _drop_isolated_schema(schema, admin_engine, scoped_engine)
 
@@ -550,3 +551,110 @@ async def test_schema_version_is_persisted_and_runtime_validation_fails_closed()
         }
     finally:
         await _drop_isolated_schema(schema, admin_engine, scoped_engine)
+
+
+@pytest.mark.parametrize("column_type", ["json", "jsonb"])
+@pytest.mark.parametrize("fail_version_write", [False, True])
+@pytest.mark.parametrize("previous_version", [8, 10, 11])
+async def test_resource_selection_migration_is_atomic_and_does_not_repeat(
+    fail_version_write, column_type, previous_version
+):
+    """真实 PostgreSQL 保留旧配置语义，版本失败回滚且重试不改新空数组。"""
+    schema, admin_engine, engine, manager = await _create_isolated_manager("resource_selection")
+    try:
+        await manager.create_schema_version_table()
+        await manager.record_schema_version("business", previous_version)
+        async with engine.begin() as conn:
+            await conn.execute(text(f"CREATE TABLE agents (id integer PRIMARY KEY, config_json {column_type})"))
+            await conn.execute(
+                text("INSERT INTO agents (id, config_json) VALUES (:id, CAST(:config AS jsonb))"),
+                [
+                    {"id": index, "config": json.dumps(config)}
+                    for index, config in enumerate(
+                        [
+                            {
+                                "context": {
+                                    "tools": None,
+                                    "knowledges": None,
+                                    "skills": None,
+                                    "subagents": [],
+                                    "mcps": None,
+                                    "preload_skills": None,
+                                },
+                                "extra": 42,
+                            },
+                            {"context": {"tools": [], "skills": ["fixed"], "subagents": ["fixed"]}},
+                            {"context": {}},
+                            {"context": {"subagents": None}},
+                        ],
+                        start=1,
+                    )
+                ],
+            )
+            if fail_version_write:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE yuxi_schema_migrations ADD CONSTRAINT reject_v12 "
+                        f"CHECK (version < {BUSINESS_SCHEMA_VERSION})"
+                    )
+                )
+        if fail_version_write:
+            from sqlalchemy.exc import IntegrityError
+
+            with pytest.raises(IntegrityError):
+                await manager.upgrade_agent_resource_selection()
+            async with engine.connect() as conn:
+                old = await conn.scalar(text("SELECT config_json FROM agents WHERE id = 1"))
+            assert old["context"]["subagents"] == []
+            assert old["context"]["tools"] is None
+            assert await manager.get_schema_versions() == {"business": previous_version}
+            return
+        await manager.upgrade_agent_resource_selection()
+        async with engine.begin() as conn:
+            rows = dict((await conn.execute(text("SELECT id, config_json FROM agents"))).all())
+            assert rows[1] == {
+                "context": {
+                    "tools": "all",
+                    "knowledges": "all",
+                    "skills": "all",
+                    "subagents": "all",
+                    "mcps": [],
+                    "preload_skills": [],
+                },
+                "extra": 42,
+            }
+            assert rows[2] == {"context": {"tools": [], "skills": ["fixed"], "subagents": ["fixed"]}}
+            assert rows[3] == {"context": {}}
+            assert rows[4] == {"context": {"subagents": "all"}}
+            await conn.execute(text("""UPDATE agents SET config_json = '{"context":{"subagents":[]}}' WHERE id = 1"""))
+        await manager.upgrade_agent_resource_selection()
+        async with engine.connect() as conn:
+            assert await conn.scalar(text("SELECT config_json FROM agents WHERE id = 1")) == {
+                "context": {"subagents": []}
+            }
+        assert await manager.get_schema_versions() == {"business": BUSINESS_SCHEMA_VERSION}
+    finally:
+        await _drop_isolated_schema(schema, admin_engine, engine)
+
+
+@pytest.mark.parametrize("column_type", ["json", "jsonb"])
+async def test_upstream_v9_resource_selection_is_not_reinterpreted(column_type):
+    """上游 v9 的空数组已表示禁用，升至 Basic v12 时必须原样保留。"""
+    schema, admin_engine, engine, manager = await _create_isolated_manager("resource_v9")
+    try:
+        await manager.create_schema_version_table()
+        await manager.record_schema_version("business", 9)
+        original = {"context": {"tools": "all", "skills": ["fixed"], "subagents": [], "mcps": []}}
+        async with engine.begin() as conn:
+            await conn.execute(text(f"CREATE TABLE agents (id integer PRIMARY KEY, config_json {column_type})"))
+            await conn.execute(
+                text("INSERT INTO agents (id, config_json) VALUES (1, CAST(:config AS jsonb))"),
+                {"config": json.dumps(original)},
+            )
+
+        await manager.upgrade_agent_resource_selection()
+        async with engine.connect() as conn:
+            assert await conn.scalar(text("SELECT config_json FROM agents WHERE id = 1")) == original
+        assert await manager.get_schema_versions() == {"business": BUSINESS_SCHEMA_VERSION}
+    finally:
+        await _drop_isolated_schema(schema, admin_engine, engine)
