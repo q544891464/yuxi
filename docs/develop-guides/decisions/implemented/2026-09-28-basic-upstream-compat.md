@@ -14,6 +14,8 @@ Basic 版从较早的 Yuxi 主线分化；上游 `main` 截至 `8bfc2e88` 增加
 
 Basic 合入上游 `main`。`agent_request_service.py` 统一接收并持久化普通 Agent 请求，`agent_run_manifest_service.py` 在执行前从可见 Agent 配置构建 Context；Basic 保留已持久化 Context 的权限归一化。`AgentChatComponent.vue` 采用上游多图片输入契约，并保留 Basic 的发送失败核对与恢复。`storage_migration.py` 将业务 Schema 升至 v11，接受 v10 数据库并执行幂等的 `ensure_business_schema`；v10 已有文书表，不重复创建。Basic 路由与欢迎页继续提供通用入口，`cydx` 和线上环境不参与该决定。
 
+Basic 的 System Tests 在合并后必须构建 Compose 的 `sandbox-runtime-image`，其默认镜像名仅存在本地，不能作为远程镜像执行 `docker pull`。合并后的后端单测 fixture 按可信持久配置与真实用户字段补齐，保持原有权限边界。
+
 ## 替代方案
 
 - 只挑选少数修复：短期冲突少，但请求、前端与持久化契约相互依赖，容易漏改。

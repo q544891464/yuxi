@@ -68,6 +68,7 @@ async def test_saved_restricted_settings_survive_runtime_but_writes_require_role
         db=object(),
         user=types.SimpleNamespace(role=role),
         context_schema=SuperAdminOnlyContext,
+        trusted_persisted_config=True,
     )
     assert {key: normalized[key] for key in readable} == readable
     assert "unknown" not in normalized
@@ -250,7 +251,7 @@ async def test_normalize_agent_context_config_defaults_mcps_off_and_filters_expl
             "max_execution_steps": 50,
         },
         db=object(),
-        user=types.SimpleNamespace(role="user", uid="u1", department_id=None),
+        user=types.SimpleNamespace(role="admin", uid="u1", department_id=None),
         context_schema=ChatBotContext,
     )
 

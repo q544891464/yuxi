@@ -19,7 +19,11 @@ def prepared_context(monkeypatch):
     """隔离资源准备，压缩测试只验证事务与checkpoint更新。"""
     from unittest.mock import AsyncMock
 
+    async def empty_resources(resource_fields, *, db, user):
+        return {field_name: [] for field_name in resource_fields}
+
     monkeypatch.setattr(service, "prepare_agent_runtime_context", AsyncMock())
+    monkeypatch.setattr("yuxi.agents.context.resolve_agent_resource_options", empty_resources)
 
 
 class _Graph:
@@ -97,7 +101,7 @@ async def test_compress_thread_context_uses_locked_idle_thread(monkeypatch: pyte
 
     result = await service.compress_thread_context(
         thread_id="thread-1",
-        current_user=SimpleNamespace(uid="user-1", role="user"),
+        current_user=SimpleNamespace(uid="user-1", role="user", department_id=None),
         db=Db(),
     )
 

@@ -13,6 +13,16 @@ from yuxi.services.agent_run_manifest_service import (
 )
 
 
+@pytest.fixture
+def empty_agent_resources(monkeypatch):
+    """隔离资源目录查询，保留 Context 归一化的实际调用。"""
+
+    async def resolve(resource_fields, *, db, user):
+        return {field_name: [] for field_name in resource_fields}
+
+    monkeypatch.setattr("yuxi.agents.context.resolve_agent_resource_options", resolve)
+
+
 def _manifest(**overrides):
     payload = {
         "run_type": "chat",
@@ -194,7 +204,9 @@ def test_limits_captured_from_context(field, expected):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("run_type", ["chat", "resume", "subagent"])
 @pytest.mark.parametrize("empty_config", [False, True])
-async def test_manifest_uses_prepared_context_and_persisted_overrides(monkeypatch, run_type, empty_config):
+async def test_manifest_uses_prepared_context_and_persisted_overrides(
+    monkeypatch, empty_agent_resources, run_type, empty_config
+):
     """配置覆盖、默认值、工作区提示词与 Skill 摘要来自同一执行对象。"""
     import hashlib
     from types import SimpleNamespace
@@ -257,8 +269,13 @@ async def test_manifest_uses_prepared_context_and_persisted_overrides(monkeypatc
         },
     )
     binding = SimpleNamespace(workdir_path="projects/project")
+    user = SimpleNamespace(uid="user", role="user", department_id=None)
     result = await service.prepare_run_execution(
-        run=run, user=SimpleNamespace(uid="user"), db=object(), workdir_binding=binding, worker_id="owner"
+        run=run,
+        user=user,
+        db=object(),
+        workdir_binding=binding,
+        worker_id="owner",
     )
     assert result.context is seen[0]
     assert result.context.model == result.manifest["model"]["spec"] == "chosen"
@@ -276,12 +293,12 @@ async def test_manifest_uses_prepared_context_and_persisted_overrides(monkeypatc
     first_digest = result.manifest["config_digest"]
     run.id, run.request_id = "different-run", "different-request"
     same_config = await service.prepare_run_execution(
-        run=run, user=SimpleNamespace(uid="user"), db=object(), workdir_binding=binding, worker_id="different-owner"
+        run=run, user=user, db=object(), workdir_binding=binding, worker_id="different-owner"
     )
     assert same_config.manifest["config_digest"] == first_digest
     monkeypatch.setattr("yuxi.agents.context._load_workspace_agent_context", lambda uid: "changed policy")
     changed = await service.prepare_run_execution(
-        run=run, user=SimpleNamespace(uid="user"), db=object(), workdir_binding=binding, worker_id="owner"
+        run=run, user=user, db=object(), workdir_binding=binding, worker_id="owner"
     )
     assert changed.manifest["config_digest"] != first_digest
     assert result.context.system_prompt == f"{expected_prompt}\n\nworkspace policy"
@@ -289,7 +306,7 @@ async def test_manifest_uses_prepared_context_and_persisted_overrides(monkeypatc
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("missing", ["agent", "backend", "user", "parent"])
-async def test_execution_preparation_rejects_missing_dependencies(monkeypatch, missing):
+async def test_execution_preparation_rejects_missing_dependencies(monkeypatch, empty_agent_resources, missing):
     """缺少执行依赖必须失败，不能固化空配置并进入执行。"""
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
@@ -325,7 +342,7 @@ async def test_execution_preparation_rejects_missing_dependencies(monkeypatch, m
     with pytest.raises(ValueError):
         await service.prepare_run_execution(
             run=run,
-            user=SimpleNamespace(uid="user"),
+            user=SimpleNamespace(uid="user", role="user", department_id=None),
             db=object(),
             workdir_binding=SimpleNamespace(workdir_path="projects/project"),
             worker_id="owner",
