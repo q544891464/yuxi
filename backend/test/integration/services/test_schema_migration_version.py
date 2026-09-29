@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import uuid
 
@@ -129,6 +130,7 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
             # v0.7.2 tag 没有这些字段，不能用当前 ORM 预建它们来证明迁移。
             for column in ("prepared_at", "first_output_at", "first_model_request_at"):
                 await connection.execute(text(f"ALTER TABLE agent_runs DROP COLUMN {column}"))
+            await connection.execute(text("ALTER TABLE model_providers DROP COLUMN include_user_uid"))
             await connection.execute(text("ALTER TABLE agent_runs ADD COLUMN last_event_id VARCHAR(64)"))
             await connection.execute(text("DROP TABLE scheduled_agent_runs"))
             await connection.execute(text("DROP TABLE scheduled_agent_jobs"))
@@ -162,6 +164,17 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
                         text(
                             "SELECT column_name FROM information_schema.columns "
                             "WHERE table_schema = :schema AND table_name = 'agent_runs'"
+                        ),
+                        {"schema": schema},
+                    )
+                ).scalars()
+            )
+            provider_columns = set(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = :schema AND table_name = 'model_providers'"
                         ),
                         {"schema": schema},
                     )
@@ -244,6 +257,7 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
             "timeout_seconds",
         } <= task_columns
         assert {"prepared_at", "first_output_at", "first_model_request_at"} <= run_columns
+        assert {"include_user_uid"} <= provider_columns
         assert "last_event_id" not in run_columns
         assert tuple(row) == ("running", None, 0, 0)
         assert scheduled_tables == {"scheduled_agent_jobs", "scheduled_agent_runs"}
@@ -268,7 +282,41 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
             "ix_scheduled_agent_runs_job_created",
             "ix_scheduled_agent_runs_dispatching",
         }.issubset(scheduled_indexes)
-        assert BUSINESS_SCHEMA_VERSION == 9
+        assert BUSINESS_SCHEMA_VERSION == 12
+    finally:
+        await _drop_isolated_schema(schema, admin_engine, scoped_engine)
+
+
+async def test_basic_v10_upgrade_restores_model_provider_uid_column() -> None:
+    """现有 Basic v10 数据库升级时补齐上游新增字段，保留供应商记录。"""
+    schema, admin_engine, scoped_engine, manager = await _create_isolated_manager("pytest_basic_v10")
+    try:
+        await manager.create_business_tables()
+        async with scoped_engine.begin() as connection:
+            await connection.execute(text("ALTER TABLE model_providers DROP COLUMN include_user_uid"))
+            await connection.execute(
+                text(
+                    "INSERT INTO model_providers "
+                    "(provider_id, provider_type, display_name, base_url, "
+                    "capabilities, enabled_models, is_enabled, is_builtin) "
+                    "VALUES ('existing-provider', 'openai', 'Existing', 'https://example.invalid', "
+                    "'[]'::json, '[]'::json, TRUE, FALSE)"
+                )
+            )
+
+        await manager.ensure_business_schema()
+        await manager.ensure_business_schema()
+
+        async with scoped_engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT provider_id, include_user_uid FROM model_providers "
+                        "WHERE provider_id = 'existing-provider'"
+                    )
+                )
+            ).one()
+        assert tuple(row) == ("existing-provider", False)
     finally:
         await _drop_isolated_schema(schema, admin_engine, scoped_engine)
 
@@ -503,3 +551,110 @@ async def test_schema_version_is_persisted_and_runtime_validation_fails_closed()
         }
     finally:
         await _drop_isolated_schema(schema, admin_engine, scoped_engine)
+
+
+@pytest.mark.parametrize("column_type", ["json", "jsonb"])
+@pytest.mark.parametrize("fail_version_write", [False, True])
+@pytest.mark.parametrize("previous_version", [8, 10, 11])
+async def test_resource_selection_migration_is_atomic_and_does_not_repeat(
+    fail_version_write, column_type, previous_version
+):
+    """真实 PostgreSQL 保留旧配置语义，版本失败回滚且重试不改新空数组。"""
+    schema, admin_engine, engine, manager = await _create_isolated_manager("resource_selection")
+    try:
+        await manager.create_schema_version_table()
+        await manager.record_schema_version("business", previous_version)
+        async with engine.begin() as conn:
+            await conn.execute(text(f"CREATE TABLE agents (id integer PRIMARY KEY, config_json {column_type})"))
+            await conn.execute(
+                text("INSERT INTO agents (id, config_json) VALUES (:id, CAST(:config AS jsonb))"),
+                [
+                    {"id": index, "config": json.dumps(config)}
+                    for index, config in enumerate(
+                        [
+                            {
+                                "context": {
+                                    "tools": None,
+                                    "knowledges": None,
+                                    "skills": None,
+                                    "subagents": [],
+                                    "mcps": None,
+                                    "preload_skills": None,
+                                },
+                                "extra": 42,
+                            },
+                            {"context": {"tools": [], "skills": ["fixed"], "subagents": ["fixed"]}},
+                            {"context": {}},
+                            {"context": {"subagents": None}},
+                        ],
+                        start=1,
+                    )
+                ],
+            )
+            if fail_version_write:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE yuxi_schema_migrations ADD CONSTRAINT reject_v12 "
+                        f"CHECK (version < {BUSINESS_SCHEMA_VERSION})"
+                    )
+                )
+        if fail_version_write:
+            from sqlalchemy.exc import IntegrityError
+
+            with pytest.raises(IntegrityError):
+                await manager.upgrade_agent_resource_selection()
+            async with engine.connect() as conn:
+                old = await conn.scalar(text("SELECT config_json FROM agents WHERE id = 1"))
+            assert old["context"]["subagents"] == []
+            assert old["context"]["tools"] is None
+            assert await manager.get_schema_versions() == {"business": previous_version}
+            return
+        await manager.upgrade_agent_resource_selection()
+        async with engine.begin() as conn:
+            rows = dict((await conn.execute(text("SELECT id, config_json FROM agents"))).all())
+            assert rows[1] == {
+                "context": {
+                    "tools": "all",
+                    "knowledges": "all",
+                    "skills": "all",
+                    "subagents": "all",
+                    "mcps": [],
+                    "preload_skills": [],
+                },
+                "extra": 42,
+            }
+            assert rows[2] == {"context": {"tools": [], "skills": ["fixed"], "subagents": ["fixed"]}}
+            assert rows[3] == {"context": {}}
+            assert rows[4] == {"context": {"subagents": "all"}}
+            await conn.execute(text("""UPDATE agents SET config_json = '{"context":{"subagents":[]}}' WHERE id = 1"""))
+        await manager.upgrade_agent_resource_selection()
+        async with engine.connect() as conn:
+            assert await conn.scalar(text("SELECT config_json FROM agents WHERE id = 1")) == {
+                "context": {"subagents": []}
+            }
+        assert await manager.get_schema_versions() == {"business": BUSINESS_SCHEMA_VERSION}
+    finally:
+        await _drop_isolated_schema(schema, admin_engine, engine)
+
+
+@pytest.mark.parametrize("column_type", ["json", "jsonb"])
+async def test_upstream_v9_resource_selection_is_not_reinterpreted(column_type):
+    """上游 v9 的空数组已表示禁用，升至 Basic v12 时必须原样保留。"""
+    schema, admin_engine, engine, manager = await _create_isolated_manager("resource_v9")
+    try:
+        await manager.create_schema_version_table()
+        await manager.record_schema_version("business", 9)
+        original = {"context": {"tools": "all", "skills": ["fixed"], "subagents": [], "mcps": []}}
+        async with engine.begin() as conn:
+            await conn.execute(text(f"CREATE TABLE agents (id integer PRIMARY KEY, config_json {column_type})"))
+            await conn.execute(
+                text("INSERT INTO agents (id, config_json) VALUES (1, CAST(:config AS jsonb))"),
+                {"config": json.dumps(original)},
+            )
+
+        await manager.upgrade_agent_resource_selection()
+        async with engine.connect() as conn:
+            assert await conn.scalar(text("SELECT config_json FROM agents WHERE id = 1")) == original
+        assert await manager.get_schema_versions() == {"business": BUSINESS_SCHEMA_VERSION}
+    finally:
+        await _drop_isolated_schema(schema, admin_engine, engine)

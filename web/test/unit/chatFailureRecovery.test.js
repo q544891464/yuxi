@@ -203,18 +203,21 @@ test('核对失败不盲目重发', async () => {
 
 test('恢复明确拒绝的发送内容时保留后续草稿；未知状态不能编辑重发', () => {
   const userInput = ref('后续草稿')
-  const failedSends = ref({ t: { payload: { query: '原问题' }, rejected: false } })
+  const images = [{ imageContent: 'image-a' }, { imageContent: 'image-b' }]
+  const restoredImages = []
+  const failedSends = ref({ t: { payload: { query: '原问题' }, images, rejected: false } })
   const edit = callback(chat, 'editFailedSend', {
     currentChatId: ref('t'),
     failedSends,
     userInput,
-    agentInputAreaRef: ref(null)
+    agentInputAreaRef: ref({ restoreImages: (items) => restoredImages.push(...items) })
   })
   edit()
   assert.equal(userInput.value, '后续草稿')
   failedSends.value.t.rejected = true
   edit()
   assert.equal(userInput.value, ['原问题', '后续草稿'].join(String.fromCharCode(10)))
+  assert.deepEqual(restoredImages, images)
   assert.equal(failedSends.value.t, undefined)
 })
 

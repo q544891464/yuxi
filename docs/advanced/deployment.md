@@ -4,8 +4,8 @@
 
 ## 前置条件
 
-- Docker Engine 24.0 或更高版本；
-- Docker Compose v2.20 或更高版本；
+- Docker Engine 28.0 或更高版本；
+- Docker Compose v2.33.1 或更高版本（provisioner 使用 `gw_priority` 固定默认网关）；
 - 能访问所需镜像和模型服务的网络；
 - 使用本地 GPU OCR 时准备 NVIDIA Container Toolkit。
 
@@ -45,6 +45,21 @@ openssl rand -hex 32
 模型 API Key 按实际使用的供应商填写。生产 Compose 所有必填项都通过变量校验，缺失时会拒绝启动。
 
 后续命令必须显式使用 `--env-file .env.prod`。Compose 的 `env_file` 负责把变量注入容器，但不会替代 Compose 文件插值所需的 `--env-file`。
+
+### 环境隔离与自定义配置文件
+
+开发配置的容器环境文件默认为 `.env`，生产配置默认为 `.env.prod`。使用其他文件时，同时指定 `YUXI_ENV_FILE` 和 `--env-file`，让容器注入与 Compose 插值读取同一份配置：
+
+```bash
+YUXI_ENV_FILE=.env.staging docker compose --env-file .env.staging -f docker-compose.prod.yml config --quiet
+YUXI_ENV_FILE=.env.staging docker compose --env-file .env.staging -f docker-compose.prod.yml up -d --build
+```
+
+同机并行部署时，在各自的环境文件中设置不同的 `COMPOSE_PROJECT_NAME` 和 `YUXI_STATE_DIR`；项目名隔离容器、镜像、Compose 网络和动态沙盒名称，数据目录隔离持久文件。默认数据目录仍是 `./docker/volumes`，同一目录只允许一套运行中的环境写入。已有部署更换项目名或从固定容器名切换前，先结束任务和沙盒会话，用旧配置执行 `docker compose down`（保留数据，不加 `-v`），再用新配置启动；复用数据时保持状态目录和密钥不变。
+
+生产 Web 端口通过 `YUXI_WEB_PORT` 设置，默认 80；API 默认发布到 `127.0.0.1:6050`，管理服务端口也只绑定回环地址。具体默认值由 `docker-compose.prod.yml` 的 `ports` 定义；多套生产环境还需分别设置端口，启用 `all` profile 时包括 `YUXI_MINERU_PORT` 和 `YUXI_PADDLEX_PORT`。开发环境的端口隔离示例见[并行工作树与隔离运行环境](../develop-guides/parallel-worktree-environments.md)。
+
+MinIO 将同一宿主数据目录挂载到容器 `/data`，Neo4j 将日志目录挂载到 `/logs`；这两个容器内路径的调整不要求移动宿主文件。
 
 ## 2. 首次启动
 
@@ -143,6 +158,8 @@ curl --fail http://localhost/api/system/ready
 - `/api/system/health` 只表示 API 进程存活；
 - `/api/system/ready` 表示启动完成、PostgreSQL/Redis 可用，并且兼容 worker 正在提供健康租约。
 
+worker 的 Compose 健康检查通过 `python -m yuxi.services.worker_health` 轻量读取 `REDIS_URL` 中的 ARQ 心跳，不加载业务执行依赖。心跳缺失、过期、没有 TTL、TTL 超过约定上界或 Redis 连接失败时检查失败。该心跳表达共享队列的消费健康，多副本部署不能用它判断单个 worker 进程是否失活。
+
 就绪接口返回 `ready` 后，再用浏览器完成登录和一次真实对话。健康或就绪状态不能证明知识库、模型、沙盒或外部服务的业务链路正确。
 
 公开头像和智能体图片通过同源 `/minio/public/...` 只读代理访问。不要把 MinIO 的 9000 对象 API 或 9001 控制台暴露到公网；知识库等私有 bucket 不经过该代理。需要单独的静态资源域名时，设置 `MINIO_PUBLIC_URL`，并在域名侧保持同样的只读限制。
@@ -169,8 +186,7 @@ YUXI_CORS_ORIGINS=https://a.example.com,https://b.example.com
 
 ```bash
 docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=200 api worker sandbox-provisioner
-docker logs -f api-prod
-docker logs -f worker-prod
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f api worker
 ```
 
 ### Redis 重建后恢复 worker
@@ -221,12 +237,14 @@ Yuxi 本体使用 MIT License。Compose 依赖以独立进程运行，Yuxi 通�
 | 组件 | 镜像引用 | 许可证 |
 | --- | --- | --- |
 | Neo4j Community | `neo4j:5.26.29` | GPL-3.0-only |
-| MinIO | `minio/minio:RELEASE.2023-03-20T20-16-18Z` | AGPL-3.0 |
+| MinIO | 本地构建：`<项目名>-minio:RELEASE.2023-03-20T20-16-18Z`（`docker/minio/Dockerfile`；项目名取 `COMPOSE_PROJECT_NAME`，默认 `yuxi`） | AGPL-3.0 |
 | Milvus | `milvusdb/milvus:v2.5.6` | Apache-2.0 |
 | etcd | `quay.io/coreos/etcd:v3.5.5` | Apache-2.0 |
 | PostgreSQL | `postgres:16` | PostgreSQL License |
 | Redis | `redis:7.4.10-alpine` | RSALv2 / SSPLv1（均非 OSI 许可证） |
 | MinerU / PaddleX（可选） | `mineru-vllm:latest` / `paddlex:latest` | 以各自 Dockerfile 和上游声明为准 |
+
+MinIO 的镜像由本仓库构建：MinIO 在 Docker Hub 与 quay.io 上的镜像已不再公开分发（同一 registry 上其他镜像仍可匿名拉取），`dl.min.io` 返回 410。Compose 按 `docker/minio/Dockerfile` 构建该镜像，构建时从官方 GitHub Release 下载固定版本的二进制并校验 sha256；它运行与下架前镜像逐字节相同的 MinIO 二进制，基础镜像与镜像内附带文件则不同（不再包含 `mc`、`minisig` 与 `*_FILE` 变量默认值）。
 
 这张表只覆盖 Compose 的主要镜像本体，不是完整的软件物料清单，也不承诺 `latest` 镜像的内容固定。镜像还可能包含各自的基础系统和传递依赖，离线交付前要按实际 digest 核对许可证、版权声明和对应源码。
 
@@ -241,3 +259,9 @@ NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
 ```
 
 同时按 Neo4j 官方订阅协议确认许可范围；替换镜像不会自动迁移或改变现有数据卷。以上是工程侧边界，不构成法律意见；再分发、修改组件或对外托管前请让法务按具体版本和交付方式确认。
+
+### 资源选择配置升级
+
+Basic 的 Business schema 12 由 `storage-migrator` 接受现有 Basic v10/v11 和上游 v8/v9。Basic v10/v11 与上游 v8 的旧配置中，工具、知识库、Skill、子智能体 `null` 转为 `"all"`，子智能体空数组也转为 `"all"`；MCP 和预加载 Skill 的 `null` 转为空数组。上游 v9 已采用新协议，升级时保留其空数组，不重新解释为全部。省略字段与固定列表保持原样。配置与版本标记在同一事务提交，后续启动保留新写入的空数组。
+
+升级前停止旧 API 和 worker 写入，按本页的迁移流程运行迁移器后再启动新进程。API 客户端按[资源选择契约](../agents/agents-config.md)发送 `"all"` 或数组，新写入不接受 `null`。降级需要恢复升级前数据库备份并使用对应旧代码，不能只回退代码或修改版本标记。

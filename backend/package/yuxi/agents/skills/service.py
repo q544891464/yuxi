@@ -25,6 +25,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.agents.mcp.service import get_enabled_mcp_server_slugs
+from yuxi.agents.skills.buildin import BUILTIN_SKILLS_DIR
 from yuxi.agents.skills.repository import SkillRepository
 from yuxi.config import (
     get_runtime_dir,
@@ -98,6 +99,8 @@ class ResolvedSkill:
     tool_dependencies: list[str]
     mcp_dependencies: list[str]
     skill_dependencies: list[str]
+    version: str | None = None
+    content_hash: str | None = None
     overrides_shared: bool = False
     shadowed_by_personal: bool = False
 
@@ -373,7 +376,7 @@ async def refresh_user_skill_projection_async(uid: str) -> dict[str, str]:
         else:
             source_dirs = {
                 item.slug: str(_resolve_skill_dir(item))
-                for item in await _list_accessible_shared_skills(db, user)
+                for item in await list_accessible_shared_skills(db, user)
                 if item.slug
             }
         await sync_user_accessible_skills_async(normalized_uid, source_dirs)
@@ -455,12 +458,6 @@ def _remove_skill_projection_entry(path: Path) -> None:
         shutil.rmtree(path)
     else:
         path.unlink()
-
-
-def get_builtin_skill_specs() -> list[Any]:
-    from yuxi.agents.skills.buildin import BUILTIN_SKILLS
-
-    return BUILTIN_SKILLS
 
 
 def _build_builtin_skill_dir_path(slug: str) -> str:
@@ -611,7 +608,7 @@ async def list_accessible_skills(
 ) -> list[ResolvedSkill]:
     """返回当前用户最终生效的共享与个人 Skill。"""
     shared_items, personal_items = await asyncio.gather(
-        _list_accessible_shared_skills(db, user, require_enabled=require_enabled),
+        list_accessible_shared_skills(db, user, require_enabled=require_enabled),
         list_personal_skills(str(user.uid)),
     )
     personal_by_slug = {item.slug: item for item in personal_items}
@@ -697,7 +694,7 @@ async def get_skill_dependency_options(
     }
 
 
-async def _list_accessible_shared_skills(
+async def list_accessible_shared_skills(
     db: AsyncSession,
     user: User,
     *,
@@ -711,7 +708,7 @@ async def _list_accessible_shared_skills(
 
 async def _list_shared_skill_slugs(db: AsyncSession, user: User) -> list[str]:
     """返回依赖配置可引用的共享 Skill slug。"""
-    return [item.slug for item in await _list_accessible_shared_skills(db, user) if isinstance(item.slug, str)]
+    return [item.slug for item in await list_accessible_shared_skills(db, user) if isinstance(item.slug, str)]
 
 
 def _get_all_tool_names() -> list[str]:
@@ -771,7 +768,7 @@ async def update_skill_dependencies(
     item = await get_manageable_skill_or_raise(db, operator, slug)
     _ensure_non_builtin(item)
     repo = SkillRepository(db)
-    skill_items = await _list_accessible_shared_skills(db, operator)
+    skill_items = await list_accessible_shared_skills(db, operator)
     available_skills = {skill.slug: skill for skill in skill_items}
     tools, mcps, skills = await _validate_dependencies(
         parent=item,
@@ -1136,44 +1133,6 @@ def _export_personal_skill_zip_locked(uid: str, slug: str) -> tuple[str, str]:
         os.close(directory_fd)
 
 
-async def enable_personal_skills_for_agent_config(
-    db: AsyncSession,
-    *,
-    thread_id: str,
-    uid: str,
-    skill_slugs: list[str],
-) -> bool:
-    """为显式 Skill 白名单追加个人 Skill；全部模式无需写入。"""
-    from yuxi.repositories.agent_repository import AgentRepository
-    from yuxi.repositories.conversation_repository import ConversationRepository
-
-    conversation = await ConversationRepository(db).get_conversation_by_thread_id(thread_id)
-    if not conversation or str(conversation.uid) != str(uid):
-        return False
-    agent_repo = AgentRepository(db)
-    agent = await agent_repo.get_by_slug(conversation.agent_id)
-    if not agent or agent.created_by != str(uid):
-        return False
-
-    context = (agent.config_json or {}).get("context") or {}
-    configured_skills = context.get("skills")
-    if configured_skills is None:
-        return True
-
-    selected_skills = normalize_string_list(configured_skills if isinstance(configured_skills, list) else [])
-    updated_skills = normalize_string_list([*selected_skills, *skill_slugs])
-    if updated_skills == selected_skills:
-        return True
-
-    await agent_repo.update(
-        agent,
-        config_json={"context": {"skills": updated_skills}},
-        config_resource_access={"skills": set(skill_slugs)},
-        updated_by=str(uid),
-    )
-    return True
-
-
 def _resolved_shared_skill(item: Skill, *, shadowed_by_personal: bool = False) -> ResolvedSkill:
     """将数据库 Skill 适配为统一的有效 Skill 描述。"""
     source_scope = "builtin" if is_builtin_skill(item) else "shared"
@@ -1193,6 +1152,8 @@ def _resolved_shared_skill(item: Skill, *, shadowed_by_personal: bool = False) -
         tool_dependencies=normalize_string_list(item.tool_dependencies),
         mcp_dependencies=normalize_string_list(item.mcp_dependencies),
         skill_dependencies=normalize_string_list(item.skill_dependencies),
+        version=item.version,
+        content_hash=item.content_hash,
         shadowed_by_personal=shadowed_by_personal,
     )
 
@@ -2022,21 +1983,12 @@ async def update_skill_enabled(db: AsyncSession, *, slug: str, enabled: bool, op
 
 
 def list_builtin_skill_specs() -> list[dict[str, Any]]:
+    """发现源码目录中的 Skill，并以 frontmatter 作为唯一元数据。"""
     specs: list[dict[str, Any]] = []
-    for raw_spec in get_builtin_skill_specs():
-        slug = str(getattr(raw_spec, "slug", "")).strip()
-        source_dir = Path(str(getattr(raw_spec, "source_dir", ""))).resolve()
-        configured_description = str(getattr(raw_spec, "description", "")).strip()
-        version = str(getattr(raw_spec, "version", "1.0.0")).strip() or "1.0.0"
-        configured_tools = normalize_string_list(getattr(raw_spec, "tool_dependencies", None))
-        configured_mcps = normalize_string_list(getattr(raw_spec, "mcp_dependencies", None))
-        configured_skills = normalize_string_list(getattr(raw_spec, "skill_dependencies", None))
-
-        if not is_valid_skill_slug(slug):
-            raise ValueError(f"内置 skill slug 非法: {slug}")
-        if not source_dir.exists() or not source_dir.is_dir():
-            raise ValueError(f"内置 skill 目录不存在: {source_dir}")
-
+    for source_dir in sorted(BUILTIN_SKILLS_DIR.iterdir()):
+        if not source_dir.is_dir() or source_dir.name.startswith(("_", ".")):
+            continue
+        slug = source_dir.name
         skill_md = source_dir / "SKILL.md"
         if not skill_md.exists():
             raise ValueError(f"内置 skill 缺少 SKILL.md: {source_dir}")
@@ -2050,11 +2002,11 @@ def list_builtin_skill_specs() -> list[dict[str, Any]]:
             {
                 "slug": slug,
                 "name": parsed_name,
-                "description": configured_description or parsed_desc,
-                "version": version,
-                "tool_dependencies": configured_tools or normalize_string_list(meta.get("tool_dependencies")),
-                "mcp_dependencies": configured_mcps or normalize_string_list(meta.get("mcp_dependencies")),
-                "skill_dependencies": configured_skills or normalize_string_list(meta.get("skill_dependencies")),
+                "description": parsed_desc,
+                "version": str(meta.get("version", "1.0.0")),
+                "tool_dependencies": normalize_string_list(meta.get("tool_dependencies")),
+                "mcp_dependencies": normalize_string_list(meta.get("mcp_dependencies")),
+                "skill_dependencies": normalize_string_list(meta.get("skill_dependencies")),
                 "content_hash": _compute_dir_hash(source_dir),
                 "source_dir": source_dir,
             }

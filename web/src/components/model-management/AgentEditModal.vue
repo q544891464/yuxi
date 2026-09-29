@@ -1076,7 +1076,7 @@ defineExpose({
 
 :global(.agent-edit-modal .ant-modal-header) {
   margin: 0;
-  padding: 18px 24px;
+  padding: 10px 24px;
   border-bottom: 1px solid var(--gray-150);
   background: var(--gray-0);
 }

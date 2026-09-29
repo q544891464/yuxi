@@ -95,15 +95,18 @@ async def resolve_runtime_skills_for_context(
     db: AsyncSession,
     user: User,
 ) -> dict:
-    """从已授权 Skill 派生当前 Agent Run 的运行时 scope 与预加载快照。"""
+    """合并已选共享与全部个人 Skill，派生运行范围和预加载快照。"""
     skill_items = [item for item in await list_accessible_skills(db, user) if item.slug]
     runtime_skills = build_runtime_skills(skill_items)
     available = set(runtime_skills)
     selected = normalize_string_list(getattr(context, "skills", None))
-    context_skills = [slug for slug in selected if slug in available]
+    shared_skills = [slug for slug in selected if slug in available]
+    context_skills = normalize_string_list(
+        [*shared_skills, *(item.slug for item in skill_items if item.source_scope == "personal")]
+    )
     effective_skills = expand_skill_closure(context_skills, runtime_skills)
     configured_preloads = normalize_string_list(getattr(context, "preload_skills", None))
-    context_preload_skills = [slug for slug in configured_preloads if slug in context_skills]
+    context_preload_skills = [slug for slug in configured_preloads if slug in shared_skills]
     preloaded_skills = expand_skill_closure(context_preload_skills, runtime_skills)
     items_by_slug = {item.slug: item for item in skill_items}
     preloaded_contents = (
@@ -116,7 +119,14 @@ async def resolve_runtime_skills_for_context(
         "context_preload_skills": context_preload_skills,
         "effective_skills": effective_skills,
         "runtime_skills": runtime_skills,
-        "runtime_skill_source_scopes": {slug: items_by_slug[slug].source_scope for slug in effective_skills},
+        "skill_metadata": {
+            slug: {
+                "source_scope": items_by_slug[slug].source_scope,
+                "version": items_by_slug[slug].version,
+                "content_hash": items_by_slug[slug].content_hash,
+            }
+            for slug in effective_skills
+        },
         "preloaded_skills": preloaded_skills,
         "preloaded_skill_contents": preloaded_contents,
     }
@@ -149,8 +159,8 @@ def _read_preloaded_skill_contents(slugs: list[str], skill_items: dict[str, Any]
 
 def resolve_skill_gated_tools(context) -> list:
     """解析所有可见 Skill 依赖且需注册到 ToolNode 的本地工具。"""
-    runtime_skills = getattr(context, "_runtime_skills", {}) or {}
-    effective_skills = getattr(context, "_effective_skill_slugs", []) or []
+    runtime_skills = getattr(context, "_skill_runtime_snapshot", {}).get("runtime_skills", {}) or {}
+    effective_skills = getattr(context, "_skill_runtime_snapshot", {}).get("effective_skills", []) or []
     tool_names: set[str] = set()
     for slug in effective_skills:
         node = runtime_skills.get(slug) or {}

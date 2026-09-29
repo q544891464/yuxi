@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from yuxi.agents.context import BaseContext
+
 import asyncio
 from types import SimpleNamespace
 
@@ -9,13 +11,19 @@ from fastapi import HTTPException
 from yuxi.services import context_compression_service as service
 
 
-class _Context:
-    uid = ""
-    thread_id = ""
+_Context = BaseContext
 
-    def update_from_dict(self, values):
-        for key, value in values.items():
-            setattr(self, key, value)
+
+@pytest.fixture(autouse=True)
+def prepared_context(monkeypatch):
+    """隔离资源准备，压缩测试只验证事务与checkpoint更新。"""
+    from unittest.mock import AsyncMock
+
+    async def empty_resources(resource_fields, *, db, user):
+        return {field_name: [] for field_name in resource_fields}
+
+    monkeypatch.setattr(service, "prepare_agent_runtime_context", AsyncMock())
+    monkeypatch.setattr("yuxi.agents.context.resolve_agent_resource_options", empty_resources)
 
 
 class _Graph:
@@ -65,9 +73,6 @@ async def test_compress_thread_context_uses_locked_idle_thread(monkeypatch: pyte
     async def idle(**_kwargs):
         events.append("idle")
 
-    async def normalize(*_args, **_kwargs):
-        return {}
-
     async def resolve_model(*_args, **_kwargs):
         return "provider:model"
 
@@ -80,28 +85,23 @@ async def test_compress_thread_context_uses_locked_idle_thread(monkeypatch: pyte
     async def release(**_kwargs):
         events.append("release")
 
-    async def build_context(agent_config, *, thread_id, uid):
-        return {**agent_config, "thread_id": thread_id, "uid": uid}
-
     async def compress(**kwargs):
-        events.append(("compress", kwargs["input_context"]["model"]))
+        events.append(("compress", kwargs["context"].model))
         return {"status": "completed", "after_tokens": 300}
 
     monkeypatch.setattr(service, "ConversationRepository", ConversationRepo)
     monkeypatch.setattr(service, "AgentRepository", AgentRepo)
     monkeypatch.setattr(service, "_ensure_thread_idle", idle)
-    monkeypatch.setattr(service, "normalize_agent_context_config", normalize)
     monkeypatch.setattr(service, "resolve_agent_run_model_spec", resolve_model)
     monkeypatch.setattr(service, "ensure_conversation_workdir_available", workdir)
     monkeypatch.setattr(service, "_ensure_runtime_available", runtime)
     monkeypatch.setattr(service, "_release_runtime", release)
-    monkeypatch.setattr(service, "build_agent_input_context", build_context)
     monkeypatch.setattr(service, "_compress_agent_checkpoint", compress)
-    monkeypatch.setattr(service.agent_manager, "get_agent", lambda _backend_id: agent)
+    monkeypatch.setattr(service, "get_agent_backend", lambda _backend_id: agent)
 
     result = await service.compress_thread_context(
         thread_id="thread-1",
-        current_user=SimpleNamespace(uid="user-1", role="user"),
+        current_user=SimpleNamespace(uid="user-1", role="user", department_id=None),
         db=Db(),
     )
 
@@ -140,7 +140,7 @@ async def test_runtime_is_released_when_checkpoint_compression_fails(
     with pytest.raises(RuntimeError, match="summary failed"):
         await service._compress_agent_checkpoint_in_runtime(
             agent=object(),
-            input_context={},
+            context=BaseContext(**{}),
             thread_id="thread-1",
             uid="user-1",
             workdir_path="projects/project-1",
@@ -170,7 +170,7 @@ async def test_runtime_is_released_when_provisioning_fails_without_masking_error
     with pytest.raises(RuntimeError, match="provisioning failed"):
         await service._compress_agent_checkpoint_in_runtime(
             agent=object(),
-            input_context={},
+            context=BaseContext(**{}),
             thread_id="thread-1",
             uid="user-1",
             workdir_path="projects/project-1",
@@ -219,7 +219,7 @@ async def test_compresses_checkpoint_through_canonical_graph(monkeypatch: pytest
 
     result = await service._compress_agent_checkpoint(
         agent=Agent(),
-        input_context={"uid": "user-1", "thread_id": "thread-1", "summary_threshold": 2},
+        context=BaseContext(**{"uid": "user-1", "thread_id": "thread-1", "summary_threshold": 2}),
     )
 
     assert result == {"status": "completed", "after_tokens": 300}

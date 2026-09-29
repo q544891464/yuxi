@@ -161,12 +161,12 @@
           <div
             ref="messageInputDockRef"
             class="bottom composer-zone"
-            :class="{ 'start-screen': !conversations.length }"
+            :class="{ 'start-screen': isNewConversation && !$slots.welcome }"
           >
             <div class="message-input-wrapper">
               <!-- 加载状态：加载消息 -->
-              <div v-if="isLoadingMessages" class="chat-loading">
-                <div class="loading-spinner"></div>
+              <div v-if="isLoadingMessages" class="chat-loading" role="status">
+                <div class="loading-spinner" aria-hidden="true"></div>
                 <span>正在加载消息...</span>
               </div>
 
@@ -207,7 +207,7 @@
                 </button>
               </div>
               <!-- 打招呼区域 - 在输入框上方 -->
-              <div v-if="!conversations.length && !$slots.welcome" class="chat-greeting-input">
+              <div v-if="isNewConversation && !$slots.welcome" class="chat-greeting-input">
                 <h1>{{ randomGreeting }}</h1>
               </div>
 
@@ -811,6 +811,13 @@
                               />
                             </div>
                             <div class="state-list-item-meta">{{ run.description }}</div>
+                            <div
+                              v-if="run.observation_error"
+                              class="state-list-item-meta"
+                              role="status"
+                            >
+                              状态暂不可用，正在重连
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -842,7 +849,7 @@
           :thread-id="currentChatId"
           :active-run-id="currentThreadState?.activeRunId || null"
           :run-active="Boolean(currentThreadState?.activeRunId && currentThreadState?.isStreaming)"
-          :visible="isFilePanelOpen"
+          :visible="isFilePanelOpen && subagentObservationEnabled"
           :messages="currentDebugMessages"
           :runs="currentThreadRuns"
           :panel-ratio="panelRatio"
@@ -908,6 +915,7 @@ import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import AgentMessageComponent from '@/components/AgentMessageComponent.vue'
 import {
   formatEmptyRunStatus,
+  groupConversationContinuations,
   isConversationSettled as isRunConversationSettled
 } from '@/utils/conversationProcessGrouping'
 import RefsComponent from '@/components/RefsComponent.vue'
@@ -945,6 +953,7 @@ import HumanApprovalModal from '@/components/HumanApprovalModal.vue'
 import { extractPendingInterrupt, useApproval } from '@/composables/useApproval'
 import { useAgentThreadState, IDLE_QUEUE_SNAPSHOT } from '@/composables/useAgentThreadState'
 import { useAgentRunStream } from '@/composables/useAgentRunStream'
+import { useSubagentRuns } from '@/composables/useSubagentRuns'
 import { useAgentStreamHandler } from '@/composables/useAgentStreamHandler'
 import { useStreamSmoother } from '@/composables/useStreamSmoother'
 import { useAgentRequestQueue } from '@/composables/useAgentRequestQueue'
@@ -986,6 +995,7 @@ import {
 const props = defineProps({
   agentId: { type: String, default: '' },
   initialProjectId: { type: String, default: '' },
+  isNewConversation: { type: Boolean, required: true },
   singleMode: { type: Boolean, default: true },
   sendDisabled: { type: Boolean, default: false }
 })
@@ -1838,9 +1848,18 @@ const currentTodos = computed(() => {
     }
   })
 })
-const currentSubagentRuns = computed(() => {
-  const runs = currentAgentState.value?.subagent_runs
-  return Array.isArray(runs) ? runs : []
+const subagentObservationEnabled = ref(true)
+const currentSubagentRuns = useSubagentRuns({
+  scope: computed(() =>
+    userStore.isLoggedIn && userStore.uid && currentChatId.value
+      ? `${userStore.uid}:${currentChatId.value}`
+      : ''
+  ),
+  enabled: subagentObservationEnabled,
+  runs: computed(() => {
+    const runs = currentAgentState.value?.subagent_runs
+    return Array.isArray(runs) ? runs : []
+  })
 })
 const currentSubagentRunById = computed(() => {
   const runById = new Map()
@@ -1868,10 +1887,11 @@ const currentSubagentOptionBySlug = computed(() => {
 const openSubagentThread = (run) => {
   if (!run?.child_thread_id) return
   const threadId = String(run.child_thread_id)
-  const key = `subagent:${threadId}`
+  const key = `subagent:${run.run_id || threadId}`
   const section = {
     key,
     type: 'subagent',
+    runId: run.run_id || '',
     title: getSubagentRunName(run),
     threadId,
     avatar: getSubagentIconSrc(run),
@@ -1883,6 +1903,8 @@ const openSubagentThread = (run) => {
   statePanelOpen.value = false
   panelRatio.value = clampPanelRatio(previewPanelRatio)
 }
+
+provide('openSubagentThread', openSubagentThread)
 
 const toggleMessageDebugPanel = () => {
   if (isFilePanelOpen.value && agentPanelActiveSectionKey.value === MESSAGE_DEBUG_SECTION.key) {
@@ -2214,11 +2236,13 @@ const historyConversations = computed(() => {
 })
 
 function mergeLocalImageFields(message, localMessage) {
-  if (!localMessage?.image_content || message?.image_content) return message
+  const localImages = localMessage?.image_contents || []
+  if (!localImages.length || message?.image_contents?.length) return message
   return {
     ...message,
     message_type: localMessage.message_type || message.message_type,
     image_content: localMessage.image_content,
+    image_contents: localImages,
     extra_metadata: message.extra_metadata || {}
   }
 }
@@ -2337,9 +2361,9 @@ const conversations = computed(() => {
       messages: activeRunOngoingMessages,
       status: 'streaming'
     }
-    return [...activeRunHistoryConvs, onGoingConv]
+    return groupConversationContinuations([...activeRunHistoryConvs, onGoingConv])
   }
-  return activeRunHistoryConvs
+  return groupConversationContinuations(activeRunHistoryConvs)
 })
 
 /** 间隔超过一小时时，在新用户消息上方显示发送时间。 */
@@ -2368,7 +2392,10 @@ const getConversationTimeLabel = (conv, previousConv) => {
 const conversationRows = computed(() => {
   const rows = conversations.value.map((conv, index) => ({
     type: 'conversation',
-    key: conv.status === 'streaming' ? 'ongoing-conversation' : `history-${index}`,
+    key:
+      conv.displayKey ||
+      conv.run?.run_id ||
+      (conv.status === 'streaming' ? 'ongoing-conversation' : `history-${index}`),
     conv,
     timeLabel: getConversationTimeLabel(conv, conversations.value[index - 1]),
     displayItems: getDisplayItems(conv),
@@ -2552,7 +2579,7 @@ const createClientRequestId = () => {
 const buildOptimisticHumanMessage = ({
   requestId,
   text,
-  imageContent = null,
+  imageContents = [],
   attachments = []
 }) => {
   const message = {
@@ -2562,31 +2589,19 @@ const buildOptimisticHumanMessage = ({
     created_at: new Date().toISOString(),
     delivery_status: 'sending',
     content: text,
-    message_type: imageContent ? 'multimodal_image' : 'text',
+    message_type: imageContents.length ? 'multimodal_image' : 'text',
     extra_metadata: {
       request_id: requestId,
       attachments
     }
   }
 
-  if (imageContent) {
-    message.image_content = imageContent
+  if (imageContents.length) {
+    message.image_contents = imageContents
+    message.image_content = imageContents[0]
   }
 
   return message
-}
-
-// 发送 runs 前先在前端插入一条用户消息，避免等待 worker 轮询后消息才出现。
-const insertOptimisticHumanMessage = (
-  threadState,
-  { requestId, text, imageContent = null, attachments = [] }
-) => {
-  if (!threadState || !requestId) return
-  threadState.pendingRequestId = requestId
-  threadState.replyLoadingVisible = false
-  threadState.onGoingConv.msgChunks[requestId] = [
-    buildOptimisticHumanMessage({ requestId, text, imageContent, attachments })
-  ]
 }
 
 const markAttachmentsRequestId = (threadId, attachments, requestId) => {
@@ -2838,6 +2853,7 @@ onMounted(() => {
 
 onActivated(() => {
   replyElapsedViewActive.value = true
+  subagentObservationEnabled.value = true
   nextTick(() => {
     startChatMainResizeObserver()
   })
@@ -2848,6 +2864,7 @@ onActivated(() => {
 
 onDeactivated(() => {
   replyElapsedViewActive.value = false
+  subagentObservationEnabled.value = false
   stopChatMainResizeObserver()
   stopStreamingStateRefresh()
   stopReplyElapsedTimer()
@@ -3348,12 +3365,12 @@ const selectThreadFromRoute = async (threadId) => {
   return true
 }
 
-const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
+const handleSendMessage = async ({ images = [], queuePolicy = 'enqueue' } = {}) => {
   if (currentFailedSend.value) return
   const text = userInput.value.trim()
-  const imageContent = image?.imageContent || null
+  const imageContents = images.map((item) => item.imageContent).filter(Boolean)
   if (
-    (!text && !image) ||
+    (!text && !imageContents.length) ||
     !currentAgent.value ||
     sendCooldownActive.value ||
     props.sendDisabled ||
@@ -3424,24 +3441,24 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
 
   const requestId = createClientRequestId()
   const previousAttachments = markAttachmentsRequestId(threadId, pendingAttachments, requestId)
+  const inputMessage = buildOptimisticHumanMessage({
+    requestId,
+    text,
+    imageContents,
+    attachments: pendingAttachments.map((attachment) => ({ ...attachment, request_id: requestId }))
+  })
   if (!hadActiveRun) {
     resetOnGoingConv(threadId)
-    insertOptimisticHumanMessage(threadState, {
-      requestId,
-      text,
-      imageContent,
-      attachments: pendingAttachments.map((attachment) => ({
-        ...attachment,
-        request_id: requestId
-      }))
-    })
+    threadState.pendingRequestId = requestId
+    threadState.onGoingConv.msgChunks[requestId] = [inputMessage]
     threadState.isStreaming = true
   } else {
     threadState.queuedRequests.push({
       request_id: requestId,
       status: 'sending',
       content: text,
-      created_at: new Date().toISOString()
+      created_at: inputMessage.created_at,
+      message: inputMessage
     })
   }
 
@@ -3453,7 +3470,7 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
       request_id: requestId,
       attachment_file_ids: pendingAttachmentFileIds
     },
-    image_content: imageContent,
+    image_content: imageContents.length ? imageContents : null,
     model_spec: modelSpec,
     tool_approval_mode: toolApprovalMode,
     queue_policy: queuePolicy
@@ -3467,9 +3484,6 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
     intakeAccepted = true
     const status = runResp?.status
     const runId = runResp?.run_id
-    const sendingRequest = threadState.queuedRequests.find(
-      (request) => request.request_id === requestId
-    )
     threadState.queuedRequests = threadState.queuedRequests.filter(
       (request) => request.request_id !== requestId
     )
@@ -3481,9 +3495,7 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
       }
     }
     if (status === 'queued' || (!runId && status !== 'rejected')) {
-      for (const msg of threadState.onGoingConv.msgChunks[requestId] || []) {
-        if (msg.type === 'human') msg.delivery_status = 'queued'
-      }
+      inputMessage.delivery_status = 'queued'
       threadState.queuedRequests = threadState.queuedRequests || []
       threadState.queuedRequests.push({
         request_id: requestId,
@@ -3491,7 +3503,8 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
         queue_policy: runResp?.queue_policy || queuePolicy,
         queue_position: runResp?.queue_position || 1,
         content: text,
-        created_at: sendingRequest?.created_at
+        created_at: inputMessage.created_at,
+        message: inputMessage
       })
       if (!hadActiveRun) {
         threadState.isStreaming = false
@@ -3499,19 +3512,7 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
       }
       await resumeQueuedRequests(threadId, resolveAgentSlugForThread(threadId))
     } else if (runId) {
-      if (sendingRequest) {
-        threadState.onGoingConv.msgChunks[requestId] = [
-          {
-            ...buildOptimisticHumanMessage({
-              requestId,
-              text,
-              imageContent,
-              attachments: pendingAttachments
-            }),
-            created_at: sendingRequest.created_at
-          }
-        ]
-      }
+      threadState.onGoingConv.msgChunks[requestId] = [inputMessage]
       threadState.pendingRequestId = requestId
       await startRunStream(threadId, runId, 0, { requestId })
     } else {
@@ -3521,7 +3522,7 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
     if (!intakeAccepted && !isRunInterruptedConflict(error)) {
       failedSends.value[threadId] = {
         payload: sendPayload,
-        image,
+        images,
         busy: false,
         rejected: [400, 401, 403, 404, 413, 422, 429].includes(error?.status),
         error: error?.status
@@ -3545,7 +3546,7 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
       if (currentChatId.value === threadId) {
         const currentDraft = userInput.value
         userInput.value = [text, currentDraft].filter(Boolean).join('\n')
-        agentInputAreaRef.value?.restoreImage?.(image)
+        agentInputAreaRef.value?.restoreImages?.(images)
       }
       try {
         await fetchAgentState(currentAgentId.value, threadId, { required: true })
@@ -3602,7 +3603,7 @@ const editFailedSend = () => {
   const failed = failedSends.value[threadId]
   if (!failed || !failed.rejected || failed.busy) return
   userInput.value = [failed.payload.query, userInput.value].filter(Boolean).join('\n')
-  if (failed.image) agentInputAreaRef.value?.restoreImage?.(failed.image)
+  if (failed.images?.length) agentInputAreaRef.value?.restoreImages?.(failed.images)
   delete failedSends.value[threadId]
 }
 
@@ -3646,7 +3647,7 @@ const handleSendOrStop = async (payload) => {
 
   const threadId = currentChatId.value
   const threadState = getThreadState(threadId)
-  const hasNewInput = Boolean(String(userInput.value || '').trim() || payload?.image)
+  const hasNewInput = Boolean(String(userInput.value || '').trim() || payload?.images?.length)
   if (threadState?.activeRunId && threadState?.isStreaming && !hasNewInput) {
     try {
       await agentApi.cancelAgentRun(threadState.activeRunId)
@@ -3706,6 +3707,12 @@ const handleApprovalWithStream = async (answer) => {
     const runId = runResp?.run_id
     if (!runId) {
       throw new Error('创建 resume run 失败：缺少 run_id')
+    }
+    // 首个流事件前读取已持久化的续跑关系；读取失败不能把已创建的 Run 当成创建失败。
+    try {
+      await fetchThreadMessages({ agentId: currentAgentId.value, threadId })
+    } catch (error) {
+      console.warn('Failed to refresh history before resume stream:', error)
     }
     await startRunStream(threadId, runId, '0-0')
   } catch (error) {
@@ -3863,7 +3870,7 @@ const getMessageToolCalls = (message) => {
 const getDisplayItems = (conv) =>
   getConversationDisplayItems(conv, {
     enrichToolCalls: getMessageToolCalls,
-    runTiming: getMessageRun(getLastMessage(conv))?.timing,
+    runTiming: conv.processTiming || getMessageRun(getLastMessage(conv))?.timing,
     collapseIntermediate: conv?.status !== 'streaming' && isConversationSettled(conv)
   })
 
@@ -4468,17 +4475,12 @@ watch(currentChatId, (threadId, oldThreadId) => {
 }
 
 .chat-loading {
-  padding: 0 50px;
+  padding-bottom: 12px;
   text-align: center;
-  position: absolute;
-  top: 20%;
-  width: 100%;
-  z-index: 9;
-  animation: slideInUp 0.5s ease-out;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
 
   span {
     color: var(--gray-700);
