@@ -43,6 +43,9 @@ async def test_storage_migration_reads_legacy_schema_before_cutover(monkeypatch)
         upgrade_agent_resource_selection=lambda: _record(
             calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
         ),
+        upgrade_user_default_agent=lambda: _record(
+            calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
+        ),
         record_schema_version=lambda domain, version: _record(calls, f"version:{domain}:{version}"),
         create_business_tables=lambda: _record(calls, "create_business_tables"),
         create_knowledge_tables=lambda: _record(calls, "create_knowledge_tables"),
@@ -117,6 +120,9 @@ async def test_storage_migration_rejects_v071_schema_without_quiescence_proof(mo
         upgrade_agent_resource_selection=lambda: _record(
             calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
         ),
+        upgrade_user_default_agent=lambda: _record(
+            calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
+        ),
         record_schema_version=lambda domain, version: _record(calls, f"version:{domain}:{version}"),
         create_business_tables=lambda: _record(calls, "create"),
         create_knowledge_tables=lambda: _record(calls, "create_knowledge"),
@@ -165,6 +171,9 @@ async def test_current_schema_skips_schema_ddl(monkeypatch):
             }
         ),
         upgrade_agent_resource_selection=lambda: _record(
+            calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
+        ),
+        upgrade_user_default_agent=lambda: _record(
             calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
         ),
         record_schema_version=lambda domain, version: _record(calls, f"version:{domain}:{version}"),
@@ -265,6 +274,9 @@ async def test_supported_legacy_business_schema_is_converged_and_versioned_as_cu
         upgrade_agent_resource_selection=lambda: _record(
             calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
         ),
+        upgrade_user_default_agent=lambda: _record(
+            calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
+        ),
         record_schema_version=lambda domain, version: _record(calls, f"version:{domain}:{version}"),
         create_business_tables=lambda: _record(calls, "create_business"),
         create_knowledge_tables=lambda: _record(calls, "create_knowledge"),
@@ -300,7 +312,7 @@ async def test_supported_legacy_business_schema_is_converged_and_versioned_as_cu
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("previous_version", [7, 8, 9, 10, 11])
+@pytest.mark.parametrize("previous_version", [7, 8, 9, 10, 11, 12])
 async def test_previous_business_schema_is_converged_and_versioned_as_current(monkeypatch, previous_version):
     """旧版数据库补齐缺失列与资源选择；仅旧于 v10 的数据库新增文书表。"""
 
@@ -320,6 +332,9 @@ async def test_previous_business_schema_is_converged_and_versioned_as_current(mo
             {"business": previous_version, "knowledge": storage_migration.KNOWLEDGE_SCHEMA_VERSION}
         ),
         upgrade_agent_resource_selection=lambda: _record(
+            calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
+        ),
+        upgrade_user_default_agent=lambda: _record(
             calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
         ),
         record_schema_version=lambda domain, version: _record(calls, f"version:{domain}:{version}"),
@@ -378,6 +393,9 @@ async def test_failed_business_migration_does_not_record_version(monkeypatch):
         upgrade_agent_resource_selection=lambda: _record(
             calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
         ),
+        upgrade_user_default_agent=lambda: _record(
+            calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
+        ),
         record_schema_version=lambda domain, version: _record(calls, f"version:{domain}:{version}"),
         create_business_tables=lambda: _record(calls, "create_business"),
         create_knowledge_tables=lambda: _record(calls, "create_knowledge"),
@@ -422,6 +440,9 @@ async def test_current_schema_does_not_rewrite_workdir_data(monkeypatch):
         create_schema_version_table=lambda: _record(calls, "create_schema_version_table"),
         get_schema_versions=lambda: _async_value({}),
         upgrade_agent_resource_selection=lambda: _record(
+            calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
+        ),
+        upgrade_user_default_agent=lambda: _record(
             calls, f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}"
         ),
         record_schema_version=lambda domain, version: _record(calls, f"version:{domain}:{version}"),

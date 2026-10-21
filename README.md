@@ -5,7 +5,7 @@
 [项目主页](https://xerrors.github.io/Yuxi/) · [快速开始](https://xerrors.github.io/Yuxi/intro/quick-start) · [演示视频](https://www.bilibili.com/video/BV1erE26iEgv/) · [版本记录](https://github.com/xerrors/Yuxi/releases) · [English](README.en.md)
 
 
-`basic` 分支提供通用版本：登录后进入 `/chat`，保留项目、附件、知识库、通用 Skills 与智能体管理；不预置税务数字人、税务角色、业务技能树或文书移交流程。请为 Basic 使用独立配置和数据库，避免继承 `cydx` 部署中已保存的品牌、用户技能与业务资料。
+`basic` 分支提供通用版本：登录后进入数字员工广场，可选择有权访问的员工并设置账号默认入口；聊天仍使用 `/chat`。管理员复用智能体管理配置员工名称、形象、知识库、Skills 与共享范围。保留项目、附件与通用能力，不预置税务标识、业务角色、技能树或文书移交流程。请为 Basic 使用独立配置和数据库，避免继承 `cydx` 部署中已保存的品牌、用户技能与业务资料。
 
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=ffffff)](https://github.com/xerrors/Yuxi/blob/main/docker-compose.yml)
 [![Release](https://img.shields.io/github/v/release/xerrors/Yuxi?color=046A82)](https://github.com/xerrors/Yuxi/releases/latest)

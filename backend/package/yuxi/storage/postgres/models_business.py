@@ -335,6 +335,7 @@ class UserConfig(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     uid = Column(String, ForeignKey("users.uid"), nullable=False, unique=True, index=True)
     enable_memory = Column(Boolean, nullable=False, default=False)
+    default_agent_id = Column(String(80), nullable=True)
     created_at = Column(DateTime, default=utc_now_naive)
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
@@ -344,6 +345,7 @@ class UserConfig(Base):
         return {
             "uid": self.uid,
             "enable_memory": bool(self.enable_memory),
+            "default_agent_id": self.default_agent_id,
             "created_at": format_utc_datetime(self.created_at),
             "updated_at": format_utc_datetime(self.updated_at),
         }

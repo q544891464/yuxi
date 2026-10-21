@@ -73,7 +73,12 @@ TEXT_FILE_EXTENSIONS = {
 BUILTIN_SKILL_OPERATOR = "builtin-system"
 ADMIN_ROLES = {"admin", "superadmin"}
 DEFAULT_SKILL_SHARE_CONFIG = {"access_level": "user", "department_ids": [], "user_uids": []}
-BUILTIN_SKILL_SHARE_CONFIG = {"access_level": "global", "department_ids": [], "user_uids": []}
+BUILTIN_SKILL_READ_SCOPE = {"access_level": "global", "department_ids": [], "user_uids": []}
+BUILTIN_SKILL_SHARE_CONFIG = {
+    "version": 2,
+    "read_scope": BUILTIN_SKILL_READ_SCOPE,
+    "manage_scope": None,
+}
 SKILL_DRAFT_TTL_SECONDS = 60 * 60
 PERSONAL_SKILL_SOURCE_TYPE = "personal"
 _USER_SKILLS_LOCK = threading.Lock()
@@ -202,7 +207,11 @@ def normalize_skill_share_config(
     allowed_access_levels: set[str] | None = None,
 ) -> dict:
     if source_type == "builtin":
-        return {"version": 2, "read_scope": BUILTIN_SKILL_SHARE_CONFIG.copy(), "manage_scope": None}
+        return {
+            "version": 2,
+            "read_scope": BUILTIN_SKILL_READ_SCOPE.copy(),
+            "manage_scope": None,
+        }
 
     default_scope = {
         "access_level": "user",

@@ -29,6 +29,8 @@ Owner：web/src/router/index.js
 | 税务专属路由、默认 Skill、子智能体和文书 API 不再 shipping | 前端删除后直达 API/默认注册仍可用 | `system_router.py`、`routers/__init__.py`、内置 Skill 与 lifespan | 后端相关 unit、真实 HTTP 负向检查、provider 注册搜索 | 恢复任一税务注册后负向检查失败 | 源码注册检查与编译通过；真实 HTTP 未验证 |
 | 通用聊天、项目、附件、知识库与 Skills 仍可用 | 误删通用 consumer 或更改普通身份授权 | 对应 router/service/store | 前后端相关回归、构建和隔离运行链 | 普通用户不能进入聊天或引用 Skills 时失败 | 前端 366 项单测通过；后端运行链未验证 |
 
+首页入口的后续调整见[Basic 数字员工广场与个人默认入口](2026-10-21-basic-digital-employees.md)。通用员工选择复用 Agent 配置，不恢复本记录移除的税务页面或业务角色。
+
 ## 后果
 
 旧 `cydx` 数据库中保存的品牌、角色和个人/共享业务 Skill 不由代码删除；若错误地复用该数据库，仍可能显示旧配置或保留历史资源。Basic 需要独立部署配置与数据。移除接口时要核对前端、公开契约、测试和 migration consumer；停用业务表不意味着可以原地降级数据库 Schema。

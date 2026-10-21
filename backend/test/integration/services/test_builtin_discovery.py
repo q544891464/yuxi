@@ -1,6 +1,7 @@
 """文件发现、真实 PostgreSQL 落库与 HTTP 可见性。"""
 
 import os
+import shutil
 import sys
 import uuid
 from importlib import invalidate_caches
@@ -81,6 +82,67 @@ async def test_backend_http_contract_rejects_unknown_ids(test_client, admin_head
             await db.execute(delete(Agent).where(Agent.slug == slug))
             await db.commit()
         await engine.dispose()
+
+
+async def test_builtin_init_creates_v2_acl_and_user_can_read_resources(
+    tmp_path, monkeypatch, test_client, standard_user
+):
+    """首次初始化 builtin Skill 写入 v2 ACL 并允许普通用户读取。"""
+    skill_slug = f"pytest-builtin-acl-{uuid.uuid4().hex}"
+    source_dir = tmp_path / "builtin-skills" / skill_slug
+    source_dir.mkdir(parents=True)
+    (source_dir / "SKILL.md").write_text("# 临时权限验收技能\n", encoding="utf-8")
+    skill_data_dir = tmp_path / "skill-data"
+    monkeypatch.setattr(skill_service, "get_skill_data_dir", lambda: skill_data_dir)
+    monkeypatch.setattr(
+        skill_service,
+        "list_builtin_skill_specs",
+        lambda: [
+            {
+                "slug": skill_slug,
+                "name": "临时权限验收技能",
+                "description": "验证首次 builtin 初始化 ACL",
+                "version": "1.0.0",
+                "tool_dependencies": [],
+                "mcp_dependencies": [],
+                "skill_dependencies": [],
+                "content_hash": "test-content-hash",
+                "source_dir": source_dir,
+            }
+        ],
+    )
+    v2_scope = {
+        "version": 2,
+        "read_scope": {"access_level": "global", "department_ids": [], "user_uids": []},
+        "manage_scope": None,
+    }
+    engine = create_async_engine(os.environ["POSTGRES_URL"])
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+
+    try:
+        async with sessions() as db:
+            synced = await skill_service.init_builtin_skills(db)
+            assert [item.slug for item in synced] == [skill_slug]
+            await db.commit()
+
+        async with sessions() as db:
+            created = await db.scalar(select(Skill).where(Skill.slug == skill_slug))
+            assert created is not None
+            assert created.source_type == "builtin"
+            assert created.share_config == v2_scope
+
+        user_headers = standard_user["headers"]
+        default_agent = await test_client.get("/api/agent/default", headers=user_headers)
+        assert default_agent.status_code == 200, default_agent.text
+        accessible = await test_client.get("/api/skills/accessible", headers=user_headers)
+        assert accessible.status_code == 200, accessible.text
+        assert skill_slug in {item["slug"] for item in accessible.json()["data"]}
+    finally:
+        async with sessions() as db:
+            await db.execute(delete(Skill).where(Skill.slug == skill_slug))
+            await db.commit()
+        await engine.dispose()
+        shutil.rmtree(skill_data_dir / "shared" / skill_slug, ignore_errors=True)
 
 
 async def test_unknown_backend_prevents_all_preset_writes(tmp_path, monkeypatch):

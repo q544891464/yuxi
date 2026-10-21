@@ -1,5 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { userConfigApi } from '@/apis/user_config_api'
+import { agentApi } from '@/apis/agent_api'
+import { resolveDefaultEmployee } from '@/utils/digitalEmployees'
 import { sanitizeRedirect } from '@/utils/oidcAutoStart'
 
 const AppLayout = () => import('@/layouts/AppLayout.vue')
@@ -10,7 +13,19 @@ const router = createRouter({
     {
       path: '/',
       name: 'Home',
-      redirect: '/chat'
+      component: AppLayout,
+      meta: { requiresAuth: true, consumerChat: true, defaultEmployeeEntry: true },
+      children: [
+        { path: '', name: 'EmployeeSquareHome', component: () => import('../views/EmployeeSquareView.vue') }
+      ]
+    },
+    {
+      path: '/employees',
+      component: AppLayout,
+      meta: { requiresAuth: true, consumerChat: true },
+      children: [
+        { path: '', name: 'EmployeeSquare', component: () => import('../views/EmployeeSquareView.vue') }
+      ]
     },
     {
       path: '/login',
@@ -203,6 +218,18 @@ router.beforeEach(async (to) => {
   // 页面入口按已加载的身份分流，资源授权仍由后端执行。
   if (requiresAdmin && !isAdmin) return '/chat'
   if (requiresSuperAdmin && !isSuperAdmin) return '/chat'
+
+  // 根路径按账号默认员工进入聊天；广场直达路由始终保持显式选择。
+  if (to.meta.defaultEmployeeEntry && isLoggedIn) {
+    try {
+      const [config, response] = await Promise.all([userConfigApi.get(), agentApi.getAgents()])
+      const selected = resolveDefaultEmployee(config.default_agent_id, response.agents || [])
+      if (selected) return { path: '/chat', query: { agent_id: selected.slug || selected.id } }
+    } catch (error) {
+      // 广场页面负责展示可恢复的列表错误；根路径不应因默认值读取失败而失去入口。
+      console.warn('读取默认数字员工失败:', error)
+    }
+  }
 
   // 如果用户已登录但访问登录页，按 redirect 参数跳转
   if (to.path === '/login' && isLoggedIn && !shareLoginHash) {

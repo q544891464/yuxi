@@ -11,7 +11,8 @@ import {
   PanelLeft,
   PanelLeftOpen,
   MessageCirclePlus,
-  Search
+  Search,
+  UsersRound
 } from '@lucide/vue'
 
 import { useConfigStore } from '@/stores/config'
@@ -53,6 +54,7 @@ const showSettingsModal = ref(false)
 const settingsInitialTab = ref('')
 
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
+const mobileSidebarExpanded = ref(false)
 const conversationSearchOpen = ref(false)
 const projectPendingId = ref(null)
 const archiveOpen = ref(false)
@@ -155,6 +157,13 @@ const mainList = computed(() => {
   ]
 
   items.push({
+    name: '数字员工',
+    path: '/employees',
+    icon: UsersRound,
+    activeIcon: UsersRound
+  })
+
+  items.push({
     name: '智能体',
     path: '/agent-manage',
     icon: Box,
@@ -207,6 +216,14 @@ const toggleSidebar = () => {
   setSidebarCollapsed(!sidebarCollapsed.value)
 }
 
+const toggleMobileSidebar = () => {
+  mobileSidebarExpanded.value = !mobileSidebarExpanded.value
+}
+
+const closeMobileSidebar = () => {
+  mobileSidebarExpanded.value = false
+}
+
 const openConversationSearch = () => {
   conversationSearchOpen.value = true
 }
@@ -233,6 +250,7 @@ const loadProjects = async () => {
 const handleSelectChat = (threadId) => {
   if (!threadId) return
   if (!chatThreadsStore.setCurrentThreadId(threadId)) return
+  closeMobileSidebar()
   router.push({ name: `${entryRoute.value}WithThreadId`, params: { thread_id: threadId } })
 }
 
@@ -248,11 +266,13 @@ const handleSearchSelectThread = (thread) => {
 
 const handleCreateConversationFromSearch = () => {
   if (!chatThreadsStore.setCurrentThreadId(null)) return
+  closeMobileSidebar()
   router.push({ name: entryRoute.value })
 }
 
 const handleCreateProjectChat = async (projectId) => {
   if (!projectId || projectPendingId.value || threadCreationInFlight.value) return
+  closeMobileSidebar()
   await router.push({ name: entryRoute.value, query: { project_id: projectId } })
   chatThreadsStore.setCurrentThreadId(null)
 }
@@ -262,6 +282,7 @@ const searchWorkspace = (query) => searchWorkspaceFiles(query)
 // 侧边栏搜索到工作区文件后跳转到工作区并打开对应文件
 const handleSearchSelectFile = (entry) => {
   if (!entry?.path) return
+  closeMobileSidebar()
   router.push({ name: 'WorkspaceComp', query: { open: entry.path } })
 }
 
@@ -437,16 +458,28 @@ provide('settingsModal', {
     class="app-layout"
     :class="{
       'sidebar-collapsed': sidebarCollapsed,
+      'mobile-sidebar-expanded': mobileSidebarExpanded,
       'consumer-layout': consumerChat
     }"
   >
     <header v-if="consumerChat" class="consumer-topbar">
-      <RouterLink to="/chat" class="consumer-brand">
+      <RouterLink to="/" class="consumer-brand" @click="closeMobileSidebar">
         <span class="consumer-logo" aria-hidden="true"></span>
         <span><strong>Yuxi 智能助手</strong><small>知识与智能体工作台</small></span>
       </RouterLink>
+      <button
+        type="button"
+        class="mobile-sidebar-toggle"
+        aria-label="切换导航菜单"
+        aria-controls="consumer-sidebar"
+        :aria-expanded="mobileSidebarExpanded"
+        @click="toggleMobileSidebar"
+      >
+        <PanelLeftOpen size="19" aria-hidden="true" />
+        <span>导航</span>
+      </button>
     </header>
-    <div class="header" :class="{ 'consumer-history': consumerChat }">
+    <div id="consumer-sidebar" class="header" :class="{ 'consumer-history': consumerChat }">
       <div class="sidebar-brand" @click.stop>
         <button
           v-if="!sidebarCollapsed"
@@ -486,7 +519,7 @@ provide('settingsModal', {
           class="nav-item"
           :class="{ active: isNavItemActive(primaryNavItem) }"
           :active-class="primaryNavItem.action ? '' : 'active'"
-          @click.stop
+          @click.stop="closeMobileSidebar"
         >
           <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
             <template #title>{{ primaryNavItem.name }}</template>
@@ -522,7 +555,7 @@ provide('settingsModal', {
           class="nav-item"
           :class="{ active: isNavItemActive(item) }"
           :active-class="item.action ? '' : 'active'"
-          @click.stop
+          @click.stop="closeMobileSidebar"
         >
           <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
             <template #title>{{ item.name }}</template>
@@ -537,7 +570,7 @@ provide('settingsModal', {
       </div>
       <div class="fill">
         <ConversationNavSection
-          v-if="!sidebarCollapsed"
+          v-if="!sidebarCollapsed || mobileSidebarExpanded"
           class="sidebar-conversations"
           :current-chat-id="activeConversationThreadId"
           :chats-list="threads"
@@ -644,6 +677,7 @@ provide('settingsModal', {
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);
   grid-template-rows: 76px minmax(0, 1fr);
+  position: relative;
   min-width: 0;
   height: 100dvh;
   &.sidebar-collapsed {
@@ -687,6 +721,9 @@ provide('settingsModal', {
     height: 48px;
     flex-shrink: 0;
     background: url('/favicon.svg') center / contain no-repeat;
+  }
+  .mobile-sidebar-toggle {
+    display: none;
   }
   .consumer-history {
     grid-column: 1;
@@ -812,6 +849,7 @@ provide('settingsModal', {
     background: transparent;
   }
   @media (max-width: 760px) {
+    grid-template-columns: 56px minmax(0, 1fr);
     grid-template-rows: 66px minmax(0, 1fr);
     .consumer-topbar {
       height: 66px;
@@ -827,6 +865,89 @@ provide('settingsModal', {
     .consumer-logo {
       display: none;
     }
+    .mobile-sidebar-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 38px;
+      padding: 0 10px;
+      border: 1px solid var(--gray-200);
+      border-radius: 9px;
+      background: var(--gray-0);
+      color: var(--gray-800);
+      font: inherit;
+      cursor: pointer;
+    }
+    .mobile-sidebar-toggle:focus-visible {
+      outline: 2px solid var(--main-500);
+      outline-offset: 2px;
+    }
+    .consumer-history {
+      grid-column: 1;
+      grid-row: 2;
+      width: 56px;
+      overflow: hidden;
+    }
+    .consumer-history .sidebar-brand,
+    .consumer-history .fill,
+    .consumer-history .foo {
+      display: none;
+    }
+    .consumer-history .nav {
+      align-items: stretch;
+      padding: 0;
+    }
+    .consumer-history .nav-item {
+      justify-content: center;
+      padding: 0 18px;
+    }
+    .consumer-history .nav-item .nav-text {
+      max-width: 0;
+      margin-left: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    &.mobile-sidebar-expanded .consumer-history {
+      position: absolute;
+      grid-area: 1 / 1 / -1 / -1;
+      z-index: 5;
+      top: 66px;
+      bottom: 0;
+      left: 0;
+      width: 230px;
+      height: auto;
+      box-shadow: var(--shadow-2);
+    }
+    &.mobile-sidebar-expanded .consumer-history .sidebar-brand,
+    &.mobile-sidebar-expanded .consumer-history .foo {
+      display: flex;
+    }
+    &.mobile-sidebar-expanded .consumer-history .nav-item {
+      justify-content: flex-start;
+      padding: 0 @sidebar-item-padding-x;
+    }
+    &.mobile-sidebar-expanded .consumer-history .fill {
+      display: block;
+    }
+    &.mobile-sidebar-expanded .consumer-history .nav-item .nav-text {
+      max-width: 140px;
+      margin-left: 8px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    &.mobile-sidebar-expanded.sidebar-collapsed .nav-item {
+      padding: 0 @sidebar-item-padding-x;
+    }
+    &.mobile-sidebar-expanded.sidebar-collapsed .nav {
+      padding: 0 @sidebar-padding-x;
+    }
+  }
+}
+
+@media (min-width: 761px) {
+  .app-layout.consumer-layout.sidebar-collapsed .consumer-history .fill {
+    display: none;
   }
 }
 

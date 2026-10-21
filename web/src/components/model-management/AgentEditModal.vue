@@ -38,6 +38,7 @@ const showAgentModal = ref(false)
 const editingAgentId = ref(null)
 const agentModalActiveTab = ref('basic')
 const agentIconUploading = ref(false)
+let agentIconUploadPromise = null
 const saving = ref(false)
 const agentShareConfigFormRef = ref(null)
 const agentNameInputRef = ref(null)
@@ -306,7 +307,7 @@ const beforeAgentIconUpload = (file) => {
     return false
   }
 
-  uploadAgentIcon(file)
+  agentIconUploadPromise = uploadAgentIcon(file)
   return false
 }
 
@@ -316,10 +317,13 @@ const uploadAgentIcon = async (file) => {
     const data = await userApi.uploadImage(file)
     agentForm.icon = data.image_url || data.url || ''
     message.success('图标上传成功')
+    return true
   } catch (error) {
     message.error(error.message || '图标上传失败')
+    return false
   } finally {
     agentIconUploading.value = false
+    agentIconUploadPromise = null
   }
 }
 
@@ -358,6 +362,11 @@ const saveAgent = async () => {
 
   saving.value = true
   try {
+    if (agentIconUploading.value) {
+      const pendingUpload = agentIconUploadPromise
+      if (!pendingUpload || !(await pendingUpload)) return
+    }
+
     const payload = buildAgentPayload()
     if (editingAgentId.value) {
       if (agentStore.hasConfigChanges) {
@@ -470,6 +479,9 @@ defineExpose({
                     </div>
                   </div>
                 </a-upload>
+                <span v-if="agentIconUploading" class="agent-icon-upload-status" role="status">
+                  图标上传中，保存会在完成后继续
+                </span>
                 <div class="agent-icon-preview-text">
                   <input
                     ref="agentNameInputRef"

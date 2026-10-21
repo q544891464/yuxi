@@ -18,6 +18,11 @@ export function sanitizeRedirect(value) {
   return '/'
 }
 
+/** 将无显式目标的登录回跳统一送到员工入口。 */
+export function resolvePostLoginRedirect(value) {
+  return sanitizeRedirect(value)
+}
+
 // 检查是否已经尝试过自动触发 OIDC（同一会话内，避免无限循环）
 export function hasAutoStartAttempted() {
   return sessionStorage.getItem(AUTO_START_KEY) === '1'
@@ -72,7 +77,7 @@ export async function tryAutoStartOIDC(getOIDCLoginUrl, config) {
   }
 
   // 保存当前路径，登录后返回（安全校验）
-  const redirectPath = sanitizeRedirect(params.get('redirect'))
+  const redirectPath = resolvePostLoginRedirect(params.get('redirect'))
   sessionStorage.setItem('oidc_redirect', redirectPath)
 
   // 标记已尝试，防止下次再自动触发

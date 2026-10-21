@@ -293,7 +293,7 @@ import {
   Key as KeyIcon,
   AlertCircle as ExclamationCircleIcon
 } from '@lucide/vue'
-import { tryAutoStartOIDC, sanitizeRedirect } from '@/utils/oidcAutoStart'
+import { tryAutoStartOIDC, resolvePostLoginRedirect } from '@/utils/oidcAutoStart'
 import { MIN_PASSWORD_LENGTH } from '@/utils/passwordValidation'
 
 const router = useRouter()
@@ -385,7 +385,7 @@ const exchangeShareLogin = async () => {
     message.success('已进入分享账户')
     // 分享登录可能替换现有管理员会话。整页跳转可清空前一用户的 Pinia 内存状态，
     // 避免旧会话的对话、项目或智能体数据继续参与新账户的页面初始化。
-    window.location.replace('/chat')
+    window.location.replace(resolvePostLoginRedirect(route.query.redirect))
     return true
   } catch (error) {
     errorMessage.value = error.message || '分享登录链接无效或已撤销'
@@ -483,15 +483,8 @@ const handleLogin = async () => {
     message.success('登录成功')
 
     // 获取重定向路径
-    const redirectPath = sanitizeRedirect(route.query.redirect)
-
-    // 根据用户角色决定重定向目标
-    if (redirectPath === '/') {
-      router.push('/chat')
-    } else {
-      // 跳转到其他预设的路径
-      router.push(redirectPath)
-    }
+    const redirectPath = resolvePostLoginRedirect(route.query.redirect)
+    router.push(redirectPath)
   } catch (error) {
     console.error('登录失败:', error)
 
@@ -542,8 +535,9 @@ const handleOIDCLogin = async () => {
     const response = await authApi.getOIDCLoginUrl()
     if (response.login_url) {
       // 保存当前路径，以便登录后返回
-      const redirectPath =
-        sessionStorage.getItem('redirect') || router.currentRoute.value.query.redirect || '/'
+      const redirectPath = resolvePostLoginRedirect(
+        sessionStorage.getItem('redirect') || router.currentRoute.value.query.redirect
+      )
       sessionStorage.setItem('oidc_redirect', redirectPath)
 
       // 跳转到 OIDC Provider
@@ -649,7 +643,7 @@ onMounted(async () => {
 
   // 如果已登录，按 redirect 参数跳转（不固定跳首页）
   if (userStore.isLoggedIn) {
-    router.push(sanitizeRedirect(route.query.redirect))
+    router.push(resolvePostLoginRedirect(route.query.redirect))
     return
   }
 

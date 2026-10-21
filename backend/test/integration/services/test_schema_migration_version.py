@@ -11,7 +11,12 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from yuxi.storage.postgres.manager import BUSINESS_SCHEMA_VERSION, KNOWLEDGE_SCHEMA_VERSION, PostgresManager
+from yuxi.storage.postgres.manager import (
+    AGENT_RESOURCE_SELECTION_SCHEMA_VERSION,
+    BUSINESS_SCHEMA_VERSION,
+    KNOWLEDGE_SCHEMA_VERSION,
+    PostgresManager,
+)
 from yuxi.storage.postgres.models_knowledge import KnowledgeBase
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -169,6 +174,17 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
                     )
                 ).scalars()
             )
+            user_config_columns = set(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema = :schema AND table_name = 'user_config'"
+                        ),
+                        {"schema": schema},
+                    )
+                ).scalars()
+            )
             provider_columns = set(
                 (
                     await connection.execute(
@@ -257,6 +273,7 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
             "timeout_seconds",
         } <= task_columns
         assert {"prepared_at", "first_output_at", "first_model_request_at"} <= run_columns
+        assert "default_agent_id" in user_config_columns
         assert {"include_user_uid"} <= provider_columns
         assert "last_event_id" not in run_columns
         assert tuple(row) == ("running", None, 0, 0)
@@ -282,7 +299,7 @@ async def test_v072_business_converges_current_schema_idempotently() -> None:
             "ix_scheduled_agent_runs_job_created",
             "ix_scheduled_agent_runs_dispatching",
         }.issubset(scheduled_indexes)
-        assert BUSINESS_SCHEMA_VERSION == 12
+        assert BUSINESS_SCHEMA_VERSION == 13
     finally:
         await _drop_isolated_schema(schema, admin_engine, scoped_engine)
 
@@ -380,6 +397,33 @@ async def test_release_upgrade_adds_audit_columns_idempotently() -> None:
         assert {("messages", column) for column in audit_columns} <= columns
         assert "uq_messages_run_operation_id" not in audit_indexes
         assert "(run_id, role, operation_id)" in audit_indexes["uq_messages_run_role_operation_id"]
+    finally:
+        await _drop_isolated_schema(schema, admin_engine, scoped_engine)
+
+
+async def test_user_default_agent_migration_preserves_config_and_is_idempotent() -> None:
+    """真实 PostgreSQL 从业务 v12 幂等增加默认 Agent 字段并保留用户配置。"""
+    schema, admin_engine, scoped_engine, manager = await _create_isolated_manager("user_default_agent")
+    try:
+        await manager.create_schema_version_table()
+        await manager.record_schema_version("business", AGENT_RESOURCE_SELECTION_SCHEMA_VERSION)
+        async with scoped_engine.begin() as connection:
+            await connection.execute(
+                text("CREATE TABLE user_config (uid VARCHAR PRIMARY KEY, enable_memory BOOLEAN NOT NULL DEFAULT FALSE)")
+            )
+            await connection.execute(text("INSERT INTO user_config (uid, enable_memory) VALUES ('legacy-user', TRUE)"))
+
+        await manager.upgrade_user_default_agent()
+        await manager.upgrade_user_default_agent()
+
+        async with scoped_engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    text("SELECT uid, enable_memory, default_agent_id FROM user_config WHERE uid = 'legacy-user'")
+                )
+            ).one()
+        assert tuple(row) == ("legacy-user", True, None)
+        assert await manager.get_schema_versions() == {"business": BUSINESS_SCHEMA_VERSION}
     finally:
         await _drop_isolated_schema(schema, admin_engine, scoped_engine)
 
@@ -595,7 +639,7 @@ async def test_resource_selection_migration_is_atomic_and_does_not_repeat(
                 await conn.execute(
                     text(
                         "ALTER TABLE yuxi_schema_migrations ADD CONSTRAINT reject_v12 "
-                        f"CHECK (version < {BUSINESS_SCHEMA_VERSION})"
+                        f"CHECK (version < {AGENT_RESOURCE_SELECTION_SCHEMA_VERSION})"
                     )
                 )
         if fail_version_write:
@@ -632,7 +676,7 @@ async def test_resource_selection_migration_is_atomic_and_does_not_repeat(
             assert await conn.scalar(text("SELECT config_json FROM agents WHERE id = 1")) == {
                 "context": {"subagents": []}
             }
-        assert await manager.get_schema_versions() == {"business": BUSINESS_SCHEMA_VERSION}
+        assert await manager.get_schema_versions() == {"business": AGENT_RESOURCE_SELECTION_SCHEMA_VERSION}
     finally:
         await _drop_isolated_schema(schema, admin_engine, engine)
 
@@ -655,6 +699,6 @@ async def test_upstream_v9_resource_selection_is_not_reinterpreted(column_type):
         await manager.upgrade_agent_resource_selection()
         async with engine.connect() as conn:
             assert await conn.scalar(text("SELECT config_json FROM agents WHERE id = 1")) == original
-        assert await manager.get_schema_versions() == {"business": BUSINESS_SCHEMA_VERSION}
+        assert await manager.get_schema_versions() == {"business": AGENT_RESOURCE_SELECTION_SCHEMA_VERSION}
     finally:
         await _drop_isolated_schema(schema, admin_engine, engine)

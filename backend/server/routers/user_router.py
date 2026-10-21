@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_current_user, get_db, get_required_user
 from yuxi.config import UserConfig, UserConfigSchema
+from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_env_repository import AgentEnvRepository
 from yuxi.repositories.api_key_repository import (
     APIKeyDepartmentConflict,
@@ -87,7 +88,14 @@ async def get_user_config(
     db: AsyncSession = Depends(get_db),
 ):
     user_config = await UserConfig.load(db, current_user.uid)
-    return user_config.dump_config()
+    config = user_config.dump_config()
+    if config["default_agent_id"] is not None:
+        agent = await AgentRepository(db).get_visible_by_slug(
+            slug=config["default_agent_id"], user=current_user, kind="main"
+        )
+        if agent is None:
+            config["default_agent_id"] = None
+    return config
 
 
 @user_router.put("/config", response_model=dict)
@@ -96,6 +104,12 @@ async def update_user_config(
     current_user: User = Depends(get_logged_in_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if "default_agent_id" in data.model_fields_set and data.default_agent_id is not None:
+        agent = await AgentRepository(db).get_visible_by_slug(
+            slug=data.default_agent_id, user=current_user, kind="main"
+        )
+        if agent is None:
+            raise HTTPException(status_code=422, detail="默认智能体不存在或不可访问")
     user_config = await UserConfig(uid=current_user.uid, schema=data).save(db)
     return user_config.dump_config()
 

@@ -1917,6 +1917,8 @@ async def test_init_builtin_skills_create_missing(tmp_path: Path, monkeypatch: p
     assert FakeRepo.created_payload["share_config"] == svc.BUILTIN_SKILL_SHARE_CONFIG
     assert FakeRepo.created_payload["enabled"] is True
     assert FakeRepo.created_payload["created_by"] == "system"
+    assert FakeRepo.created_payload["share_config"]["version"] == 2
+    assert FakeRepo.created_payload["share_config"]["read_scope"]["access_level"] == "global"
     assert FakeRepo.created_payload["tool_dependencies"] == ["mysql_query"]
     assert FakeRepo.created_payload["mcp_dependencies"] == ["charts"]
     assert FakeRepo.created_payload["skill_dependencies"] == ["common-report"]
@@ -1924,6 +1926,14 @@ async def test_init_builtin_skills_create_missing(tmp_path: Path, monkeypatch: p
     assert (tmp_path / "skill-sources/shared" / "reporter" / "prompts" / "system.md").read_text(
         encoding="utf-8"
     ) == "prompt"
+
+
+def test_legacy_builtin_scope_is_rejected_without_permission_fallback():
+    """旧版共享结构继续失败关闭，builtin 同步必须写入 v2。"""
+    from yuxi.permissions.resource_permission import normalize_permission_config
+
+    with pytest.raises(ValueError, match="version 2"):
+        normalize_permission_config({"access_level": "global", "department_ids": [], "user_uids": []})
 
 
 @pytest.mark.asyncio

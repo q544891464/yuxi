@@ -1,8 +1,5 @@
 <template>
-  <section
-    class="chat-welcome"
-    aria-label="Yuxi 智能助手欢迎页"
-  >
+  <section class="chat-welcome" :aria-label="`${agent?.name || '数字员工'}欢迎页`">
     <div class="welcome-hero">
       <div class="welcome-copy">
         <span class="welcome-eyebrow">Yuxi · 知识与智能体工作台</span>
@@ -12,10 +9,23 @@
       </div>
     </div>
     <div class="welcome-role">
-      <div class="role-symbol"><ShieldCheck :size="30" /></div>
+      <div class="role-symbol">
+        <FallbackAvatar
+          v-if="agent"
+          :src="agent.icon || ''"
+          :default-src="agentAvatar"
+          :name="agent.name || '数字员工'"
+          :seed="agent.slug || agent.id"
+          kind="agent"
+          :size="44"
+          shape="circle"
+          :alt="agent.name || '数字员工'"
+        />
+        <ShieldCheck v-else :size="30" />
+      </div>
       <div class="role-description">
-        <h2>智能助手</h2>
-        <p>支持资料检索、文件处理和多智能体协作</p>
+        <h2>{{ agent?.name || '智能助手' }}</h2>
+        <p>{{ agent?.description || '支持资料检索、文件处理和多智能体协作' }}</p>
       </div>
       <dl class="resource-stats" aria-label="当前可访问资源" :aria-busy="loading">
         <div
@@ -41,6 +51,15 @@ import { databaseApi } from '@/apis/knowledge_api'
 import { agentApi } from '@/apis/agent_api'
 import { listAccessibleSkills } from '@/apis/skill_api'
 import { summarizeChatWelcome } from '@/utils/chatWelcome'
+import { generatePixelAvatar } from '@/utils/pixelAvatar'
+import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
+
+const props = defineProps({
+  agent: {
+    type: Object,
+    default: null
+  }
+})
 
 const loading = ref(true)
 const summary = ref({ questions: [], fileCount: null, subagentCount: null, skillCount: null })
@@ -50,6 +69,9 @@ const stats = computed(() => [
   { label: 'Skills', value: summary.value.skillCount, icon: Sparkles }
 ])
 const loadFailed = computed(() => stats.value.some((stat) => stat.value === null))
+const agentAvatar = computed(() =>
+  props.agent ? generatePixelAvatar(props.agent.slug || props.agent.id || props.agent.name) : ''
+)
 
 /** 进入新对话时读取当前用户可访问的资源快照。 */
 async function loadResources() {

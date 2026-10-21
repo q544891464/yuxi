@@ -42,6 +42,7 @@ async def test_user_config_load_returns_defaults_without_creating_row(session):
 
     assert dumped["uid"] == user.uid
     assert dumped["enable_memory"] is False
+    assert dumped["default_agent_id"] is None
 
     result = await db.execute(select(UserConfigRecord).filter(UserConfigRecord.uid == user.uid))
     assert result.scalar_one_or_none() is None
@@ -57,3 +58,14 @@ async def test_user_config_save_persists_user_specific_values(session):
     assert loaded.dump_config()["enable_memory"] is True
     result = await db.execute(select(UserConfigRecord).filter(UserConfigRecord.uid == user.uid))
     assert result.scalar_one().enable_memory is True
+
+
+async def test_user_config_partial_save_preserves_unmentioned_fields(session):
+    db, user = session
+    await UserConfig(uid=user.uid, schema=UserConfigSchema(enable_memory=True, default_agent_id="first")).save(db)
+
+    await UserConfig(uid=user.uid, schema=UserConfigSchema(default_agent_id=None)).save(db)
+    loaded = await UserConfig.load(db, user.uid)
+
+    assert loaded.schema.enable_memory is True
+    assert loaded.schema.default_agent_id is None

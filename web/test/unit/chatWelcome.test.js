@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { summarizeChatWelcome } from '../../src/utils/chatWelcome.js'
 const ok = (value) => ({ status: 'fulfilled', value })
@@ -61,4 +62,19 @@ test('HTTP 成功但缺失响应体时展示未知并允许重试', () => {
       skillCount: null
     })
   }
+})
+
+test('聊天欢迎区展示当前所选员工的名称、说明和形象', () => {
+  const welcomeSource = readFileSync(
+    new URL('../../src/components/ChatWelcome.vue', import.meta.url),
+    'utf8'
+  )
+  const agentViewSource = readFileSync(
+    new URL('../../src/views/AgentView.vue', import.meta.url),
+    'utf8'
+  )
+  assert.match(welcomeSource, /<h2>\{\{ agent\?\.name \|\| '智能助手' \}\}<\/h2>/)
+  assert.match(welcomeSource, /<p>\{\{ agent\?\.description \|\|/)
+  assert.match(welcomeSource, /:src="agent\.icon \|\| ''"/)
+  assert.match(agentViewSource, /<ChatWelcome :agent="selectedAgent" \/>/)
 })

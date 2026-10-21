@@ -10,8 +10,12 @@
           :is-new-conversation="!getRouteThreadId()"
           @thread-change="handleThreadChange"
         >
-          <template v-if="consumerChat" #welcome><ChatWelcome /></template>
+          <template v-if="consumerChat" #welcome><ChatWelcome :agent="selectedAgent" /></template>
           <template #input-actions-left="{ hasActiveThread, isCreatingThread }">
+            <a-button v-if="consumerChat" class="employee-square-link" @click="goToEmployeeSquare">
+              <template #icon><UsersRound :size="15" /></template>
+              员工广场
+            </a-button>
             <ActionDropdown
               upward
               v-if="selectedAgentId"
@@ -120,7 +124,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { Settings2, Check, Plus } from '@lucide/vue'
+import { Settings2, Check, Plus, UsersRound } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import { agentApi } from '@/apis/agent_api'
 import ChatWelcome from '@/components/ChatWelcome.vue'
@@ -147,8 +151,10 @@ const router = useRouter()
 const consumerChat = computed(() => route.meta.consumerChat === true)
 const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
 
+const goToEmployeeSquare = () => router.push('/employees')
+
 // 从 agentStore 中获取响应式状态
-const { agents, selectedAgentId, isLoadingConfig } = storeToRefs(agentStore)
+const { agents, selectedAgent, selectedAgentId, isLoadingConfig } = storeToRefs(agentStore)
 
 const syncingRouteThread = ref(false)
 let routeSyncVersion = 0

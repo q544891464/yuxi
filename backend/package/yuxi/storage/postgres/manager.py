@@ -23,7 +23,8 @@ from yuxi.utils import logger
 from yuxi.utils.singleton import SingletonMeta
 
 AGENT_RUN_TERMINAL_STATUS_SQL = ", ".join(f"'{status}'" for status in AGENT_RUN_TERMINAL_STATUSES)
-BUSINESS_SCHEMA_VERSION = 12
+BUSINESS_SCHEMA_VERSION = 13
+AGENT_RESOURCE_SELECTION_SCHEMA_VERSION = 12
 KNOWLEDGE_SCHEMA_VERSION = 2
 SCHEMA_VERSION_TABLE = "yuxi_schema_migrations"
 AGENT_RUN_LEASE_SCHEMA_STATEMENTS = (
@@ -480,7 +481,7 @@ class PostgresManager(metaclass=SingletonMeta):
             version = await conn.scalar(
                 text(f"SELECT version FROM {SCHEMA_VERSION_TABLE} WHERE domain = 'business' FOR UPDATE")
             )
-            if version == BUSINESS_SCHEMA_VERSION:
+            if version == AGENT_RESOURCE_SELECTION_SCHEMA_VERSION:
                 return
             if version not in (None, 2, 7, 8, 9, 10, 11):
                 raise RuntimeError(f"Unsupported business schema version: {version}")
@@ -499,6 +500,29 @@ class PostgresManager(metaclass=SingletonMeta):
                         """),
                         {"name": name, "replacement": replacement},
                     )
+            await conn.execute(
+                text(f"""
+                    INSERT INTO {SCHEMA_VERSION_TABLE} (domain, version, applied_at)
+                    VALUES ('business', :version, CURRENT_TIMESTAMP)
+                    ON CONFLICT (domain) DO UPDATE SET version = EXCLUDED.version, applied_at = EXCLUDED.applied_at
+                """),
+                {"version": AGENT_RESOURCE_SELECTION_SCHEMA_VERSION},
+            )
+
+    async def upgrade_user_default_agent(self) -> None:
+        """为账号偏好增加个人默认 Agent，并原子记录业务 Schema 版本。"""
+        self._check_initialized()
+        async with self.async_engine.begin() as conn:
+            version = await conn.scalar(
+                text(f"SELECT version FROM {SCHEMA_VERSION_TABLE} WHERE domain = 'business' FOR UPDATE")
+            )
+            if version == BUSINESS_SCHEMA_VERSION:
+                return
+            if version not in (None, AGENT_RESOURCE_SELECTION_SCHEMA_VERSION):
+                raise RuntimeError(f"Unsupported business schema version: {version}")
+            await conn.execute(
+                text("ALTER TABLE IF EXISTS user_config ADD COLUMN IF NOT EXISTS default_agent_id VARCHAR(80)")
+            )
             await conn.execute(
                 text(f"""
                     INSERT INTO {SCHEMA_VERSION_TABLE} (domain, version, applied_at)
@@ -1013,6 +1037,7 @@ class PostgresManager(metaclass=SingletonMeta):
                 id SERIAL PRIMARY KEY,
                 uid VARCHAR NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
                 enable_memory BOOLEAN NOT NULL DEFAULT FALSE,
+                default_agent_id VARCHAR(80),
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW(),
                 CONSTRAINT uq_user_config_uid UNIQUE (uid)
@@ -1050,6 +1075,7 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS agents ALTER COLUMN share_config DROP DEFAULT",
             "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS is_subagent BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE IF EXISTS user_config ADD COLUMN IF NOT EXISTS enable_memory BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE IF EXISTS user_config ADD COLUMN IF NOT EXISTS default_agent_id VARCHAR(80)",
             """
             UPDATE cli_auth_sessions
             SET api_key_id = NULL

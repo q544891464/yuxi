@@ -29,15 +29,13 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { useAgentStore } from '@/stores/agent'
 import { authApi } from '@/apis/auth_api'
 import { message } from 'ant-design-vue'
-import { clearAutoStartAttempt } from '@/utils/oidcAutoStart'
+import { clearAutoStartAttempt, resolvePostLoginRedirect } from '@/utils/oidcAutoStart'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
-const agentStore = useAgentStore()
 
 // 状态
 const loading = ref(true)
@@ -86,27 +84,14 @@ const handleCallback = async () => {
     message.success('登录成功')
 
     // 获取重定向路径并清理 OIDC 相关标记
-    const redirectPath = sessionStorage.getItem('oidc_redirect') || '/'
+    const redirectPath = resolvePostLoginRedirect(sessionStorage.getItem('oidc_redirect'))
     sessionStorage.removeItem('oidc_redirect')
     clearAutoStartAttempt()
 
     loading.value = false
 
     // 延迟跳转，让用户看到成功提示
-    setTimeout(async () => {
-      // 跳转
-      if (redirectPath === '/') {
-        try {
-          await agentStore.initialize()
-          router.push('/')
-        } catch (err) {
-          console.error('获取智能体信息失败:', err)
-          router.push('/')
-        }
-      } else {
-        router.push(redirectPath)
-      }
-    }, 500)
+    setTimeout(() => router.push(redirectPath), 500)
   } catch (err) {
     console.error('OIDC 回调处理失败:', err)
     loading.value = false
