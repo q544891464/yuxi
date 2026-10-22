@@ -4,7 +4,7 @@
 
 ## Basic 数字员工产品整改
 
-[产品审查](./basic-product-review.md)以 StaffDeck 为主要参照，记录首次使用、工作交付及企业化方向的差距。[首轮整改执行计划](./decisions/proposed/2026-10-22-basic-product-first-round.md)拥有本轮范围、执行顺序、验收与风险，当前状态为 proposed；后续接手按该提案定位各模块 Owner 和所需证据。
+[产品审查](./basic-product-review.md)以 StaffDeck 为主要参照，记录首次使用、工作交付及企业化方向的差距。[首轮整改执行计划](./decisions/proposed/2026-10-22-basic-product-first-round.md)保留首次任务引导、创建配置与试运行、“我的工作”三个待完成工作包；已交付的统计与后台任务结果口径由[实现决策](./decisions/implemented/2026-10-22-dashboard-task-results.md)维护。整体计划仍为 proposed，后续按剩余工作包定位 Owner 和证据。
 
 ## 计划中的不兼容方向
 

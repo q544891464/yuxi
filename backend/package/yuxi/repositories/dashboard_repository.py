@@ -420,7 +420,7 @@ class DashboardRepository:
         for agent in agents:
             conversation_count = conversation_counts.get(agent.slug, 0)
             total_feedbacks, positive_feedbacks = feedback_by_agent.get(agent.slug, (0, 0))
-            satisfaction_rate = round(positive_feedbacks / total_feedbacks * 100, 2) if total_feedbacks else 100
+            satisfaction_rate = round(positive_feedbacks / total_feedbacks * 100, 2) if total_feedbacks else None
             conversation_stats.append({"agent_id": agent.slug, "conversation_count": conversation_count})
             satisfaction_stats.append(
                 {
@@ -497,7 +497,7 @@ class DashboardRepository:
             "total_users": total_users_result.scalar() or 0,
             "feedback_stats": {
                 "total_feedbacks": total_feedbacks,
-                "satisfaction_rate": round(like_count / total_feedbacks * 100, 2) if total_feedbacks else 100,
+                "satisfaction_rate": round(like_count / total_feedbacks * 100, 2) if total_feedbacks else None,
             },
         }
 

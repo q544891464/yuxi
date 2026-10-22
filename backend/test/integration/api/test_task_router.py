@@ -5,6 +5,7 @@ Integration tests for the task management router.
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 
 import pytest
@@ -36,6 +37,138 @@ async def test_admin_can_list_tasks(test_client, admin_headers):
     assert isinstance(payload["tasks"], list)
     assert "summary" in payload
     assert isinstance(payload["summary"], dict)
+
+
+async def test_task_file_results_preserve_history_and_read_current_file(test_client, admin_headers, standard_user):
+    """真实 HTTP 与数据库证明部分失败、当前状态、缺失记录和授权边界。"""
+    from sqlalchemy import delete, select, update
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from yuxi.storage.postgres.models_business import TaskRecord
+    from yuxi.storage.postgres.models_knowledge import KnowledgeBase, KnowledgeFile
+
+    identity = await test_client.get("/api/auth/me", headers=admin_headers)
+    assert identity.status_code == 200
+    uid = identity.json()["uid"]
+    marker = uuid.uuid4().hex
+    missing_id = uuid.uuid4().hex
+    engine = create_async_engine(os.environ["POSTGRES_URL"])
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+            try:
+                db.add(
+                    KnowledgeBase(
+                        kb_id=marker,
+                        name="pytest task result",
+                        kb_type="milvus",
+                        embedding_model_spec="siliconflow-cn:Pro/BAAI/bge-m3",
+                        created_by=uid,
+                        share_config={
+                            "version": 2,
+                            "read_scope": {"access_level": "user", "user_uids": [uid], "department_ids": []},
+                            "manage_scope": None,
+                        },
+                    )
+                )
+                await db.flush()
+                db.add(
+                    KnowledgeFile(
+                        kb_id=marker,
+                        file_id=marker,
+                        filename="合成失败文件.txt",
+                        status="error_parsing",
+                        error_message="合成解析失败",
+                    )
+                )
+                historical_result = {
+                    "processed": 2,
+                    "failed": 0,
+                    "items": [
+                        {
+                            "file_id": marker,
+                            "filename": "合成失败文件.txt",
+                            "status": "error_parsing",
+                            "error_message": "合成解析失败",
+                        },
+                        {"filename": "成功文件.txt", "status": "parsed"},
+                    ],
+                }
+                db.add(
+                    TaskRecord(
+                        id=marker,
+                        name="pytest partial failure",
+                        type="knowledge_parse",
+                        status="success",
+                        payload={"kb_id": marker},
+                        result=historical_result,
+                    )
+                )
+                db.add(
+                    TaskRecord(
+                        id=missing_id,
+                        name="pytest missing result",
+                        type="knowledge_index",
+                        status="cancelled",
+                        payload={"kb_id": marker, "file_ids": [marker]},
+                        result=None,
+                    )
+                )
+                await db.commit()
+                listing = await test_client.get("/api/tasks", headers=admin_headers)
+                detail = await test_client.get(f"/api/tasks/{marker}", headers=admin_headers)
+                assert listing.status_code == detail.status_code == 200
+                summary = next(item for item in listing.json()["tasks"] if item["id"] == marker)
+                assert "result" not in summary and "payload" not in summary
+                assert detail.json()["task"]["status"] == "success"
+                assert detail.json()["task"]["result"] == historical_result
+                expected = {
+                    "total": 2,
+                    "recorded": 2,
+                    "succeeded": 1,
+                    "failed": 1,
+                    "pending": 0,
+                    "unknown": 0,
+                    "has_result": True,
+                    "truncated": False,
+                }
+                assert summary["file_result_summary"] == detail.json()["task"]["file_result_summary"] == expected
+                missing = await test_client.get(f"/api/tasks/{missing_id}", headers=admin_headers)
+                assert missing.json()["task"]["file_result_summary"]["unknown"] == 1
+                assert missing.json()["task"]["file_result_summary"]["has_result"] is False
+
+                file_url = f"/api/knowledge/databases/{marker}/documents/{marker}/basic"
+                before = await test_client.get(file_url, headers=admin_headers)
+                assert before.status_code == 200
+                assert before.json()["meta"]["status"] == "error_parsing"
+                await db.execute(
+                    update(KnowledgeFile)
+                    .where(KnowledgeFile.file_id == marker)
+                    .values(status="indexed", error_message=None)
+                )
+                await db.commit()
+                current = await test_client.get(file_url, headers=admin_headers)
+                assert current.status_code == 200
+                assert current.json()["meta"]["status"] == "indexed"
+                assert current.json()["meta"]["updated_at"]
+                refreshed = await test_client.get(f"/api/tasks/{marker}", headers=admin_headers)
+                assert refreshed.json()["task"]["result"] == historical_result
+                assert (await db.scalar(select(TaskRecord.result).where(TaskRecord.id == marker))) == historical_result
+                denied = await test_client.get(file_url, headers=standard_user["headers"])
+                assert denied.status_code == 403
+                await db.execute(delete(KnowledgeFile).where(KnowledgeFile.file_id == marker))
+                await db.commit()
+                removed = await test_client.get(file_url, headers=admin_headers)
+                assert removed.status_code == 200
+                assert removed.json()["status"] == "failed"
+                assert "meta" not in removed.json()
+                retained = await test_client.get(f"/api/tasks/{marker}", headers=admin_headers)
+                assert retained.json()["task"]["result"] == historical_result
+            finally:
+                await db.rollback()
+                await db.execute(delete(TaskRecord).where(TaskRecord.id.in_([marker, missing_id])))
+                await db.execute(delete(KnowledgeBase).where(KnowledgeBase.kb_id == marker))
+                await db.commit()
+    finally:
+        await engine.dispose()
 
 
 async def test_cancel_unknown_task_returns_client_error(test_client, admin_headers):

@@ -110,7 +110,7 @@ onMounted(() => {
   void getRemoteDatabase()
   void initAgentNavigation()
   void getRemoteConfig()
-  // 仅管理员加载任务中心数据
+  // 仅管理员加载后台任务数据
   if (userStore.isAdmin) {
     taskerStore.loadTasks()
   }
@@ -746,12 +746,12 @@ provide('settingsModal', {
         <div class="nav-item user-info" @click.stop>
           <UserInfoComponent :show-role="!sidebarCollapsed">
             <template v-if="userStore.isAdmin" #actions>
-              <a-tooltip placement="top" title="任务中心">
+              <a-tooltip placement="top" title="后台任务">
                 <button
                   class="user-task-center"
                   :class="{ active: isDrawerOpen }"
                   type="button"
-                  aria-label="任务中心"
+                  aria-label="后台任务"
                   @click.stop="taskerStore.openDrawer()"
                 >
                   <a-badge

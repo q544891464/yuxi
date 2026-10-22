@@ -8,7 +8,7 @@ Owner：web/src/views/AgentView.vue
 
 [产品审查](../../basic-product-review.md)显示，Basic 的现有能力需要形成容易开始、能够找回、结果可核对的用户流程。首轮解决四个问题：无评价显示满分；新用户缺少任务示例；创建员工后还需发现能力配置入口；工作进度与成果分散。计划面向产品、设计、前后端实施者及验收人员，前置知识为现有员工配置、会话、项目、Request/Run 与资源权限模型。
 
-起始基线为 `basic@9dd2ceab`，导航拆分已经实现，相关能力纳入回归。当前交付是审查与执行计划落档；下列功能整改尚未执行，验收状态均为 `Not run`。源码事实与职责继续由各模块拥有，本计划不引入独立的主张编号或运行状态登记。
+起始基线为 `basic@9dd2ceab`，导航拆分已经实现，相关能力纳入回归。工作包 1 的统计与任务结果修复已落地，当前事实与证据见[满意度与后台任务结果决策](../implemented/2026-10-22-dashboard-task-results.md)；其余工作包仍为 `Not run`，本整体提案保留 proposed。源码事实与职责继续由各模块拥有，本计划不引入独立的主张编号或运行状态登记。
 
 ## 提案
 
@@ -84,12 +84,12 @@ Owner：web/src/views/AgentView.vue
 
 ## 验收标准
 
-本提案尚未实施，以下是实施后的验收要求，当前全部为 `Not run`。现有测试文件只是扩展入口，既有通过结果不能证明新增交互；新增断言需要直接读取协议、数据库、DOM 或文件。每个新增 guard 都要通过恢复缺陷或构造违规状态确认负向测试在正确原因上失败。
+工作包 1 的前两项验收已完成，详见[实现与验证](../implemented/2026-10-22-dashboard-task-results.md#验证)；其余行仍为实施后的验收要求，状态为 `Not run`。现有测试文件只是扩展入口，既有通过结果不能证明新增交互；新增断言需要直接读取协议、数据库、DOM 或文件。每个新增 guard 都要通过恢复缺陷或构造违规状态确认负向测试在正确原因上失败。
 
 | 验收主张 | 失败面 | 语义 Owner | 直接证据 / 命令 | 负向案例 | 当前结果 |
 |---|---|---|---|---|---|
-| 无评价与真实 0% 分开显示，整体与员工统计口径一致 | 聚合、响应空值、前端默认值 | dashboard repository、统计组件 | 扩展 `test_dashboard_router.py`；真实 HTTP 返回、反馈行和统计 DOM 对照 | 零反馈、全部差评、混合反馈；恢复零样本返回 100 后断言失败 | Not run |
-| 后台任务结束与文件结果分开表达 | 部分失败、历史与当前结果混淆 | task service、knowledge file repository、TaskCenterDrawer | 扩展 `test_task_router.py`，回读任务关联与文件状态并核对页面 | 执行结束但文件失败；后续重试改变状态；缺少关联时不得报全成功 | Not run |
+| 无评价与真实 0% 分开显示，整体与员工统计口径一致 | 聚合、响应空值、前端默认值 | dashboard repository、统计组件 | 扩展 `test_dashboard_router.py`；真实 HTTP 返回、反馈行和统计 DOM 对照 | 零反馈、全部差评、混合反馈；恢复零样本返回 100 后断言失败 | Passed |
+| 后台任务结束与文件结果分开表达 | 部分失败、历史与当前结果混淆 | task service、knowledge file repository、TaskCenterDrawer | 扩展 `test_task_router.py`，回读任务关联与文件状态并核对页面 | 执行结束但文件失败；后续重试改变状态；缺少关联时不得报全成功 | Passed |
 | 示例说明真实能力，只写入所选员工草稿 | 错员工、无权限、覆盖草稿、自动发送 | 员工资料、digitalEmployees、ChatWelcome、草稿状态 | 扩展 `digitalEmployees.test.js`、`thread_draft.test.js`；真实浏览器核对输入框和请求 | 用户有资源但员工未启用；自建同名员工；快速切换及已有草稿 | Not run |
 | 创建配置完整落库，静态检查与试运行独立 | 配置丢失、越权资源、假就绪 | AgentEditModal、AgentRuntimeConfigForm、agent_config_service | 扩展 `agentConfigSave.test.js`、`test_agent_config_resource_authorization.py`；回读 Agent 配置与实际 Run | 不可访问知识库、缺技能、不可用模型；失败保留输入，未试运行不显示通过 | Not run |
 | 我的工作只展示当前用户有权访问的内容 | 横向越权、员工侧栏范围扩大 | conversation service/repository、现有权限依赖 | 新增摘要接口 HTTP 集成用例；两个普通账号、真实 PostgreSQL 与浏览器交叉验证 | 替换用户、员工、会话 ID；撤回权限；分页与空状态不泄漏标题或数量 | Not run |
@@ -116,7 +116,7 @@ docker compose exec api uv run --group test pytest test/e2e/test_deterministic_a
 
 ## 风险
 
-- 环境与证据：真实 HTTP、worker 和文件验收需要隔离 Compose；模型样例需要部署者提供的可用模型与受控资源。环境或凭据缺失时记录 `Not run` 及影响，文档落档不构成任何产品链路已验证。本次本地 Windows 环境没有可用 Docker，功能执行留待实施环境完成。
+- 环境与证据：真实 HTTP、worker 和文件验收需要隔离 Compose；模型样例需要部署者提供的可用模型与受控资源。工作包 1 已使用远端隔离 Compose 完成对应验证，其余范围仍需按各自风险补齐。环境或凭据缺失时记录 `Not run` 及影响，文档落档不构成任何产品链路已验证。
 - 示例与能力漂移：预置员工可被修改，示例依赖也会变化。产品负责人维护任务内容，配置与权限决定能否展示；不承诺未经实际验证的检索、联网或文件交付能力。业务样例维护成本随模板数量增加，首轮限定两个员工。
 - 状态与权限：跨员工个人列表容易误写为跨用户工作台，历史文件状态也容易被当作本次运行结果。repository 的用户过滤、request/run 因果关系及文件边界是放行重点；当前实现无法证明的摘要字段先显示未知，不补造成功值。
 - 兼容与回退：满意度空值可能影响既有 API 消费者，实施前核对契约并同步展示端。四个工作包分别交付；回退页面和摘要接口不删除已保存员工、请求或成果。首轮不计划新业务表或迁移，若实现发现持久化变更必要性，须在 owning proposal 说明消费者、迁移与回退后再实施。

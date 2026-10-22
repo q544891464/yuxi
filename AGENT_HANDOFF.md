@@ -73,7 +73,7 @@ python3 -m unittest scripts.offline.test_offline
 |---|---|---|
 | 员工会话、技能范围与侧栏精简 | [侧栏决策](docs/develop-guides/decisions/implemented/2026-10-22-employee-chat-sidebar.md)；实现提交 `715ce2c5` | 已实现；快速切换、历史深链接、搜索归档、技能交集和成果预览的证据与未验证范围由该记录维护 |
 | 知识库与技能管理导航 | [管理导航决策](docs/develop-guides/decisions/implemented/2026-10-22-management-navigation.md)；实现提交 `9dd2ceab` | 已拆分独立知识库入口，技能管理承接侧栏技能配置，重复工作台入口已移除；后续改动保留导航与权限回归 |
-| 产品审查与首轮整改 | [产品审查](docs/develop-guides/basic-product-review.md)与[首轮执行计划](docs/develop-guides/decisions/proposed/2026-10-22-basic-product-first-round.md) | StaffDeck 为主要参照；审查与计划已落档，功能整改为 proposed，按工作包定位 Owner、负向案例及验收证据 |
+| 产品审查与首轮整改 | [产品审查](docs/develop-guides/basic-product-review.md)与[首轮执行计划](docs/develop-guides/decisions/proposed/2026-10-22-basic-product-first-round.md) | [统计与后台任务结果](docs/develop-guides/decisions/implemented/2026-10-22-dashboard-task-results.md)已完成对应修复；首次任务、创建试运行和“我的工作”仍为 proposed，按剩余工作包推进 |
 | ARM64 全新离线安装 | [离线提案](docs/develop-guides/decisions/proposed/2026-10-22-basic-arm64-offline.md)与[安装说明](scripts/offline/README.md) | 源码脚本已存在，提案整体仍为 proposed；目标 DGX Spark 原生安装与完整 readiness、断网验收仍需补齐 |
 | 数字员工既有验证限制 | [广场决策的验证与后果](docs/develop-guides/decisions/implemented/2026-10-21-basic-digital-employees.md#后果) | 保留后端全量 unit 未完整通过及真实模型、检索、worker、沙盒链路未验证的记录；页面或定向测试结果不能扩展为全链路通过 |
 

@@ -39,6 +39,104 @@ async def test_dashboard_requires_authentication(test_client):
     assert response.status_code == 401
 
 
+async def test_satisfaction_http_distinguishes_unrated_zero_and_mixed_feedback(test_client, admin_headers):
+    """回读真实反馈行，验证整体与员工的空值、零分及混合评价口径。"""
+    from sqlalchemy import delete, select
+    from yuxi.storage.postgres.models_business import (
+        AUDIT_MESSAGE_TYPES,
+        Agent,
+        Message,
+        MessageFeedback,
+        Project,
+        User,
+    )
+
+    identity = await test_client.get("/api/auth/me", headers=admin_headers)
+    assert identity.status_code == 200
+    uid = identity.json()["uid"]
+    marker = uuid.uuid4().hex
+    engine = create_async_engine(os.environ["POSTGRES_URL"])
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+            try:
+                db.add(Agent(slug=marker, backend_id="test", name="pytest satisfaction", share_config={}))
+                db.add(
+                    Project(
+                        id=marker,
+                        uid=uid,
+                        selection_status="implicit",
+                        workdir_path=f"pytest/{marker}",
+                        directory_mode="managed",
+                    )
+                )
+                await db.flush()
+                conversation = Conversation(thread_id=marker, project_id=marker, uid=uid, agent_id=marker)
+                db.add(conversation)
+                await db.commit()
+                for ratings, expected in [
+                    ([], None),
+                    (["dislike", "dislike"], 0),
+                    (["like", "dislike"], 50),
+                    (["like", "like", "dislike"], 66.67),
+                ]:
+                    message_ids = select(Message.id).where(Message.conversation_id == conversation.id)
+                    await db.execute(delete(MessageFeedback).where(MessageFeedback.message_id.in_(message_ids)))
+                    await db.execute(delete(Message).where(Message.conversation_id == conversation.id))
+                    for rating in ratings:
+                        message = Message(conversation_id=conversation.id, role="assistant", content="合成评价样本")
+                        db.add(message)
+                        await db.flush()
+                        db.add(MessageFeedback(message_id=message.id, uid=uid, rating=rating))
+                    await db.commit()
+
+                    agent_response = await test_client.get("/api/dashboard/stats/agents", headers=admin_headers)
+                    basic_response = await test_client.get("/api/dashboard/stats", headers=admin_headers)
+                    assert agent_response.status_code == basic_response.status_code == 200
+                    agent_stats = next(
+                        item for item in agent_response.json()["agent_satisfaction_rates"] if item["agent_id"] == marker
+                    )
+                    assert agent_stats == {
+                        "agent_id": marker,
+                        "total_feedbacks": len(ratings),
+                        "satisfaction_rate": expected,
+                    }
+                    stored_ratings = list(
+                        (
+                            await db.scalars(
+                                select(MessageFeedback.rating)
+                                .join(Message)
+                                .join(Conversation)
+                                .join(User, Conversation.uid == User.uid)
+                                .join(Agent, Conversation.agent_id == Agent.slug)
+                                .where(
+                                    Conversation.status.notin_(["deleted", "subagent"]),
+                                    User.is_deleted == 0,
+                                    (Message.message_type.is_(None))
+                                    | (Message.message_type.notin_(AUDIT_MESSAGE_TYPES)),
+                                )
+                            )
+                        ).all()
+                    )
+                    expected_global = (
+                        round(stored_ratings.count("like") / len(stored_ratings) * 100, 2) if stored_ratings else None
+                    )
+                    assert basic_response.json()["feedback_stats"] == {
+                        "total_feedbacks": len(stored_ratings),
+                        "satisfaction_rate": expected_global,
+                    }
+            finally:
+                await db.rollback()
+                own_messages = select(Message.id).join(Conversation).where(Conversation.thread_id == marker)
+                await db.execute(delete(MessageFeedback).where(MessageFeedback.message_id.in_(own_messages)))
+                await db.execute(delete(Message).where(Message.id.in_(own_messages)))
+                await db.execute(delete(Conversation).where(Conversation.thread_id == marker))
+                await db.execute(delete(Project).where(Project.id == marker))
+                await db.execute(delete(Agent).where(Agent.slug == marker))
+                await db.commit()
+    finally:
+        await engine.dispose()
+
+
 async def test_standard_user_is_forbidden(test_client, standard_user):
     response = await test_client.get("/api/dashboard/conversations", headers=standard_user["headers"])
     assert response.status_code == 403

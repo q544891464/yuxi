@@ -18,6 +18,7 @@ from yuxi.services.task_queue_service import (
     publish_task,
 )
 from yuxi.services.task_registry import get_failure_task_definition, get_task_definition
+from yuxi.services.task_result_service import summarize_file_result
 from yuxi.utils.datetime_utils import utc_isoformat, utc_now_naive
 from yuxi.utils.logging_config import logger
 
@@ -242,13 +243,24 @@ class Tasker:
     async def list_tasks(self, status: str | None = None, limit: int = 100) -> dict[str, Any]:
         records = await self._repo.list(status=status, limit=limit)
         return {
-            "tasks": [record.to_summary_dict() for record in records],
+            "tasks": [
+                {
+                    **record.to_summary_dict(),
+                    "file_result_summary": summarize_file_result(record.type, record.payload or {}, record.result),
+                }
+                for record in records
+            ],
             "summary": await self._repo.summarize(status=status),
         }
 
     async def get_task(self, task_id: str) -> dict[str, Any] | None:
         record = await self._repo.get_by_id(task_id)
-        return record.to_dict() if record else None
+        if record is None:
+            return None
+        return {
+            **record.to_dict(),
+            "file_result_summary": summarize_file_result(record.type, record.payload or {}, record.result),
+        }
 
     async def cancel_task(self, task_id: str) -> Task | None:
         current = await self._repo.get_by_id(task_id)

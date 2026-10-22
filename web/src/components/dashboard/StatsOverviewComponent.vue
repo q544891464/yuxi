@@ -44,15 +44,20 @@
       />
       <DashboardMetricCard
         :icon="Heart"
-        :value="`${basicStats?.feedback_stats?.satisfaction_rate || 0}%`"
+        :value="satisfactionRate == null ? '暂无评价' : `${satisfactionRate}%`"
         label="满意度"
         :tone="getSatisfactionTone()"
-      />
+      >
+        <template #meta>
+          <span>评价样本 {{ formatNumber(basicStats?.feedback_stats?.total_feedbacks) }}</span>
+        </template>
+      </DashboardMetricCard>
     </DashboardMetricGrid>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import {
   MessageCircle,
   Activity,
@@ -75,13 +80,15 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['open-feedback'])
+const satisfactionRate = computed(() => props.basicStats?.feedback_stats?.satisfaction_rate)
 
 const handleFeedbackClick = () => {
   emit('open-feedback')
 }
 
 const getSatisfactionTone = () => {
-  const rate = props.basicStats?.feedback_stats?.satisfaction_rate || 0
+  const rate = satisfactionRate.value
+  if (rate == null) return 'neutral'
   if (rate >= 80) return 'success'
   if (rate >= 60) return 'warning'
   return 'neutral'

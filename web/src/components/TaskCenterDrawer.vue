@@ -1,7 +1,7 @@
 <template>
   <a-modal
     :open="isOpen"
-    title="任务中心"
+    title="后台任务"
     :width="680"
     :footer="null"
     :destroy-on-close="false"
@@ -12,7 +12,7 @@
       type="info"
       show-icon
       class="task-tip"
-      message="状态为「已完成」仅代表任务执行结束，其内部仍可能存在已捕获的问题，请留意日志。"
+      message="执行结束后，请核对文件处理结果；失败文件可从详情返回知识库处理。"
     />
     <div class="task-center">
       <div class="task-toolbar">
@@ -75,6 +75,9 @@
           <div v-if="task.error" class="task-card-error">
             {{ task.error }}
           </div>
+          <div v-if="task.file_result_summary" class="task-file-summary">
+            {{ formatFileResultSummary(task.file_result_summary) }}
+          </div>
 
           <!-- 底部信息 -->
           <div class="task-card-footer">
@@ -86,6 +89,9 @@
               <span v-if="!task.started_at">创建 {{ formatTime(task.created_at, 'short') }}</span>
             </div>
             <div class="task-card-actions">
+              <a-button type="text" size="small" @click.stop="handleDetail(task.id)">
+                查看结果
+              </a-button>
               <a-button
                 type="text"
                 size="small"
@@ -116,6 +122,12 @@
       </div>
     </div>
   </a-modal>
+  <TaskDetailModal
+    v-if="isOpen && selectedTaskId"
+    :task-id="selectedTaskId"
+    @close="selectedTaskId = null"
+    @open-knowledge="handleClose"
+  />
 </template>
 
 <script setup>
@@ -124,6 +136,8 @@ import { Modal } from 'ant-design-vue'
 import { useTaskerStore } from '@/stores/tasker'
 import { storeToRefs } from 'pinia'
 import { formatFullDateTime, formatRelative, parseToShanghai } from '@/utils/time'
+import TaskDetailModal from '@/components/TaskDetailModal.vue'
+import { TASK_STATUS_CONFIG as STATUS_CONFIG, formatFileResultSummary } from '@/utils/taskResults'
 
 const taskerStore = useTaskerStore()
 const {
@@ -142,6 +156,7 @@ const tasks = computed(() => sortedTasks.value)
 const loadingState = computed(() => Boolean(loading.value))
 const lastErrorState = computed(() => lastError.value)
 const statusFilter = ref('all')
+const selectedTaskId = ref(null)
 const inProgressCount = computed(() => activeCount.value || 0)
 const completedCount = computed(() => successCount.value || 0)
 const failedTaskCount = computed(() => failedCount.value || 0)
@@ -166,7 +181,7 @@ const taskFilterOptions = computed(() => [
   {
     label: () =>
       h('span', { class: 'task-filter-option' }, [
-        '已完成',
+        '执行结束',
         h('span', { class: 'filter-count' }, completedCount.value)
       ]),
     value: 'success'
@@ -181,14 +196,6 @@ const taskFilterOptions = computed(() => [
   }
 ])
 
-const STATUS_CONFIG = {
-  pending: { label: '等待中', terminal: false, cancelable: true, progress: 'active' },
-  queued: { label: '已排队', terminal: false, cancelable: true, progress: 'active' },
-  running: { label: '进行中', terminal: false, cancelable: true, progress: 'active' },
-  success: { label: '已完成', terminal: true, cancelable: false, progress: 'success' },
-  failed: { label: '失败', terminal: true, cancelable: false, progress: 'exception' },
-  cancelled: { label: '已取消', terminal: true, cancelable: false, progress: 'normal' }
-}
 const TASK_TYPE_LABELS = {
   knowledge_ingest: '知识库导入',
   knowledge_parse: '文档解析',
@@ -222,7 +229,7 @@ const emptyHint = computed(() => {
     case 'active':
       return { title: '暂无进行中的任务', subtitle: '当前没有正在执行的后台任务。' }
     case 'success':
-      return { title: '暂无已完成的任务', subtitle: '执行成功的后台任务会显示在这里。' }
+      return { title: '暂无执行结束的任务', subtitle: '执行结束后，可在这里核对文件处理结果。' }
     case 'failed':
       return { title: '暂无失败的任务', subtitle: '失败或已取消的后台任务会显示在这里。' }
     default:
@@ -256,6 +263,8 @@ watch(
   (open) => {
     if (open) {
       taskerStore.loadTasks()
+    } else {
+      selectedTaskId.value = null
     }
   },
   { immediate: true }
@@ -269,62 +278,9 @@ function handleRefresh() {
   taskerStore.loadTasks()
 }
 
-function prettyJson(value) {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
-const DETAIL_ROW_STYLE = 'display:flex;gap:8px;padding:3px 0;font-size:13px'
-const DETAIL_LABEL_STYLE = 'color:var(--gray-500);min-width:64px;flex-shrink:0'
-const DETAIL_TITLE_STYLE = 'font-weight:600;margin-top:12px;font-size:13px'
-const DETAIL_JSON_STYLE =
-  'max-height:240px;overflow:auto;background:var(--gray-50);padding:10px;border-radius:6px;' +
-  'font-size:12px;white-space:pre-wrap;word-break:break-all;margin:4px 0 0'
-
-function hasContent(value) {
-  if (value === null || value === undefined) return false
-  if (typeof value === 'object') return Object.keys(value).length > 0
-  return true
-}
-
+/** 打开详情组件，由详情接口读取完整持久结果。 */
 function handleDetail(taskId) {
-  const task = tasks.value.find((item) => item.id === taskId)
-  if (!task) {
-    return
-  }
-  const rows = [
-    ['类型', taskTypeLabel(task.type)],
-    ['状态', statusLabel(task.status)],
-    ['进度', `${Math.round(task.progress || 0)}%`],
-    ['创建时间', formatTime(task.created_at)],
-    ['开始时间', task.started_at ? formatTime(task.started_at) : '-'],
-    ['完成时间', task.completed_at ? formatTime(task.completed_at) : '-'],
-    ['耗时', getTaskDuration(task) || '-'],
-    ['描述', task.message || '-'],
-    ['错误', task.error || '-']
-  ]
-  const children = rows.map(([label, value]) =>
-    h('div', { style: DETAIL_ROW_STYLE }, [
-      h('span', { style: DETAIL_LABEL_STYLE }, label),
-      h('span', value)
-    ])
-  )
-  if (hasContent(task.payload)) {
-    children.push(h('div', { style: DETAIL_TITLE_STYLE }, '参数'))
-    children.push(h('pre', { style: DETAIL_JSON_STYLE }, prettyJson(task.payload)))
-  }
-  if (hasContent(task.result)) {
-    children.push(h('div', { style: DETAIL_TITLE_STYLE }, '结果'))
-    children.push(h('pre', { style: DETAIL_JSON_STYLE }, prettyJson(task.result)))
-  }
-  Modal.info({
-    title: task.name,
-    width: 560,
-    content: h('div', children)
-  })
+  selectedTaskId.value = taskId
 }
 
 function handleCancel(taskId) {
@@ -632,6 +588,13 @@ function canCancel(task) {
   align-items: center;
   padding-top: 4px;
   border-top: 1px solid var(--gray-100);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.task-file-summary {
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
 .task-card-times {

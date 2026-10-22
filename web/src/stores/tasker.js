@@ -28,6 +28,7 @@ const toTask = (raw = {}) => ({
   completed_at: raw.completed_at,
   payload: raw.payload || {},
   result: raw.result,
+  file_result_summary: raw.file_result_summary,
   error: raw.error,
   cancel_requested: raw.cancel_requested || false
 })

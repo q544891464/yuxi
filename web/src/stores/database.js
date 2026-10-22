@@ -490,7 +490,7 @@ export const useDatabaseStore = defineStore('database', () => {
       if (data.status === 'success' || data.status === 'queued') {
         const itemType = contentType === 'file' ? '文件' : 'URL'
         enableAutoRefresh('auto')
-        message.success(data.message || `${itemType}已提交处理，请在任务中心查看进度`)
+        message.success(data.message || `${itemType}已提交处理，请在后台任务查看进度`)
         if (data.task_id) {
           registerTask({
             task_id: data.task_id,

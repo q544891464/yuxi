@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import pytest
 import pytest_asyncio
-from sqlalchemy import event
+from sqlalchemy import delete, event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from yuxi.services.dashboard_service import DashboardService
@@ -285,6 +285,31 @@ async def test_dashboard_service_basic_stats(dashboard_db):
     assert len(feedbacks) == 1
 
 
+@pytest.mark.parametrize(
+    ("ratings", "expected"),
+    [([], None), (["dislike", "dislike"], 0), (["like", "dislike"], 50), (["like", "like", "dislike"], 66.67)],
+)
+async def test_satisfaction_distinguishes_no_feedback_from_zero(dashboard_db, ratings, expected):
+    """整体与员工使用同一有效反馈口径，无样本不产生分数。"""
+    await dashboard_db.execute(delete(MessageFeedback))
+    conversation = (
+        await dashboard_db.execute(select(Conversation).where(Conversation.thread_id == "thread-101"))
+    ).scalar_one()
+    for rating in ratings:
+        message = Message(conversation=conversation, role="assistant", content="合成评价样本")
+        dashboard_db.add(MessageFeedback(message=message, uid="uid-alice", rating=rating))
+    await dashboard_db.commit()
+
+    service = DashboardService(dashboard_db)
+    stats = await service.get_basic_stats()
+    analytics = await service.get_agent_analytics()
+    helper = next(item for item in analytics["agent_satisfaction_rates"] if item["agent_id"] == "agent-helper")
+    coder = next(item for item in analytics["agent_satisfaction_rates"] if item["agent_id"] == "agent-coder")
+    assert stats["feedback_stats"] == {"total_feedbacks": len(ratings), "satisfaction_rate": expected}
+    assert helper == {"agent_id": "agent-helper", "total_feedbacks": len(ratings), "satisfaction_rate": expected}
+    assert coder["satisfaction_rate"] is None
+
+
 async def test_agent_analytics_omits_removed_top_performers_contract(dashboard_db):
     """智能体统计保留概览字段且不再生成 TOP 5 排行。"""
     analytics = await DashboardService(dashboard_db).get_agent_analytics()
@@ -306,7 +331,7 @@ async def test_agent_analytics_omits_removed_top_performers_contract(dashboard_d
     )
     assert coder_satisfaction == {
         "agent_id": "agent-coder",
-        "satisfaction_rate": 100,
+        "satisfaction_rate": None,
         "total_feedbacks": 0,
     }
 

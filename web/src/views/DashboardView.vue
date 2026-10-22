@@ -37,16 +37,16 @@
               <Moon v-else class="header-action-icon" />
             </button>
           </a-tooltip>
-          <a-tooltip title="任务中心">
+          <a-tooltip title="后台任务">
             <button
               type="button"
               class="header-action-button task-center-button"
               :class="{ active: taskerStore.isDrawerOpen }"
-              aria-label="任务中心"
+              aria-label="后台任务"
               @click="openTaskCenter"
             >
               <ClipboardList class="header-action-icon" />
-              <span class="task-center-label">任务中心</span>
+              <span class="task-center-label">后台任务</span>
               <a-badge :count="activeTaskCount" :overflow-count="99" size="small" />
             </button>
           </a-tooltip>
