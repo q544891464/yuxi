@@ -10,8 +10,13 @@
           :is-new-conversation="!getRouteThreadId()"
           @thread-change="handleThreadChange"
         >
-          <template v-if="consumerChat" #welcome="{ openUpload }">
-            <ChatWelcome :agent="selectedAgent">
+          <template v-if="consumerChat" #welcome="{ openUpload, starterGuide, previewStarterTask }">
+            <ChatWelcome
+              :agent="selectedAgent"
+              :guide="starterGuide"
+              :loading="isLoadingConfig"
+              @preview-task="previewStarterTask"
+            >
               <template v-if="selectedSkill" #skill-description>
                 <section class="skill-start-panel" aria-label="技能说明">
                   <h3>

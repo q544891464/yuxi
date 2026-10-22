@@ -4,7 +4,7 @@
       <div>
         <p class="eyebrow">数字员工</p>
         <h1>选择数字员工</h1>
-        <p class="square-description">选择一个员工开始新的对话。已有对话会继续由原员工处理。</p>
+        <p class="square-description">先按用途选择员工，再预览任务示例、补充材料，检查后发送。</p>
       </div>
       <a-button v-if="userStore.isAdmin" @click="goToManagement">
         <template #icon><Settings2 :size="16" /></template>
@@ -50,8 +50,8 @@
           shape="rounded"
         />
         <h2 :title="agent.name || '未命名员工'">{{ agent.name || '未命名员工' }}</h2>
-        <p class="employee-description" :title="agent.description || ''">
-          {{ agent.description || '可以开始新的对话。' }}
+        <p class="employee-description" :title="employeeTaskPurpose(agent)">
+          {{ employeeTaskPurpose(agent) }}
         </p>
         <div class="employee-actions">
           <a-button
@@ -96,6 +96,7 @@ import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 import { normalizeAgent } from '@/utils/agentConfigUtils'
 import { getDefaultEmployeePortrait } from '@/utils/employeePortraits'
 import { resolveDefaultEmployee, searchEmployees } from '@/utils/digitalEmployees'
+import { employeeTaskPurpose } from '@/utils/employeeTaskGuidance'
 
 const router = useRouter()
 const userStore = useUserStore()

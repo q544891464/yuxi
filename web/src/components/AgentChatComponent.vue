@@ -157,6 +157,8 @@
               name="welcome"
               :set-prompt="(text) => (userInput = text)"
               :open-upload="handleAttachmentUpload"
+              :starter-guide="starterGuide"
+              :preview-starter-task="starterDraft.open"
             ></slot>
           </div>
           <div
@@ -883,11 +885,27 @@
       </div>
     </div>
   </div>
+  <a-modal
+    :open="!!starterDraft.preview.value"
+    title="任务草稿预览"
+    :ok-text="starterDraft.hasDraft.value ? '替换当前草稿' : '填入草稿'"
+    :cancel-text="starterDraft.hasDraft.value ? '保留原草稿' : '取消'"
+    @cancel="starterDraft.dismiss"
+    @ok="applyStarterTask"
+  >
+    <p v-if="starterDraft.hasDraft.value">
+      输入框已有内容。替换仅修改当前草稿，请先确认是否需要保留。
+    </p>
+    <pre class="starter-preview">{{ starterDraft.preview.value?.prompt }}</pre>
+    <p>填入后可继续编辑，点击输入框的发送按钮才会开始任务。</p>
+  </a-modal>
 </template>
 
 <script setup>
 import { canReferenceSkill, withSkillDraft } from '@/utils/skillDraft'
 import { resolveAuthorizedThread } from '@/utils/agentThreadAccess'
+import { getEmployeeTaskGuide } from '@/utils/employeeTaskGuidance'
+import { useStarterTaskDraft } from '@/composables/useStarterTaskDraft'
 import { useRoute } from 'vue-router'
 import {
   ref,
@@ -2010,6 +2028,35 @@ const { mentionConfig } = useAgentMentionConfig({
 })
 
 const currentThreadMessages = computed(() => threadMessages.value[currentChatId.value] || [])
+const starterGuide = computed(() =>
+  getEmployeeTaskGuide(agentStore.selectedAgent, agentConfig.value, configurableItems.value)
+)
+const starterDraft = useStarterTaskDraft({
+  contextKey: computed(() =>
+    JSON.stringify([
+      userStore.uid,
+      currentAgentId.value,
+      selectedProjectId.value,
+      currentChatId.value,
+      route.fullPath
+    ])
+  ),
+  examples: computed(() => starterGuide.value.examples),
+  enabled: computed(
+    () =>
+      Boolean(userStore.token) &&
+      !currentChatId.value &&
+      !agentStore.isLoadingConfig &&
+      !threadCreationInFlight.value
+  ),
+  userInput
+})
+
+/** 示例仅填入已确认的草稿，继续沿用原输入框发送。 */
+const applyStarterTask = () => {
+  if (starterDraft.apply()) nextTick(() => agentInputAreaRef.value?.focus())
+}
+
 watch(
   [selectedProjectId, currentAgentId],
   ([projectId, agentId]) => {
@@ -4132,6 +4179,19 @@ watch(currentChatId, (threadId, oldThreadId) => {
 </script>
 
 <style lang="less" scoped>
+.starter-preview {
+  max-height: 45vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  border: 1px solid var(--gray-150);
+  border-radius: 6px;
+  background: var(--gray-10);
+  color: var(--color-text);
+  font: inherit;
+  line-height: 1.7;
+}
 .recovery-notice {
   padding: 10px 14px;
   margin-bottom: 8px;

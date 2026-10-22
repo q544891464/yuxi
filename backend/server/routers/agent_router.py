@@ -24,7 +24,7 @@ from yuxi.services.agent_request_queue_service import (
     steer_queued_request,
     stream_request_events,
 )
-from yuxi.services.agent_config_service import prepare_agent_config_write
+from yuxi.services.agent_config_service import get_starter_task_profile, prepare_agent_config_write
 from yuxi.services.agent_run_service import (
     cancel_agent_run_view,
     create_resume_run_view,
@@ -107,6 +107,7 @@ async def _serialize_agent(
             backend_info_cache=backend_info_cache,
         )
         data["config_json"] = _filter_agent_config_json(item.backend_id, data.get("config_json"))
+        data["starter_task_profile"] = get_starter_task_profile(data)
     except AgentBackendNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return data

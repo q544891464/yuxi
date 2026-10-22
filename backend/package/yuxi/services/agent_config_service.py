@@ -1,17 +1,38 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.agents.buildin import get_agent_backend
+from yuxi.agents.buildin.chatbot.context import ChatBotContext
 from yuxi.agents.context import (
     BaseContext,
     filter_config_by_role,
     resolve_agent_resource_options,
 )
 from yuxi.agents.presets import discover_agent_presets
+from yuxi.agents.presets.default_chatbot import PRESET as ASSISTANT_PRESET
+from yuxi.agents.presets.deep_research import PRESET as RESEARCH_PRESET
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.storage.postgres.models_business import User
+
+
+def get_starter_task_profile(agent: dict[str, Any]) -> str | None:
+    """仅为身份及行为配置仍符合预置定义的员工提供示例标识。"""
+    preset = next((item for item in (ASSISTANT_PRESET, RESEARCH_PRESET) if item.slug == agent.get("slug")), None)
+    if not preset or agent.get("is_subagent") or agent.get("backend_id") != preset.backend_id:
+        return None
+
+    context = (agent.get("config_json") or {}).get("context", {})
+    expected = {**asdict(ChatBotContext()), **preset.context}
+    # 模型随部署变化；资源的有效交集由详情中的权限选项和前端消费方核对。
+    resource_and_model_fields = {"model", "tools", "knowledges", "skills", "subagents", "mcps"}
+    if any(value != expected.get(key) for key, value in context.items() if key not in resource_and_model_fields):
+        return None
+    if context.get("system_prompt", ChatBotContext().system_prompt) != expected["system_prompt"]:
+        return None
+    return preset.slug
 
 
 async def prepare_agent_config_write(
