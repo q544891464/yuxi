@@ -67,15 +67,17 @@ python3 -m unittest scripts.offline.test_offline
 
 ## 交接快照与待核对事项
 
-快照日期：2026-10-22；核对基线：`09d6bf07`。以下仅帮助定位接手工作，实时状态由 Git、对应提案和运行环境决定。提案文件如已移动，先在 `docs/develop-guides/decisions/` 搜索其主题并读取新状态。
+快照日期：2026-10-22；产品源码核对基线：`9dd2ceab`。以下仅帮助定位接手工作，实时状态由 Git、对应提案和运行环境决定。提案文件如已移动，先在 `docs/develop-guides/decisions/` 搜索其主题并读取新状态。
 
 | 工作 | 接手入口 | 核对时的边界 |
 |---|---|---|
-| 员工会话、技能范围与侧栏精简 | 未跟踪的 `docs/develop-guides/decisions/proposed/2026-10-22-employee-chat-sidebar.md`；`AppLayout.vue`、`AgentChatComponent.vue`、员工/会话 Store、技能菜单及测试的未提交改动 | 提案验收为 Not run；核对快速切换、历史深链接、搜索归档、无选择状态、技能交集和成果预览。对应 `ARCHITECTURE.md` 与 `docs/agents/agents-config.md` 的修改也属于该工作 |
+| 员工会话、技能范围与侧栏精简 | [侧栏决策](docs/develop-guides/decisions/implemented/2026-10-22-employee-chat-sidebar.md)；实现提交 `715ce2c5` | 已实现；快速切换、历史深链接、搜索归档、技能交集和成果预览的证据与未验证范围由该记录维护 |
+| 知识库与技能管理导航 | [管理导航决策](docs/develop-guides/decisions/implemented/2026-10-22-management-navigation.md)；实现提交 `9dd2ceab` | 已拆分独立知识库入口，技能管理承接侧栏技能配置，重复工作台入口已移除；后续改动保留导航与权限回归 |
+| 产品审查与首轮整改 | [产品审查](docs/develop-guides/basic-product-review.md)与[首轮执行计划](docs/develop-guides/decisions/proposed/2026-10-22-basic-product-first-round.md) | StaffDeck 为主要参照；审查与计划已落档，功能整改为 proposed，按工作包定位 Owner、负向案例及验收证据 |
 | ARM64 全新离线安装 | [离线提案](docs/develop-guides/decisions/proposed/2026-10-22-basic-arm64-offline.md)与[安装说明](scripts/offline/README.md) | 源码脚本已存在，提案整体仍为 proposed；目标 DGX Spark 原生安装与完整 readiness、断网验收仍需补齐 |
 | 数字员工既有验证限制 | [广场决策的验证与后果](docs/develop-guides/decisions/implemented/2026-10-21-basic-digital-employees.md#后果) | 保留后端全量 unit 未完整通过及真实模型、检索、worker、沙盒链路未验证的记录；页面或定向测试结果不能扩展为全链路通过 |
 
-新出现的 `agentThreadAccess` 工具、相关 unit 与 `web/test/browser/employeeSidebar.js` 在核对时属于未提交侧栏工作。接手者应读取其 diff 与实际运行结果，再决定下一步；交接文档没有执行部署、数据迁移或模型任务。
+接手产品整改时先核对基线之后的实现，已提交的侧栏与导航工作只做回归；首次任务、创建试运行、统计口径与“我的工作”的详细范围以首轮提案为准。产品审查中的部署页面未逐一匹配 Git 版本，不能将其观察扩展为当前 HEAD 的全链路验收。
 
 ## 新会话起步与下一次交接
 
@@ -87,7 +89,7 @@ python3 -m unittest scripts.offline.test_offline
 本次目标：<用户可观察的结果与验收条件>。
 先给出目标、非目标、假设和每步的验证方式，再定位源码 Owner。
 保持通用数字员工定位与独立数据环境；保留其他会话的修改。
-核对员工侧栏工作和 ARM64 离线提案的实际进度与剩余验收。
+按任务核对首轮产品整改、既有导航和 ARM64 离线提案的实际进度与剩余验收。
 完成后报告改动文件、实际执行的检查及未执行原因。
 ```
 

@@ -2,6 +2,10 @@
 
 这里记录尚未完成的方向，不代表已经实现或一定会在某个版本发布。需求和优先级会根据 Issue、讨论和维护资源调整；欢迎在 [GitHub Issues](https://github.com/xerrors/Yuxi/issues) 提交建议。
 
+## Basic 数字员工产品整改
+
+[产品审查](./basic-product-review.md)以 StaffDeck 为主要参照，记录首次使用、工作交付及企业化方向的差距。[首轮整改执行计划](./decisions/proposed/2026-10-22-basic-product-first-round.md)拥有本轮范围、执行顺序、验收与风险，当前状态为 proposed；后续接手按该提案定位各模块 Owner 和所需证据。
+
 ## 计划中的不兼容方向
 
 后续 0.8 版本可能包含：
