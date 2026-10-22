@@ -286,8 +286,12 @@ const syncSelectedThreadFromRoute = async () => {
 }
 
 const consumeRouteAgentSelection = async () => {
+  const sourceRoute = router.currentRoute.value
   const targetAgentId = getRouteAgentId()
-  if (!targetAgentId || getRouteThreadId()) return
+  if (sourceRoute.name !== entryRoute.value || !targetAgentId || getRouteThreadId()) return
+
+  /** 路由对象标识这次选择的所属页面，离页再返回相同 URL 也已是新操作。 */
+  const isCurrentRoute = () => router.currentRoute.value === sourceRoute
 
   try {
     if (!agentStore.isInitialized) {
@@ -295,15 +299,18 @@ const consumeRouteAgentSelection = async () => {
     }
 
     await nextTick()
+    if (!isCurrentRoute()) return
     const canSwitch = await chatComponentRef.value?.selectThreadFromRoute?.('')
-    if (canSwitch === null) return
+    if (canSwitch === null || !isCurrentRoute()) return
     await agentStore.selectAgent(targetAgentId)
   } catch (error) {
-    handleChatError(error, 'load')
+    if (isCurrentRoute()) handleChatError(error, 'load')
   } finally {
-    const nextQuery = { ...route.query }
-    delete nextQuery.agent_id
-    await router.replace({ name: entryRoute.value, query: nextQuery })
+    if (isCurrentRoute()) {
+      const nextQuery = { ...sourceRoute.query }
+      delete nextQuery.agent_id
+      await router.replace({ name: sourceRoute.name, query: nextQuery })
+    }
   }
 }
 
