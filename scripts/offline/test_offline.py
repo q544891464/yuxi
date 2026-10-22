@@ -218,6 +218,32 @@ class OfflineInstallTests(unittest.TestCase):
         with self.assertRaisesRegex(installer.InstallError, "没有处于 running/healthy"):
             verifier.validate_service_rows(rows, expected)
 
+    def test_starting_long_running_service_is_rejected_by_verifier(self):
+        expected = set(packager.SERVICE_TYPE)
+        rows = [
+            {"Service": name, "State": "running", "Health": "healthy"}
+            for name in expected - {"storage-migrator", "sandbox-runtime-image"}
+        ]
+        rows.extend([
+            {"Service": "storage-migrator", "State": "exited", "ExitCode": 0},
+            {"Service": "sandbox-runtime-image", "State": "exited", "ExitCode": 0},
+        ])
+        next(row for row in rows if row["Service"] == "graph")["Health"] = "starting"
+        with self.assertRaisesRegex(installer.InstallError, "没有处于 running/healthy"):
+            verifier.validate_service_rows(rows, expected)
+
+    def test_running_service_without_healthcheck_may_have_empty_health(self):
+        expected = set(packager.SERVICE_TYPE)
+        rows = [
+            {"Service": name, "State": "running", "Health": ""}
+            for name in expected - {"storage-migrator", "sandbox-runtime-image"}
+        ]
+        rows.extend([
+            {"Service": "storage-migrator", "State": "exited", "ExitCode": 0},
+            {"Service": "sandbox-runtime-image", "State": "exited", "ExitCode": 0},
+        ])
+        verifier.validate_service_rows(rows, expected)
+
     def test_core_image_revision_label_must_match_declared_source(self):
         revision = "a" * 40
         info = {"Config": {"Labels": {"org.opencontainers.image.revision": revision}}}

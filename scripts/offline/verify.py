@@ -106,8 +106,10 @@ def validate_service_rows(rows: list[dict], expected: set[str]) -> None:
         if service_name in {"storage-migrator", "sandbox-runtime-image"}:
             if state != "exited" or str(row.get("ExitCode")) != "0":
                 raise InstallError(f"一次性服务未成功退出：{service_name} ({state}, {row.get('ExitCode')})")
-        elif state != "running" or "unhealthy" in str(row.get("Health", "")).lower():
-            raise InstallError(f"长驻服务没有处于 running/healthy 状态：{service_name} ({state})")
+        else:
+            health = str(row.get("Health") or "").strip().lower()
+            if state != "running" or (health and health != "healthy"):
+                raise InstallError(f"长驻服务没有处于 running/healthy 状态：{service_name} ({state}, {health or 'no healthcheck'})")
 
 
 def read_env(path: Path, key: str) -> str:

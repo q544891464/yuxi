@@ -31,12 +31,17 @@ def main() -> None:
     from PIL import Image, ImageDraw, ImageFont
     from yuxi.knowledge.parser.rapid_ocr import RapidOCRParser
 
-    sample = Image.new("RGB", (1200, 180), "white")
-    font = ImageFont.truetype("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 52)
-    ImageDraw.Draw(sample).text((40, 50), "离线文档识别测试 2026", font=font, fill="black")
+    sample = Image.new("RGB", (1200, 320), "white")
+    font = ImageFont.truetype("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 64)
+    draw = ImageDraw.Draw(sample)
+    text = "中文测试 2026"
+    bounds = draw.textbbox((0, 0), text, font=font)
+    x = (sample.width - (bounds[2] - bounds[0])) // 2
+    y = (sample.height - (font.size + 28)) // 2
+    draw.text((x, y), text, font=font, fill="black")
     result = RapidOCRParser().process_image(sample)
     compact = "".join(result.split())
-    if "离线文档识别测试" not in compact or "2026" not in compact:
+    if compact != "中文测试2026":
         raise RuntimeError(f"OCR 未识别预期样例：{result!r}")
     frozen = checksums(directory)
     if len([name for name in frozen if name.endswith(".onnx")]) < 3:

@@ -135,6 +135,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="yuxi-offline-smoke-") as directory:
             root = Path(directory)
 
+            results["stage"] = "python-office"
             document = Document()
             document.add_paragraph("审理报告 {{ subject }}")
             template_path = root / "template.docx"
@@ -198,6 +199,7 @@ def main() -> int:
             pyplot.close()
             assert chart_path.stat().st_size > 0
 
+            results["stage"] = "office-to-pdf"
             _run(
                 [
                     "libreoffice",
@@ -221,6 +223,7 @@ def main() -> int:
             )
             assert "离线验证" in poppler_text_path.read_text(encoding="utf-8")
 
+            results["stage"] = "tesseract-english"
             image_path = root / "ocr.png"
             image = Image.new("RGB", (900, 180), "white")
             english_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 52)
@@ -232,16 +235,18 @@ def main() -> int:
             chinese_font_path = Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")
             assert chinese_font_path.is_file(), "Noto CJK 字体缺失"
             chinese_image_path = root / "ocr-chinese.png"
-            chinese_image = Image.new("RGB", (500, 150), "white")
-            chinese_font = ImageFont.truetype(str(chinese_font_path), 88)
+            chinese_image = Image.new("RGB", (700, 180), "white")
+            chinese_font = ImageFont.truetype(str(chinese_font_path), 112)
             ImageDraw.Draw(chinese_image).text((24, 10), "中文测试", fill="black", font=chinese_font)
             chinese_image.save(chinese_image_path)
+            results["stage"] = "tesseract-chinese"
             chinese_ocr_text = _run(
                 ["tesseract", str(chinese_image_path), "stdout", "-l", "chi_sim", "--psm", "7"],
                 cwd=root,
             )
-            assert "中文" in chinese_ocr_text and "测试" in chinese_ocr_text
+            assert chinese_ocr_text == "中文测试", f"中文 OCR 实际输出: {chinese_ocr_text!r}"
 
+            results["stage"] = "node-office"
             node_files = _write_node_office(root)
             assert all(node_files.values())
             results["python_office"] = {"docx": True, "xlsx": True, "pptx": True, "pdf": True}
@@ -250,6 +255,7 @@ def main() -> int:
             results["tesseract"] = {"english": True, "chinese": True}
             results["node_office"] = node_files
 
+            results["stage"] = "dotnet-openxml"
             dotnet_docx = _write_dotnet_docx(root)
             results["dotnet_openxml_offline"] = dotnet_docx
             assert dotnet_docx, "预缓存的 .NET OpenXML 依赖未能离线还原和生成 DOCX"
@@ -257,6 +263,7 @@ def main() -> int:
 
             results["uid"] = os.getuid() if hasattr(os, "getuid") else None
             results["writable_tmp"] = True
+            results["stage"] = "complete"
         print(json.dumps({"ok": True, "checks": results}, ensure_ascii=False, sort_keys=True))
         return 0
     except Exception as exc:  # pragma: no cover - failure output is the container contract.

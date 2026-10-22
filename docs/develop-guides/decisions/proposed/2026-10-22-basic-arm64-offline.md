@@ -25,7 +25,7 @@ DGX Spark 已有 Docker，但目标网络无法下载镜像、软件包或 OCR �
 | 验收主张 | 失败面 | 语义 Owner | 直接证据 / 命令 | 负向案例 | 当前结果 |
 |---|---|---|---|---|---|
 | 无网络完成全新安装 | 隐式 pull、错误架构、旧数据混入 | scripts/offline 与生产 Compose | 隔离 Compose 安装、镜像架构和最终数据库回读 | 错误哈希、已有目标、错误架构拒绝 | Not run |
-| 常用文档任务无下载 | 缺库、字体或 NuGet | docker/offline/sandbox.Dockerfile | network none、UID 1000、只读根目录产物生成和回读 | 缺失依赖时 smoke 失败 | Not run |
+| 常用文档任务无下载 | 缺库、字体或 NuGet | docker/offline/sandbox.Dockerfile | network none、UID 1000、只读根目录产物生成和回读 | 缺失依赖时 smoke 失败 | Passed |
 | OCR 无首次下载 | 缺失/损坏模型 | docker/offline/api.Dockerfile | network none 实际中文识别与模型哈希 | 损坏模型拒绝 | Not run |
 | 网页必要资源本地可用 | CDN 字体或 PDF 资源 | web | 构建和禁止外网的浏览器预览 | 外网请求被阻断仍可预览 | Passed |
 
@@ -33,11 +33,19 @@ DGX Spark 已有 Docker，但目标网络无法下载镜像、软件包或 OCR �
 
 浏览器禁止外网请求时，使用构建后的 PDF.js 完成中文 PDF 字符提取及渲染，无外网请求；未覆盖登录后的完整预览交互。
 
-`python -m unittest scripts.offline.test_offline` 的 20 项测试通过，覆盖完整组件摘要、路径边界、已有目标拒绝、健康状态、版本来源，以及 Docker classic/config 与 containerd/manifest 两类镜像身份。真实 `docker compose config --format json` 验证冻结拓扑包含 12 个服务，仅 Web 发布端口，全部服务禁止构建与拉取，沙盒宿主路径位于独立部署目录。
+`python -m unittest scripts.offline.test_offline` 的 22 项测试通过，覆盖完整组件摘要、路径边界、已有目标拒绝、健康状态、版本来源，以及 Docker classic/config 与 containerd/manifest 两类镜像身份。真实 `docker compose config --format json` 验证冻结拓扑包含 12 个服务，仅 Web 发布端口，全部服务禁止构建与拉取，沙盒宿主路径位于独立部署目录。
 
 Web 定向 unit、ESLint 和生产构建通过；文档构建、工程信任检查通过。工程信任单测在 Windows 上 61 项通过，1 项因创建符号链接缺少系统权限而报错。后端在无网络、独立临时状态目录的 amd64 容器运行 `python -m pytest test/unit -m "not slow"`，2621 项通过；该结果证明逻辑回归基线，不能替代 ARM64 实际运行验证。
 
-独立 Reviewer 对源码、diff 与测试进行了三轮审查；验证器的错误分支、镜像来源与部分归档清理问题已修复。制包环境下载不使用代理，本地缓存和产物写入数据盘，镜像构建在独立服务器目录执行。
+独立 Reviewer 对源码、diff 与测试进行了三轮审查；验证器的错误分支、镜像来源与部分归档清理问题已修复。制包环境下载不使用代理，本地缓存和产物仅写入 Windows D 盘，镜像构建在 app3 的独立目录执行；这一约束不限定目标 DGX 的 Linux 安装目录。
+
+## 运行验证补充
+
+ARM64 办公镜像已在 QEMU 容器中通过完整断网检查：Python/Node Office 产物生成并回读、LibreOffice 中文转 PDF、Poppler、英文/中文 Tesseract，以及只使用缓存的 .NET OpenXML 还原和 DOCX 生成。根目录只读，运行 UID 为 1000。原 88px 中文样例误识别最后一个字；同一字体和完整原文在 112px、700×180px 画布精确识别两次后，显式调整测试图片并使用全文断言；没有把错字加入预期。失败输出补充当前步骤，方便离线排查。
+
+服务状态检查新增负向案例证明 `running + Health=starting` 原先会被误判为通过，现要求非空健康状态为 `healthy`；未定义健康检查的服务仍允许空状态。22 项离线脚本单测通过；最新工程信任与离线脚本的 84 项单测在 Linux 隔离容器全部通过，消除了 Windows 符号链接权限导致的环境性报错。
+
+RapidOCR 已在 API 基础镜像使用同一张 1200×320px、64px 字号的中文测试图完成联网与断网重复识别，全文结果均为“中文测试2026”；旧长文本样例重复识别字符，因此显式改用清晰的短文本 oracle，未放宽错字断言。最终 API 镜像、损坏模型负向案例和整套安装仍待验收。
 
 ## 风险
 
