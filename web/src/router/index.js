@@ -109,6 +109,7 @@ const router = createRouter({
       path: '/workspace',
       name: 'workspace',
       component: AppLayout,
+      meta: { consumerChat: true },
       children: [
         {
           path: '',
@@ -122,6 +123,7 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: AppLayout,
+      meta: { consumerChat: true },
       children: [
         {
           path: '',
@@ -135,6 +137,7 @@ const router = createRouter({
       path: '/agent-manage',
       name: 'agent-manage',
       component: AppLayout,
+      meta: { consumerChat: true },
       children: [
         {
           path: '',
@@ -148,6 +151,7 @@ const router = createRouter({
       path: '/extensions',
       name: 'extensions',
       component: AppLayout,
+      meta: { consumerChat: true },
       children: [
         {
           path: '',

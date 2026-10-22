@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { Plus, RefreshCw, Trash2, SquarePen, Bot, ChevronRight } from '@lucide/vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { agentApi } from '@/apis/agent_api'
 import AgentEditModal from '@/components/model-management/AgentEditModal.vue'
@@ -16,6 +16,7 @@ import { generatePixelAvatar } from '@/utils/pixelAvatar'
 import { getShareConfigLabel } from '@/utils/shareConfig'
 
 const agentStore = useAgentStore()
+const route = useRoute()
 const router = useRouter()
 const agentLoading = ref(false)
 const searchQuery = ref('')
@@ -117,7 +118,10 @@ const openEditAgentModal = (agent) => {
 
 const openAgentChat = (agent) => {
   if (!agent?.id || agent.is_subagent) return
-  router.push({ name: 'AgentComp', query: { agent_id: agent.id } })
+  router.push({
+    name: route.meta.consumerChat ? 'ChatComp' : 'AgentComp',
+    query: { agent_id: agent.id }
+  })
 }
 
 const refreshAgentLists = async () => {

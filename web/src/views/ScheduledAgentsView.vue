@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { ExternalLink, Pause, Play, Plus, RefreshCw, Trash2, X, Zap } from '@lucide/vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 import { scheduledAgentApi } from '@/apis/scheduled_agent_api'
 import ScheduledAgentEditor from '@/components/scheduled-agents/ScheduledAgentEditor.vue'
@@ -15,6 +15,7 @@ import { useAgentStore } from '@/stores/agent'
 import { describeSchedule, parseCronExpression } from '@/utils/scheduleFrequency'
 
 const router = useRouter()
+const route = useRoute()
 const agentStore = useAgentStore()
 const jobs = ref([])
 const loading = ref(false)
@@ -252,7 +253,10 @@ function canOpenConversation(run) {
 async function openConversation(run) {
   if (!canOpenConversation(run)) return
   if (!(await flushAutoSave())) return
-  await router.push({ name: 'AgentCompWithThreadId', params: { thread_id: run.thread_id } })
+  await router.push({
+    name: route.meta.consumerChat ? 'ChatCompWithThreadId' : 'AgentCompWithThreadId',
+    params: { thread_id: run.thread_id }
+  })
 }
 
 function runRecordLabel(run) {

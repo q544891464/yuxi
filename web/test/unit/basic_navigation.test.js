@@ -149,3 +149,44 @@ test('消费端知识库保留布局，消费端总览仅管理员可访问', as
   assert.equal(router.currentRoute.value.name, 'ConsumerDashboard')
   assert.equal(router.currentRoute.value.meta.consumerChat, true)
 })
+
+test('业务配置与详情页保持前台外壳，只有管理工作台使用后台布局', async () => {
+  const user = { token: 'test', userId: 1, isLoggedIn: true, isAdmin: true }
+  const router = createTestRouter(user)
+  for (const path of [
+    '/employees',
+    '/agent-manage',
+    '/agent-manage?tab=providers',
+    '/extensions',
+    '/extensions?tab=knowledge',
+    '/extensions/skill/example',
+    '/extensions/mcp/example',
+    '/extensions/knowledgebase/example',
+    '/extensions/knowledgebase/example/evaluation/dataset',
+    '/workspace',
+    '/dashboard'
+  ]) {
+    await router.push(path)
+    assert.equal(router.currentRoute.value.fullPath, path)
+    assert.equal(router.currentRoute.value.meta.consumerChat, true, path)
+  }
+  for (const path of ['/agent', '/agent/thread-1']) {
+    await router.push(path)
+    assert.notEqual(router.currentRoute.value.meta.consumerChat, true, path)
+  }
+  user.isAdmin = false
+  for (const path of ['/extensions/skill/example', '/agent-manage', '/workspace']) {
+    await router.push(path)
+    assert.equal(router.currentRoute.value.fullPath, path)
+    assert.equal(router.currentRoute.value.meta.consumerChat, true, path)
+  }
+  for (const path of [
+    '/agent',
+    '/dashboard',
+    '/extensions/mcp/example',
+    '/extensions/knowledgebase/example/evaluation/dataset'
+  ]) {
+    await router.push(path)
+    assert.equal(router.currentRoute.value.path, '/chat', path)
+  }
+})
