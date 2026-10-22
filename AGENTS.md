@@ -4,6 +4,7 @@ Yuxi 是基于 LangGraph、FastAPI、Vue 和多种持久化服务构建的知识
 
 ## 每次任务先加载什么
 
+- [本分支 Agent 交接](AGENT_HANDOFF.md)：分支定位、接手入口、交接快照与新会话模板。
 - [ARCHITECTURE.md](ARCHITECTURE.md)：稳定边界、主链路和架构不变量。
 - [Yuxi Spec Loop](docs/develop-guides/spec-loop.md)：非平凡变更从提案、证据到收敛的流程。
 - [工程信任系统](docs/develop-guides/engineering-trust.md)：语义 Owner、证据、决策记录、派生审计和 gate 规则。
