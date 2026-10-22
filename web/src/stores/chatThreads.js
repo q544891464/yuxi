@@ -18,6 +18,7 @@ function countNonPinnedThreads(items) {
 export const useChatThreadsStore = defineStore('chatThreads', () => {
   const threads = ref([])
   const currentThreadId = ref(null)
+  const activeAgentId = ref(undefined)
   const threadCreationInFlight = ref(false)
   const hasMoreThreads = ref(true)
   const isLoadingMoreThreads = ref(false)
@@ -37,8 +38,30 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
     threadCreationInFlight.value = Boolean(value)
   }
 
+  const setAgentScope = (agentId) => {
+    const nextAgentId = agentId === undefined ? undefined : agentId || null
+    if (activeAgentId.value === nextAgentId) return
+    const currentThread = threads.value.find((thread) => thread.id === currentThreadId.value)
+    const preserveCurrentThread = Boolean(
+      nextAgentId && currentThread?.agent_id === nextAgentId
+    )
+    activeAgentId.value = nextAgentId
+    requestGeneration += 1
+    threads.value = []
+    hasMoreThreads.value = nextAgentId === undefined || Boolean(nextAgentId)
+    isLoadingMoreThreads.value = false
+    if (!preserveCurrentThread) setCurrentThreadId(null, { force: true })
+  }
+
+  let requestGeneration = 0
+
+  const resolveAgentId = (agentId) => (agentId === undefined ? activeAgentId.value : agentId)
+  const canShowThread = (thread) =>
+    activeAgentId.value === undefined ||
+    (activeAgentId.value && thread?.agent_id === activeAgentId.value)
+
   const upsertThread = (thread) => {
-    if (!thread?.id) return
+    if (!thread?.id || !canShowThread(thread)) return
     const index = threads.value.findIndex((item) => item.id === thread.id)
     if (index >= 0) {
       threads.value[index] = { ...threads.value[index], ...thread }
@@ -67,10 +90,13 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
     }
   }
 
-  const syncThreadStatuses = async (agentId = null) => {
+  const syncThreadStatuses = async (agentId) => {
+    const targetAgentId = resolveAgentId(agentId)
+    if (targetAgentId === null) return
+    const generation = requestGeneration
     try {
-      const fetchedThreads = await threadApi.getThreads(agentId, PAGE_SIZE, 0)
-      if (!fetchedThreads) return
+      const fetchedThreads = await threadApi.getThreads(targetAgentId, PAGE_SIZE, 0)
+      if (!fetchedThreads || generation !== requestGeneration) return
       const statusById = new Map(fetchedThreads.map((thread) => [thread.id, thread.thread_status]))
       threads.value = threads.value.map((thread) => {
         const latestStatus = statusById.get(thread.id)
@@ -78,13 +104,25 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
         return { ...thread, thread_status: latestStatus }
       })
     } catch (error) {
+      if (generation !== requestGeneration) return
       console.warn('Failed to sync thread statuses:', error)
     }
   }
 
-  const loadThreads = async (agentId = null) => {
+  const loadThreads = async (agentId) => {
+    const targetAgentId = resolveAgentId(agentId)
+    if (targetAgentId === null) {
+      threads.value = []
+      hasMoreThreads.value = false
+      return threads.value
+    }
+    const generation = requestGeneration
     try {
-      const fetchedThreads = await threadApi.getThreads(agentId, PAGE_SIZE, 0)
+      const fetchedThreads = await threadApi.getThreads(targetAgentId, PAGE_SIZE, 0)
+      if (
+        generation !== requestGeneration ||
+        (activeAgentId.value !== undefined && activeAgentId.value !== targetAgentId)
+      ) return threads.value
       threads.value = fetchedThreads || []
       hasMoreThreads.value = Boolean(fetchedThreads && countNonPinnedThreads(fetchedThreads) >= PAGE_SIZE)
       if (
@@ -95,19 +133,28 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
       }
       return threads.value
     } catch (error) {
+      if (generation !== requestGeneration) return threads.value
       console.error('Failed to fetch threads:', error)
       handleChatError(error, 'fetch')
       throw error
     }
   }
 
-  const loadMoreThreads = async (agentId = null) => {
+  const loadMoreThreads = async (agentId) => {
     if (isLoadingMoreThreads.value || !hasMoreThreads.value) return
+
+    const targetAgentId = resolveAgentId(agentId)
+    if (targetAgentId === null) return
+    const generation = requestGeneration
 
     isLoadingMoreThreads.value = true
     try {
       const nonPinnedOffset = countNonPinnedThreads(threads.value)
-      const fetchedThreads = await threadApi.getThreads(agentId, PAGE_SIZE, nonPinnedOffset)
+      const fetchedThreads = await threadApi.getThreads(targetAgentId, PAGE_SIZE, nonPinnedOffset)
+      if (
+        generation !== requestGeneration ||
+        (activeAgentId.value !== undefined && activeAgentId.value !== targetAgentId)
+      ) return
       if (fetchedThreads && fetchedThreads.length > 0) {
         // 后端分页会重复返回置顶项，这里只追加列表中尚不存在的线程。
         const existingIds = new Set(threads.value.map((thread) => thread.id))
@@ -118,10 +165,11 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
         hasMoreThreads.value = false
       }
     } catch (error) {
+      if (generation !== requestGeneration) return
       console.error('Failed to load more chats:', error)
       handleChatError(error, 'fetch')
     } finally {
-      isLoadingMoreThreads.value = false
+      if (generation === requestGeneration) isLoadingMoreThreads.value = false
     }
   }
 
@@ -131,7 +179,9 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
     try {
       const thread = await threadApi.createThread(agentId, title, metadata, options)
       if (thread) {
-        threads.value = [thread, ...threads.value.filter((item) => item.id !== thread.id)]
+        if (canShowThread(thread)) {
+          threads.value = [thread, ...threads.value.filter((item) => item.id !== thread.id)]
+        }
       }
       return thread
     } catch (error) {
@@ -231,6 +281,7 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
 
   return {
     threads,
+    activeAgentId,
     currentThreadId,
     currentThread,
     threadCreationInFlight,
@@ -238,6 +289,7 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
     isLoadingMoreThreads,
     setCurrentThreadId,
     setThreadCreationInFlight,
+    setAgentScope,
     upsertThread,
     setThreadStatus,
     markThreadViewed,

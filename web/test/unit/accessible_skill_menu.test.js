@@ -4,7 +4,8 @@ import test from 'node:test'
 import {
   normalizeAccessibleSkills,
   resolveNavigationTree,
-  findNavigationEntry
+  findNavigationEntry,
+  getEmployeeEnabledSkills
 } from '../../src/utils/accessibleSkills.js'
 
 test('技能菜单保留接口返回的可访问技能，并忽略无有效 slug 的条目', () => {
@@ -20,15 +21,52 @@ test('技能接口数据缺失时菜单为空', () => {
   assert.deepEqual(normalizeAccessibleSkills({ data: {} }), [])
 })
 
-test('技能标题可隐藏，但添加技能入口仍保留', () => {
+test('员工已保存技能选择优先，未设置时沿用 schema 默认值', () => {
+  assert.deepEqual(
+    getEmployeeEnabledSkills({ configurable_items: { skills: { default: 'all' } } }),
+    'all'
+  )
+  assert.deepEqual(
+    getEmployeeEnabledSkills({
+      config_json: { context: { skills: [] } },
+      configurable_items: { skills: { default: 'all' } }
+    }),
+    []
+  )
+})
+
+test('技能标题可隐藏，运行技能菜单不提供个人技能创建入口', () => {
   const source = readFileSync(
     new URL('../../src/components/AccessibleSkillMenu.vue', import.meta.url),
     'utf8'
   )
   assert.match(source, /showTitle: \{ type: Boolean, default: true \}/)
   assert.match(source, /<span v-if="showTitle">技能<\/span>/)
-  assert.match(source, /class="add-skill"[^>]*@click="\$emit\('create'\)"/)
+  assert.doesNotMatch(source, /class="add-skill"/)
   assert.match(source, /\.menu-heading-compact\s*\{\s*justify-content: flex-start;/)
+})
+
+test('员工配置只接受技能 slug，禁用技能始终隐藏', async () => {
+  const server = await (await import('vite')).createServer({
+    server: { middlewareMode: true },
+    appType: 'custom'
+  })
+  try {
+    const { filterEnabledAgentSkills } = await server.ssrLoadModule('/src/utils/accessibleSkills.js')
+    const skills = [
+      { slug: 'enabled' },
+      { slug: 'disabled', enabled: false },
+      { slug: 'personal', source_scope: 'personal' }
+    ]
+    assert.deepEqual(filterEnabledAgentSkills(skills, ['enabled', 'disabled', 'personal']), [
+      skills[0],
+      skills[2]
+    ])
+    assert.deepEqual(filterEnabledAgentSkills(skills, [{ slug: 'enabled' }]), [])
+    assert.deepEqual(filterEnabledAgentSkills(skills, 'all'), [skills[0], skills[2]])
+  } finally {
+    await server.close()
+  }
 })
 
 test('共享菜单解析保留配置顺序，并把无权限父绑定降为分组', () => {

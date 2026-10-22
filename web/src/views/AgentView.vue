@@ -267,7 +267,7 @@ const syncSelectedThreadFromRoute = async () => {
   const version = ++routeSyncVersion
   syncingRouteThread.value = true
   try {
-    if (!threadId && !agentStore.isInitialized) {
+    if (!agentStore.isInitialized) {
       await agentStore.initialize()
     }
 

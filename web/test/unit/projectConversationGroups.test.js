@@ -102,11 +102,32 @@ test('侧边栏同时展示项目和最近分组，最近只展示其他对话',
   assert.ok(projectSlotIndex > projectHeadingIndex)
   assert.ok(projectSlotIndex < recentHeadingIndex)
   assert.match(source, /<section class="history-group project-history-group">/)
-  assert.match(source, /暂无项目，可在输入框新建或选择/)
+  assert.match(source, /title="可在输入框中新建或选择项目">暂无项目/)
   assert.ok(recentSectionStart >= 0)
   assert.match(recentSection, /v-if="projectsLoading"[^>]*>正在加载对话/)
   assert.match(recentSection, /v-else-if="projectsError"[^>]*>项目加载失败，暂时无法分类对话/)
   assert.match(recentSection, /v-for="chat in otherConversations"/)
+})
+
+test('未选数字员工时可以隐藏最近与归档入口，同时保留项目导航', () => {
+  const source = readFileSync(
+    new URL('../../src/components/ConversationNavSection.vue', import.meta.url),
+    'utf8'
+  )
+  const layoutSource = readFileSync(
+    new URL('../../src/layouts/AppLayout.vue', import.meta.url),
+    'utf8'
+  )
+  const visibilityGate = source.indexOf('<template v-if="showConversations">')
+  const recentIndex = source.indexOf('recent-history-group', visibilityGate)
+  const archiveIndex = source.indexOf('class="archive-entry"', visibilityGate)
+  const projectsIndex = source.indexOf('project-history-group')
+  assert.match(source, /showConversations: \{ type: Boolean, default: true \}/)
+  assert.match(layoutSource, /:show-conversations="!consumerChat \|\| Boolean\(selectedAgentId\)"/)
+  assert.ok(visibilityGate >= 0)
+  assert.ok(projectsIndex < visibilityGate)
+  assert.ok(recentIndex > visibilityGate)
+  assert.ok(archiveIndex > visibilityGate)
 })
 
 test('项目默认折叠且提供完整名称提示', () => {

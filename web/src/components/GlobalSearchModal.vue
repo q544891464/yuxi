@@ -27,9 +27,9 @@
             </button>
           </div>
 
-          <div v-if="modes.length > 1" class="global-search-mode-bar" role="tablist">
+          <div v-if="availableModes.length > 1" class="global-search-mode-bar" role="tablist">
             <button
-              v-for="mode in modes"
+              v-for="mode in availableModes"
               :key="mode"
               type="button"
               class="global-search-mode-option"
@@ -206,6 +206,10 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  agentId: {
+    type: String,
+    default: undefined
+  },
   fileSearch: {
     type: Function,
     default: null
@@ -247,6 +251,13 @@ let fileSearchRequestId = 0
 
 const trimmedSearchText = computed(() => searchText.value.trim())
 const isSearchMode = computed(() => Boolean(trimmedSearchText.value))
+const availableModes = computed(() =>
+  props.agentId === null ? props.modes.filter((mode) => mode !== 'conversation') : props.modes
+)
+const defaultMode = () =>
+  availableModes.value.includes(props.defaultMode)
+    ? props.defaultMode
+    : availableModes.value[0] || props.defaultMode
 
 const inputPlaceholder = computed(() =>
   activeMode.value === 'file' ? props.filePlaceholder : '搜索对话...'
@@ -312,7 +323,7 @@ const close = () => {
 }
 
 const switchMode = (mode) => {
-  if (!props.modes.includes(mode) || mode === activeMode.value) return
+  if (!availableModes.value.includes(mode) || mode === activeMode.value) return
   activeMode.value = mode
   resetState()
   nextTick(() => {
@@ -389,7 +400,8 @@ const scrollSelectedIntoView = () => {
 
 const searchConversations = async ({ reset = false } = {}) => {
   const query = trimmedSearchText.value
-  if (!query) {
+  if (!query || props.agentId === null) {
+    searchRequestId += 1
     conversationResults.value = []
     hasMore.value = false
     selectedIndex.value = 0
@@ -407,6 +419,7 @@ const searchConversations = async ({ reset = false } = {}) => {
 
   try {
     const response = await threadApi.searchThreads(query, {
+      agentId: props.agentId,
       limit: CONVERSATION_SEARCH_LIMIT,
       offset
     })
@@ -530,11 +543,19 @@ watch(
   () => props.open,
   (nextOpen) => {
     if (!nextOpen) return
-    activeMode.value = props.defaultMode
+    activeMode.value = defaultMode()
     resetState()
     nextTick(() => {
       searchInputRef.value?.focus()
     })
+  }
+)
+
+watch(
+  () => props.agentId,
+  () => {
+    resetState()
+    if (!availableModes.value.includes(activeMode.value)) activeMode.value = defaultMode()
   }
 )
 

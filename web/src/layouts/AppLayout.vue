@@ -14,7 +14,8 @@ import {
   Search,
   UsersRound,
   WandSparkles,
-  ChevronDown
+  ChevronDown,
+  Settings2
 } from '@lucide/vue'
 
 import { useConfigStore } from '@/stores/config'
@@ -38,7 +39,7 @@ import { projectApi } from '@/apis/project_api'
 import { threadApi } from '@/apis/agent_api'
 import AccessibleSkillMenu from '@/components/AccessibleSkillMenu.vue'
 import { PLATFORM_NAME } from '@/utils/platformBranding'
-import { CREATE_SKILL_INTENT } from '@/utils/skillDraft'
+import { getEmployeeEnabledSkills } from '@/utils/accessibleSkills'
 
 const configStore = useConfigStore()
 const agentStore = useAgentStore()
@@ -59,6 +60,7 @@ const showSettingsModal = ref(false)
 const settingsInitialTab = ref('')
 
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
+const { selectedAgentId, agentDetails, isLoadingConfig } = storeToRefs(agentStore)
 const mobileSidebarExpanded = ref(false)
 const conversationSearchOpen = ref(false)
 const projectPendingId = ref(null)
@@ -68,6 +70,7 @@ const archiveLoading = ref(false)
 const archiveError = ref('')
 const archivedProjects = ref([])
 const archivedThreads = ref([])
+let archiveLoadGeneration = 0
 
 // Provide settings modal methods to child components
 const openSettingsModal = (tab) => {
@@ -203,6 +206,30 @@ const mainList = computed(() => {
   return items
 })
 
+const consumerTopItems = computed(() => {
+  const items = []
+  if (userStore.isAdmin) {
+    items.push(
+      { name: '员工管理', path: '/agent-manage', icon: Box, activeIcon: Box },
+      { name: '技能管理', path: '/extensions', icon: LibraryBig, activeIcon: LibraryBig },
+      {
+        name: '数据总览',
+        path: '/dashboard',
+        routeName: 'ConsumerDashboard',
+        icon: BarChart3,
+        activeIcon: BarChart3
+      },
+      { name: '管理工作台', path: '/agent', icon: Settings2, activeIcon: Settings2 }
+    )
+  }
+  items.push({ name: '数字员工广场', path: '/employees', icon: UsersRound, activeIcon: UsersRound })
+  return items
+})
+
+const employeeSkills = computed(
+  () => getEmployeeEnabledSkills(agentDetails.value[selectedAgentId.value])
+)
+
 /** 将技能选择带入新草稿，项目上下文由聊天页保留。 */
 const openSkill = (skill) => {
   closeMobileSidebar()
@@ -215,16 +242,10 @@ const openSkill = (skill) => {
     }
   })
 }
-const createSkill = () => openSkill({ slug: CREATE_SKILL_INTENT })
 const openKnowledge = () => {
   closeMobileSidebar()
   router.push({ name: 'ConsumerKnowledge' })
 }
-const openDashboard = () => {
-  closeMobileSidebar()
-  router.push({ name: 'ConsumerDashboard' })
-}
-
 const primaryNavItem = computed(() => mainList.value.find((item) => item.action) || null)
 const secondaryNavItems = computed(() => mainList.value.filter((item) => !item.action))
 
@@ -261,11 +282,29 @@ const initAgentNavigation = async () => {
     if (!agentStore.isInitialized) {
       await agentStore.initialize()
     }
-    await Promise.all([chatThreadsStore.loadThreads(), loadProjects()])
+    await Promise.all([
+      consumerChat.value ? Promise.resolve() : chatThreadsStore.loadThreads(),
+      loadProjects()
+    ])
   } catch (error) {
     console.warn('加载对话导航失败:', error)
   }
 }
+
+watch(
+  [consumerChat, selectedAgentId], ([isConsumer, agentId]) => {
+    archiveLoadGeneration += 1
+    archivedThreads.value = []
+    if (archiveOpen.value && isConsumer) void loadArchivedItems()
+    if (!isConsumer) {
+      chatThreadsStore.setAgentScope(undefined)
+      return
+    }
+    chatThreadsStore.setAgentScope(agentId || null)
+    if (agentId) void chatThreadsStore.loadThreads()
+  },
+  { immediate: true }
+)
 
 const loadProjects = async () => {
   try {
@@ -327,19 +366,26 @@ const handleDeleteChat = async (threadId) => {
 }
 
 const loadArchivedItems = async () => {
+  const generation = ++archiveLoadGeneration
+  const agentId = consumerChat.value ? selectedAgentId.value : undefined
   archiveLoading.value = true
   archiveError.value = ''
   try {
     const [loadedProjects, loadedThreads] = await Promise.all([
       projectApi.getProjects('archived'),
-      threadApi.getThreads(null, 500, 0, 'archived')
+      consumerChat.value && !agentId
+        ? Promise.resolve([])
+        : threadApi.getThreads(agentId ?? null, 500, 0, 'archived')
     ])
+    if (generation !== archiveLoadGeneration) return
     archivedProjects.value = loadedProjects || []
     archivedThreads.value = loadedThreads || []
   } catch (error) {
-    archiveError.value = error?.message || '已归档内容加载失败'
+    if (generation === archiveLoadGeneration) {
+      archiveError.value = error?.message || '已归档内容加载失败'
+    }
   } finally {
-    archiveLoading.value = false
+    if (generation === archiveLoadGeneration) archiveLoading.value = false
   }
 }
 
@@ -543,6 +589,26 @@ provide('settingsModal', {
           </button>
         </div>
       </div>
+      <div v-if="consumerChat" class="nav consumer-top-nav" aria-label="管理与数字员工入口">
+        <RouterLink
+          v-for="item in consumerTopItems"
+          :key="item.path"
+          :to="item.routeName ? { name: item.routeName } : item.path"
+          class="nav-item"
+          :class="{ active: isNavItemActive(item) }"
+          @click.stop="closeMobileSidebar"
+        >
+          <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
+            <template #title>{{ item.name }}</template>
+            <component
+              class="icon"
+              :is="isNavItemActive(item) ? item.activeIcon : item.icon"
+              size="18"
+            />
+          </a-tooltip>
+          <span class="nav-text">{{ item.name }}</span>
+        </RouterLink>
+      </div>
       <div class="nav" :class="{ 'consumer-primary-nav': consumerChat }">
         <RouterLink
           v-if="primaryNavItem"
@@ -605,6 +671,7 @@ provide('settingsModal', {
           class="sidebar-conversations"
           :current-chat-id="activeConversationThreadId"
           :chats-list="threads"
+          :show-conversations="!consumerChat || Boolean(selectedAgentId)"
           :projects="projects"
           :projects-loading="projectsLoading && !projectsStore.hasLoaded"
           :projects-error="projectsStore.hasLoaded ? '' : projectsError"
@@ -633,12 +700,13 @@ provide('settingsModal', {
           <template v-if="consumerChat" #after-projects>
             <div class="consumer-function-menu">
               <RouterLink
-                to="/employees"
+                to="/workspace"
                 class="consumer-function-link"
                 @click="closeMobileSidebar"
               >
-                <UsersRound :size="18" /><span>数字员工广场</span>
+                <HardDrive :size="18" /><span>个人空间</span>
               </RouterLink>
+              <template v-if="selectedAgentId && !isLoadingConfig">
               <button
                 type="button"
                 class="consumer-function-link"
@@ -649,24 +717,19 @@ provide('settingsModal', {
                 ><ChevronDown :size="14" :class="{ rotated: !skillsExpanded }" />
               </button>
               <AccessibleSkillMenu
+                v-if="selectedAgentId && !isLoadingConfig"
                 :show-title="false"
+                :agent-id="selectedAgentId"
+                :enabled-skills="employeeSkills"
                 v-show="skillsExpanded"
                 :selected-id="String(route.query.skill || '')"
                 :selected-entry-id="String(route.query.skill_entry || '')"
                 :disabled="threadCreationInFlight"
                 @select="openSkill"
-                @create="createSkill"
               />
+              </template>
               <button type="button" class="consumer-function-link" @click="openKnowledge">
                 <LibraryBig :size="18" /><span>知识库</span>
-              </button>
-              <button
-                v-if="userStore.isAdmin"
-                type="button"
-                class="consumer-function-link"
-                @click="openDashboard"
-              >
-                <BarChart3 :size="18" /><span>数据总览</span>
               </button>
             </div>
           </template>
@@ -710,6 +773,7 @@ provide('settingsModal', {
     <GlobalSearchModal
       v-model:open="conversationSearchOpen"
       :modes="['conversation', 'file']"
+      :agent-id="consumerChat ? selectedAgentId : undefined"
       default-mode="conversation"
       :recent-threads="threads"
       :file-search="searchWorkspace"
@@ -809,6 +873,9 @@ provide('settingsModal', {
   }
   .consumer-primary-nav {
     flex-shrink: 0;
+  }
+  .consumer-top-nav {
+    margin-bottom: -8px;
   }
   .consumer-primary-nav .consumer-new-chat.nav-item {
     min-height: 48px;

@@ -151,6 +151,7 @@
 
         <slot name="after-projects" />
 
+        <template v-if="showConversations">
         <section class="history-group recent-history-group">
           <button
             type="button"
@@ -198,6 +199,7 @@
         <button type="button" class="archive-entry" @click="$emit('open-archive')">
           <Archive :size="18" class="history-icon" /><span>已归档</span>
         </button>
+        </template>
       </div>
     </div>
   </section>
@@ -232,7 +234,8 @@ const props = defineProps({
   hasMoreChats: { type: Boolean, default: false },
   isLoadingMore: { type: Boolean, default: false },
   collapsed: { type: Boolean, default: false },
-  showHistory: { type: Boolean, default: true }
+  showHistory: { type: Boolean, default: true },
+  showConversations: { type: Boolean, default: true }
 })
 
 const emit = defineEmits([

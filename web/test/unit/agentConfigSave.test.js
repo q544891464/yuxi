@@ -87,3 +87,77 @@ test('共享智能体保存只提交修改字段，并使用后端合并结果�
     else delete globalThis.localStorage
   }
 })
+
+test('较慢的旧员工配置响应不会覆盖后续选择', async () => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: { getItem: () => null, setItem() {}, removeItem() {} }
+  })
+  const server = await createServer({ server: { middlewareMode: true }, appType: 'custom' })
+  setActivePinia(createPinia())
+  try {
+    const { useAgentStore } = await server.ssrLoadModule('/src/stores/agent.js')
+    const { agentApi } = await server.ssrLoadModule('/src/apis/index.js')
+    const store = useAgentStore()
+    const agentA = { id: 'employee-a', config_json: { context: { skills: ['a'] } } }
+    store.agents = [agentA, { id: 'employee-b' }]
+    store.agentDetails[agentA.id] = agentA
+    let resolveEmployeeB
+    agentApi.getAgentDetail = () =>
+      new Promise((resolve) => {
+        resolveEmployeeB = resolve
+      })
+
+    const slowSelection = store.selectAgent('employee-b')
+    assert.equal(store.selectedAgentId, null)
+    await store.selectAgent('employee-a')
+    resolveEmployeeB({ agent: { id: 'employee-b', config_json: { context: { skills: ['b'] } } } })
+    await slowSelection
+
+    assert.equal(store.selectedAgentId, 'employee-a')
+    assert.deepEqual(store.agentConfig.skills, ['a'])
+    assert.equal(store.isLoadingConfig, false)
+  } finally {
+    await server.close()
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage)
+    else delete globalThis.localStorage
+  }
+})
+
+test('新员工详情加载失败时保留原员工与配置', async () => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: { getItem: () => null, setItem() {}, removeItem() {} }
+  })
+  const server = await createServer({ server: { middlewareMode: true }, appType: 'custom' })
+  setActivePinia(createPinia())
+  let errorHandler
+  let originalHandleError
+  try {
+    errorHandler = await server.ssrLoadModule('/src/utils/errorHandler.js')
+    originalHandleError = errorHandler.default.handleError
+    errorHandler.default.handleError = (error) => error
+    const { useAgentStore } = await server.ssrLoadModule('/src/stores/agent.js')
+    const { agentApi } = await server.ssrLoadModule('/src/apis/index.js')
+    const store = useAgentStore()
+    const agentA = { id: 'employee-a', config_json: { context: { skills: ['a'] } } }
+    store.agents = [agentA, { id: 'employee-b' }]
+    store.agentDetails[agentA.id] = agentA
+    await store.selectAgent(agentA.id)
+    agentApi.getAgentDetail = async () => {
+      throw new Error('detail unavailable')
+    }
+
+    await assert.rejects(store.selectAgent('employee-b'), /detail unavailable/)
+    assert.equal(store.selectedAgentId, 'employee-a')
+    assert.deepEqual(store.agentConfig.skills, ['a'])
+    assert.equal(store.isLoadingConfig, false)
+  } finally {
+    if (errorHandler) errorHandler.default.handleError = originalHandleError
+    await server.close()
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage)
+    else delete globalThis.localStorage
+  }
+})

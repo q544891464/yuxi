@@ -342,7 +342,7 @@
                             引导
                           </button>
                           <ContextUsageRing
-                            v-if="showStateEntry"
+                            v-if="showStateEntry && !consumerChat"
                             :used-tokens="tokenUsagePressureTotal"
                             :limit-tokens="tokenUsageStackLimit"
                             :ratio="tokenUsageContextRatio"
@@ -420,7 +420,7 @@
 
             <div class="state-panel-body">
               <section
-                v-if="currentTokenUsage"
+                v-if="!consumerChat && currentTokenUsage"
                 class="state-section token-usage-section"
                 aria-label="上下文使用情况"
               >
@@ -641,7 +641,7 @@
               </section>
 
               <section
-                v-if="currentStateFiles.length"
+                v-if="!consumerChat && currentStateFiles.length"
                 class="state-section"
                 :class="{ 'is-collapsed': !isStateSectionExpanded('files') }"
               >
@@ -705,7 +705,7 @@
                   @click="toggleStateSection('artifacts')"
                 >
                   <span class="state-section-label">
-                    <span class="state-section-title">产物</span>
+                    <span class="state-section-title">成果物</span>
                     <ChevronDown
                       :size="15"
                       class="state-section-chevron"
@@ -745,7 +745,7 @@
               </section>
 
               <section
-                v-if="displaySubagentRuns.length"
+                v-if="!consumerChat && displaySubagentRuns.length"
                 class="state-section"
                 :class="{ 'is-collapsed': !isStateSectionExpanded('subagents') }"
               >
@@ -828,7 +828,9 @@
                 </div>
               </section>
 
-              <div v-if="!hasVisibleStateSections" class="state-panel-empty">暂无状态内容</div>
+              <div v-if="!hasVisibleStateSections" class="state-panel-empty">
+                {{ consumerChat ? '当前没有待办或成果物' : '暂无状态内容' }}
+              </div>
             </div>
           </div>
         </div>
@@ -885,6 +887,8 @@
 
 <script setup>
 import { canReferenceSkill, withSkillDraft } from '@/utils/skillDraft'
+import { resolveAuthorizedThread } from '@/utils/agentThreadAccess'
+import { useRoute } from 'vue-router'
 import {
   ref,
   reactive,
@@ -1003,6 +1007,8 @@ const props = defineProps({
   sendDisabled: { type: Boolean, default: false }
 })
 const emit = defineEmits(['thread-change'])
+const route = useRoute()
+const consumerChat = computed(() => route.meta.consumerChat === true)
 
 // ==================== STORE MANAGEMENT ====================
 const agentStore = useAgentStore()
@@ -1986,14 +1992,14 @@ const completedTodoCount = computed(
   () => currentTodos.value.filter((todo) => todo?.status === 'completed').length
 )
 const showStateEntry = computed(() => Boolean(currentChatId.value))
-const showFileEntry = computed(() => Boolean(currentChatId.value))
+const showFileEntry = computed(() => !consumerChat.value && Boolean(currentChatId.value))
 const hasVisibleStateSections = computed(
   () =>
-    Boolean(currentTokenUsage.value) ||
+    (!consumerChat.value && Boolean(currentTokenUsage.value)) ||
     currentTodos.value.length > 0 ||
-    currentStateFiles.value.length > 0 ||
+    (!consumerChat.value && currentStateFiles.value.length > 0) ||
     currentArtifactFiles.value.length > 0 ||
-    displaySubagentRuns.value.length > 0
+    (!consumerChat.value && displaySubagentRuns.value.length > 0)
 )
 
 const { mentionConfig } = useAgentMentionConfig({
@@ -2891,7 +2897,12 @@ onUnmounted(() => {
 // ==================== 线程管理方法 ====================
 // 获取当前智能体的线程列表
 const fetchThreads = async (agentId = null) => {
-  const targetAgentId = props.singleMode ? agentId || currentAgentId.value : agentId
+  const scopedAgentId = chatThreadsStore.activeAgentId
+  const targetAgentId = props.singleMode
+    ? agentId || currentAgentId.value
+    : agentId === null
+      ? scopedAgentId
+      : agentId
   if (props.singleMode && !targetAgentId) return
 
   await chatThreadsStore.loadThreads(targetAgentId)
@@ -3332,7 +3343,9 @@ const selectChat = async (chatId) => {
   return true
 }
 
+let routeThreadLoadGeneration = 0
 const selectThreadFromRoute = async (threadId) => {
+  const generation = ++routeThreadLoadGeneration
   if (threadCreationInFlight.value) return null
   if (!agentStore.isInitialized) {
     await initAll()
@@ -3350,17 +3363,34 @@ const selectThreadFromRoute = async (threadId) => {
     return true
   }
 
-  if (!threads.value.length || !threads.value.find((thread) => thread.id === threadId)) {
+  let targetThread = threads.value.find((thread) => thread.id === threadId)
+  if (!targetThread) {
+    targetThread = await resolveAuthorizedThread(
+      threadId,
+      threads.value,
+      agentApi.getAgentHistory
+    )
+    if (!targetThread?.agent_id) return false
+    if (generation !== routeThreadLoadGeneration || route.params.thread_id !== threadId) return null
+    if (targetThread.agent_id !== currentAgentId.value) {
+      await agentStore.selectAgent(targetThread.agent_id)
+      await nextTick()
+    }
+    if (generation !== routeThreadLoadGeneration || route.params.thread_id !== threadId) return null
+    // AppLayout 的员工选择 watcher 与本次路由恢复并行，先同步 Store 范围再加载列表。
+    if (consumerChat.value) chatThreadsStore.setAgentScope(targetThread.agent_id)
     await loadChatsList()
   }
 
-  const targetThread = threads.value.find((thread) => thread.id === threadId)
-  if (!targetThread) {
-    return false
+  if (targetThread.agent_id && targetThread.agent_id !== currentAgentId.value) {
+    await agentStore.selectAgent(targetThread.agent_id)
+    await nextTick()
+    if (consumerChat.value) chatThreadsStore.setAgentScope(targetThread.agent_id)
+    await loadChatsList()
   }
+  if (generation !== routeThreadLoadGeneration || route.params.thread_id !== threadId) return null
 
-  await selectChat(threadId)
-  return true
+  return Boolean(await selectChat(threadId))
 }
 
 const handleSendMessage = async ({ images = [], queuePolicy = 'enqueue' } = {}) => {
@@ -3934,8 +3964,8 @@ const getConversationSources = (conv) => {
 
 // ==================== LIFECYCLE & WATCHERS ====================
 const loadChatsList = async () => {
-  const agentId = props.singleMode ? currentAgentId.value : null
-  if (props.singleMode && !agentId) {
+  const agentId = props.singleMode ? currentAgentId.value : chatThreadsStore.activeAgentId
+  if ((props.singleMode && !agentId) || agentId === null) {
     console.warn('No agent selected, cannot load chats list')
     threads.value = []
     resetAgentPanelState()

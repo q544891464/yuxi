@@ -61,6 +61,8 @@ export const useAgentStore = defineStore(
     const error = ref(null)
     const isInitialized = ref(false)
     const isInitializing = ref(false)
+    let selectionGeneration = 0
+    let initializationPromise = null
 
     const selectedAgent = computed(() => {
       const agentId = selectedAgentId.value
@@ -105,23 +107,28 @@ export const useAgentStore = defineStore(
     }
 
     async function initialize() {
-      if (isInitialized.value || isInitializing.value) return
+      if (isInitialized.value) return
+      if (initializationPromise) return initializationPromise
       isInitializing.value = true
-      try {
-        await Promise.all([fetchAgents(), fetchAccessibleKnowledgeBases(), fetchToolMetadata()])
+      initializationPromise = (async () => {
+        try {
+          await Promise.all([fetchAgents(), fetchAccessibleKnowledgeBases(), fetchToolMetadata()])
 
-        const targetAgentId = getPreferredAgentId(agents.value, selectedAgentId.value)
-        if (targetAgentId) {
-          await selectAgent(targetAgentId)
+          const targetAgentId = getPreferredAgentId(agents.value, selectedAgentId.value)
+          if (targetAgentId) {
+            await selectAgent(targetAgentId)
+          }
+          isInitialized.value = true
+        } catch (err) {
+          console.error('Failed to initialize agent store:', err)
+          handleChatError(err, 'initialize')
+          error.value = err.message
+        } finally {
+          isInitializing.value = false
+          initializationPromise = null
         }
-        isInitialized.value = true
-      } catch (err) {
-        console.error('Failed to initialize agent store:', err)
-        handleChatError(err, 'initialize')
-        error.value = err.message
-      } finally {
-        isInitializing.value = false
-      }
+      })()
+      return initializationPromise
     }
 
     async function fetchAgents({ includeSubagents = false } = {}) {
@@ -183,14 +190,14 @@ export const useAgentStore = defineStore(
 
     async function selectAgent(agentId, { allowSubagent = false } = {}) {
       if (!agentId) return
-      let knownAgent = agentDetails.value[agentId] || agents.value.find((a) => a.id === agentId)
-      if (!knownAgent) {
-        knownAgent = await fetchAgentDetail(agentId)
-      }
-      if (knownAgent?.is_subagent && !allowSubagent) return
+      const generation = ++selectionGeneration
       isLoadingConfig.value = true
       try {
+        let knownAgent = agentDetails.value[agentId] || agents.value.find((a) => a.id === agentId)
+        if (!knownAgent) knownAgent = await fetchAgentDetail(agentId)
+        if (generation !== selectionGeneration || (knownAgent?.is_subagent && !allowSubagent)) return
         const detail = agentDetails.value[agentId] || (await fetchAgentDetail(agentId))
+        if (generation !== selectionGeneration) return
         const loadedConfig = applyConfigDefaults(
           extractContext(detail),
           getConfigurableItems(detail)
@@ -199,7 +206,7 @@ export const useAgentStore = defineStore(
         agentConfig.value = loadedConfig
         originalAgentConfig.value = { ...loadedConfig }
       } finally {
-        isLoadingConfig.value = false
+        if (generation === selectionGeneration) isLoadingConfig.value = false
       }
     }
 
@@ -271,6 +278,7 @@ export const useAgentStore = defineStore(
     }
 
     function reset() {
+      selectionGeneration += 1
       agents.value = []
       selectedAgentId.value = null
       availableKnowledgeBases.value = []

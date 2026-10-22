@@ -86,3 +86,67 @@ test('置顶线程不占用普通线程分页 offset 且不会提前结束加载
     await server.close()
   }
 })
+
+test('线程侧栏切换员工时只显示当前员工会话并忽略较慢的旧响应', async () => {
+  const server = await createServer({ server: { middlewareMode: true }, appType: 'custom' })
+  setActivePinia(createPinia())
+  try {
+    const { threadApi } = await server.ssrLoadModule('/src/apis/agent_api.js')
+    let resolveOld
+    threadApi.getThreads = (agentId) =>
+      agentId === 'employee-a'
+        ? new Promise((resolve) => (resolveOld = resolve))
+        : Promise.resolve([{ id: 'thread-b', agent_id: 'employee-b' }])
+
+    const { useChatThreadsStore } = await server.ssrLoadModule('/src/stores/chatThreads.js')
+    const store = useChatThreadsStore()
+    store.setAgentScope('employee-a')
+    const oldLoad = store.loadThreads()
+    store.threads = [{ id: 'thread-b', agent_id: 'employee-b' }]
+    store.setCurrentThreadId('thread-b')
+    store.setAgentScope('employee-b')
+    await store.loadThreads()
+    resolveOld([{ id: 'thread-a', agent_id: 'employee-a' }])
+    await oldLoad
+
+    assert.deepEqual(store.threads, [{ id: 'thread-b', agent_id: 'employee-b' }])
+    assert.equal(store.currentThreadId, 'thread-b')
+  } finally {
+    await server.close()
+  }
+})
+
+test('没有选中员工时清空会话且分页与状态同步沿用员工范围', async () => {
+  const server = await createServer({ server: { middlewareMode: true }, appType: 'custom' })
+  setActivePinia(createPinia())
+  try {
+    const { threadApi } = await server.ssrLoadModule('/src/apis/agent_api.js')
+    const calls = []
+    threadApi.getThreads = async (agentId, limit, offset) => {
+      calls.push({ agentId, limit, offset })
+      return Array.from({ length: 100 }, (_, index) => ({
+        id: `thread-${offset + index}`,
+        agent_id: agentId
+      }))
+    }
+
+    const { useChatThreadsStore } = await server.ssrLoadModule('/src/stores/chatThreads.js')
+    const store = useChatThreadsStore()
+    store.setAgentScope('employee-a')
+    await store.loadThreads()
+    await store.loadMoreThreads()
+    await store.syncThreadStatuses()
+    store.setAgentScope(null)
+    await store.loadThreads()
+
+    assert.deepEqual(calls.map(({ agentId, offset }) => [agentId, offset]), [
+      ['employee-a', 0],
+      ['employee-a', 100],
+      ['employee-a', 0]
+    ])
+    assert.deepEqual(store.threads, [])
+    assert.equal(store.hasMoreThreads, false)
+  } finally {
+    await server.close()
+  }
+})

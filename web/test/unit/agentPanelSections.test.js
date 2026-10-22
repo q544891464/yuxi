@@ -124,6 +124,39 @@ test('暂停队列仍有请求时禁用上下文压缩', () => {
   assert.match(handler, /hasQueuedRequests\.value/)
 })
 
+test('消费端状态区只显示待办与成果物，旧技术状态不会撑开内容区', () => {
+  const source = readFileSync(
+    new URL('../../src/components/AgentChatComponent.vue', import.meta.url),
+    'utf8'
+  )
+  const visibleSections = source.slice(
+    source.indexOf('const hasVisibleStateSections'),
+    source.indexOf('\n\nconst { mentionConfig }', source.indexOf('const hasVisibleStateSections'))
+  )
+
+  assert.match(source, /v-if="!consumerChat && currentTokenUsage"/)
+  assert.match(source, /v-if="!consumerChat && currentStateFiles\.length"/)
+  assert.match(source, /v-if="!consumerChat && displaySubagentRuns\.length"/)
+  assert.match(source, /!consumerChat\.value && Boolean\(currentTokenUsage\.value\)/)
+  assert.match(source, /!consumerChat\.value && currentStateFiles\.value\.length > 0/)
+  assert.match(source, /!consumerChat\.value && displaySubagentRuns\.value\.length > 0/)
+  assert.match(visibleSections, /currentTodos\.value\.length > 0/)
+  assert.match(visibleSections, /currentArtifactFiles\.value\.length > 0/)
+  assert.match(source, /state-section-title">成果物</)
+  assert.match(source, /consumerChat \? '当前没有待办或成果物'/)
+})
+
+test('消费端隐藏独立文件入口，成果物仍可打开预览', () => {
+  const source = readFileSync(
+    new URL('../../src/components/AgentChatComponent.vue', import.meta.url),
+    'utf8'
+  )
+
+  assert.match(source, /const showFileEntry = computed\(\(\) => !consumerChat\.value && Boolean\(currentChatId\.value\)\)/)
+  assert.match(source, /@click="openPanelPreview\(file\)"/)
+  assert.match(source, /const openPanelPreview = \(file, keepTreeOpen = false\) =>/)
+})
+
 test('文件树仅在页面可见的运行期文件视图中轮询', () => {
   const base = {
     panelOpen: true,

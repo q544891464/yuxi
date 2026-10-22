@@ -5,6 +5,15 @@ import test from 'node:test'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 const source = await readFile(new URL('../../src/views/AgentView.vue', import.meta.url), 'utf8')
+const syncStart = source.indexOf('const syncSelectedThreadFromRoute = async () => {')
+assert.ok(syncStart >= 0)
+const syncHandler = source.slice(syncStart, source.indexOf('\nconst consumeRouteAgentSelection', syncStart))
+const threadChangeStart = source.indexOf('const handleThreadChange = (threadId) => {')
+assert.ok(threadChangeStart >= 0)
+const threadChangeHandler = source.slice(
+  threadChangeStart,
+  source.indexOf('\nconst agentQuickSwitchOptions', threadChangeStart)
+)
 const start = source.indexOf('const consumeRouteAgentSelection = async () => {')
 assert.ok(start >= 0)
 const handler = source.slice(start, source.indexOf('\nwatch(', start))
@@ -139,4 +148,58 @@ test('缓存聊天组件不消费其他页面上的同名参数', async () => {
   await ctx.consume()
   assert.equal(ctx.router.currentRoute.value.fullPath, '/agent-manage?agent_id=employee-a')
   assert.deepEqual(ctx.selected, [])
+})
+
+test('深链在员工 Store 初始化完成前保持路由，并等待后再读取线程', async () => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/chat/:thread_id?', name: 'ChatComp', component: {} }]
+  })
+  await router.push('/chat/employee-b-thread')
+  const route = new Proxy({}, { get: (_, key) => router.currentRoute.value[key] })
+  const initialize = deferred()
+  const reads = []
+  const agentStore = {
+    isInitialized: false,
+    initialize: () => initialize.promise
+  }
+  const chatComponentRef = {
+    value: {
+      selectThreadFromRoute: async (threadId) => {
+        reads.push(threadId)
+        return true
+      }
+    }
+  }
+  const syncingRouteThread = { value: false }
+  const sync = vm.runInNewContext(`${syncHandler}\nsyncSelectedThreadFromRoute`, {
+    route,
+    router,
+    agentStore,
+    chatComponentRef,
+    syncingRouteThread,
+    routeSyncVersion: 0,
+    entryRoute: { value: 'ChatComp' },
+    getRouteThreadId: () => route.params.thread_id || '',
+    handleChatError: () => {}
+  })
+  const handleThreadChange = vm.runInNewContext(`${threadChangeHandler}\nhandleThreadChange`, {
+    route,
+    router,
+    syncingRouteThread,
+    entryRoute: { value: 'ChatComp' }
+  })
+
+  const pending = sync()
+  assert.equal(syncingRouteThread.value, true)
+  assert.deepEqual(reads, [])
+  handleThreadChange('')
+  assert.equal(router.currentRoute.value.fullPath, '/chat/employee-b-thread')
+  initialize.resolve()
+  agentStore.isInitialized = true
+  await pending
+
+  assert.deepEqual(reads, ['employee-b-thread'])
+  assert.equal(router.currentRoute.value.fullPath, '/chat/employee-b-thread')
+  assert.equal(syncingRouteThread.value, false)
 })

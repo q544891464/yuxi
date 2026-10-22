@@ -2,10 +2,6 @@
   <section class="accessible-skill-menu" aria-label="技能菜单">
     <div class="menu-heading" :class="{ 'menu-heading-compact': !showTitle }">
       <span v-if="showTitle">技能</span>
-      <button type="button" class="add-skill" :disabled="disabled" @click="$emit('create')">
-        <Plus :size="14" aria-hidden="true" />
-        <span>添加技能</span>
-      </button>
     </div>
 
     <div v-if="loading || (!navigation.loaded && !menuError)" class="menu-state" role="status">
@@ -45,19 +41,25 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { FileText, Plus } from '@lucide/vue'
+import { FileText } from '@lucide/vue'
 import { listAccessibleSkills } from '@/apis/skill_api'
-import { normalizeAccessibleSkills, resolveNavigationTree } from '@/utils/accessibleSkills'
+import {
+  filterEnabledAgentSkills,
+  normalizeAccessibleSkills,
+  resolveNavigationTree
+} from '@/utils/accessibleSkills'
 import { useSkillNavigationStore } from '@/stores/skillNavigation'
 import SkillNavigationTree from '@/components/SkillNavigationTree.vue'
 
-defineProps({
+const props = defineProps({
   disabled: { type: Boolean, default: false },
+  agentId: { type: String, default: '' },
+  enabledSkills: { type: [String, Array], default: () => [] },
   selectedId: { type: String, default: '' },
   selectedEntryId: { type: String, default: '' },
   showTitle: { type: Boolean, default: true }
 })
-defineEmits(['select', 'create'])
+defineEmits(['select'])
 const navigation = useSkillNavigationStore()
 const skills = ref([])
 const loading = ref(false)
@@ -65,9 +67,7 @@ const error = ref('')
 const menuError = computed(() => error.value || navigation.error)
 const entries = computed(() => resolveNavigationTree(navigation.tree, skills.value))
 const listSkills = computed(() =>
-  navigation.configured
-    ? skills.value.filter((skill) => skill.source_scope === 'personal')
-    : skills.value
+  navigation.configured ? skills.value.filter((skill) => skill.source_scope === 'personal') : skills.value
 )
 let loadGeneration = 0
 
@@ -77,21 +77,26 @@ async function loadSkills() {
   loading.value = true
   error.value = ''
   skills.value = []
+  if (!props.agentId) {
+    loading.value = false
+    return
+  }
   try {
     const [response] = await Promise.all([listAccessibleSkills(), navigation.load()])
-    if (version === loadGeneration) skills.value = normalizeAccessibleSkills(response)
+    if (version === loadGeneration) {
+      skills.value = filterEnabledAgentSkills(
+        normalizeAccessibleSkills(response),
+        props.enabledSkills
+      )
+    }
   } catch {
     if (version === loadGeneration) error.value = '技能加载失败'
   } finally {
     if (version === loadGeneration) loading.value = false
   }
 }
-watch(
-  () => navigation.loaded,
-  (loaded) => {
-    if (!loaded) void loadSkills()
-  }
-)
+watch(() => [props.agentId, props.enabledSkills], loadSkills, { deep: true })
+watch(() => navigation.loaded, (loaded) => !loaded && void loadSkills())
 onMounted(loadSkills)
 </script>
 
@@ -111,7 +116,6 @@ onMounted(loadSkills)
 .menu-heading-compact {
   justify-content: flex-start;
 }
-.add-skill,
 .menu-error button {
   border: 0;
   border-radius: 6px;
@@ -120,27 +124,12 @@ onMounted(loadSkills)
   cursor: pointer;
   font-size: 13px;
 }
-.add-skill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 32px;
-  padding: 6px 8px;
-  line-height: 20px;
-  text-align: left;
-}
-.add-skill:hover {
-  background: var(--main-10);
-}
-.add-skill svg,
 .skill-icon {
   flex: 0 0 14px;
 }
 .menu-error button {
   padding: 4px;
 }
-.add-skill:disabled,
 .skill-entry:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -171,7 +160,6 @@ onMounted(loadSkills)
     color: var(--main-color);
   }
 }
-.add-skill:focus-visible,
 .skill-entry:focus-visible {
   outline: 2px solid var(--main-300);
   outline-offset: -2px;
@@ -195,7 +183,6 @@ onMounted(loadSkills)
   color: var(--color-error-700);
 }
 @media (hover: none) {
-  .add-skill,
   .skill-entry {
     min-height: 40px;
   }
