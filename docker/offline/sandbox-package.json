@@ -1,0 +1,11 @@
+{
+  "name": "yuxi-offline-office-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "固定版本的离线 DOCX、PPTX、XLSX 生成与读取依赖",
+  "dependencies": {
+    "docx": "9.5.1",
+    "pptxgenjs": "4.0.1",
+    "xlsx": "0.18.5"
+  }
+}

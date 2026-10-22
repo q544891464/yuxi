@@ -208,7 +208,9 @@ const loadPdf = async () => {
     const loadingTask = pdfjs.getDocument({
       url: props.url,
       cMapUrl: '/assets/pdfjs-cmaps/',
-      cMapPacked: true
+      cMapPacked: true,
+      standardFontDataUrl: '/assets/pdfjs-standard-fonts/',
+      wasmUrl: '/assets/pdfjs-wasm/'
     })
     currentLoadingTask = loadingTask
 

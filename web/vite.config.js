@@ -35,8 +35,14 @@ const modelMetadataPlugin = {
 }
 
 const PDFJS_CMAPS_REQUEST_PATH = '/assets/pdfjs-cmaps/'
+const PDFJS_WASM_REQUEST_PATH = '/assets/pdfjs-wasm/'
+const PDFJS_STANDARD_FONTS_REQUEST_PATH = '/assets/pdfjs-standard-fonts/'
 
 const pdfjsCmapsDir = fileURLToPath(new URL('./node_modules/pdfjs-dist/cmaps', import.meta.url))
+const pdfjsWasmDir = fileURLToPath(new URL('./node_modules/pdfjs-dist/wasm', import.meta.url))
+const pdfjsStandardFontsDir = fileURLToPath(
+  new URL('./node_modules/pdfjs-dist/standard_fonts', import.meta.url)
+)
 
 // basename 限制请求只落在 cmaps 目录内的 .bcmap 文件上。
 const resolvePdfjsCmapFile = (requestUrl) => {
@@ -49,6 +55,32 @@ const resolvePdfjsCmapFile = (requestUrl) => {
     return null
   }
 }
+
+const resolvePdfjsAsset = (requestUrl, directory, extensions) => {
+  try {
+    const name = path.basename(decodeURIComponent(String(requestUrl || '')))
+    if (!extensions.some((extension) => name.endsWith(extension))) return null
+    const file = path.join(directory, name)
+    return fs.existsSync(file) ? file : null
+  } catch {
+    return null
+  }
+}
+
+const pdfjsRuntimeAssets = [
+  {
+    requestPath: PDFJS_WASM_REQUEST_PATH,
+    directory: pdfjsWasmDir,
+    extensions: ['.wasm', '.js'],
+    bundleDirectory: 'assets/pdfjs-wasm/'
+  },
+  {
+    requestPath: PDFJS_STANDARD_FONTS_REQUEST_PATH,
+    directory: pdfjsStandardFontsDir,
+    extensions: ['.pfb', '.ttf'],
+    bundleDirectory: 'assets/pdfjs-standard-fonts/'
+  }
+]
 
 // pdf.js 的 CMap 资源随应用本地发布，预览不依赖外部 CDN；
 // 开发态由中间件直读依赖目录，构建态复制进静态产物。
@@ -65,6 +97,25 @@ const pdfjsCmapsPlugin = {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
       fs.createReadStream(file).pipe(res)
     })
+    for (const { requestPath, directory, extensions } of pdfjsRuntimeAssets) {
+      server.middlewares.use(requestPath, (req, res, next) => {
+        const file = resolvePdfjsAsset(req.url, directory, extensions)
+        if (!file) {
+          next()
+          return
+        }
+        const extension = path.extname(file)
+        const contentType =
+          extension === '.wasm'
+            ? 'application/wasm'
+            : extension === '.js'
+              ? 'text/javascript'
+              : 'application/octet-stream'
+        res.setHeader('Content-Type', contentType)
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        fs.createReadStream(file).pipe(res)
+      })
+    }
   },
   generateBundle() {
     for (const entry of fs.readdirSync(pdfjsCmapsDir, { withFileTypes: true })) {
@@ -74,6 +125,18 @@ const pdfjsCmapsPlugin = {
         fileName: 'assets/pdfjs-cmaps/' + entry.name,
         source: fs.readFileSync(path.join(pdfjsCmapsDir, entry.name))
       })
+    }
+    for (const { directory, extensions, bundleDirectory } of pdfjsRuntimeAssets) {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (!entry.isFile() || !extensions.some((extension) => entry.name.endsWith(extension))) {
+          continue
+        }
+        this.emitFile({
+          type: 'asset',
+          fileName: bundleDirectory + entry.name,
+          source: fs.readFileSync(path.join(directory, entry.name))
+        })
+      }
     }
   }
 }

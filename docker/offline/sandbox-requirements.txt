@@ -1,0 +1,16 @@
+# Existing document-image pins, retained for parity with sandbox-documents.Dockerfile.
+python-docx==1.2.0
+docxtpl==0.20.2
+pypdf==6.0.0
+reportlab==4.4.3
+
+# Office, spreadsheet, PDF, and image support absent from the base runtime contract.
+pandas==2.3.3
+openpyxl==3.1.5
+python-pptx==1.0.2
+Pillow==12.3.0
+matplotlib==3.10.8
+XlsxWriter==3.2.9
+xlrd==2.0.2
+pypdfium2==5.13.0
+pdfplumber==0.11.9
