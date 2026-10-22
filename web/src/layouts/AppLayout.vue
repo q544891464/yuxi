@@ -921,20 +921,19 @@ provide('settingsModal', {
     min-height: 0;
   }
   :deep(.chat-main > .chat-box) {
-    width: min(760px, calc(100% - 232px));
+    // 两侧对称留白，左侧容纳输入框上沿的人物，正文与输入框共用中心线。
+    width: min(700px, calc(100% - 400px));
     max-width: none;
-    margin-left: auto;
-    margin-right: max(24px, calc((100% - 1060px) / 2));
+    margin: 0 auto;
     grid-column: 1;
     grid-row: 1;
     min-height: 0;
     overflow-y: auto;
-    padding-bottom: 8px;
+    padding: 16px 0 8px;
   }
-  @container (max-width: 760px) {
+  @container (max-width: 960px) {
     :deep(.chat-main > .chat-box) {
-      width: calc(100% - 32px);
-      margin: 0 auto;
+      width: min(700px, calc(100% - 48px));
     }
     :deep(.composer-mascot) {
       display: none;
