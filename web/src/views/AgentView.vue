@@ -440,11 +440,11 @@ const openAgentManagement = async () => {
 .composer-mascot {
   position: absolute;
   left: 18px;
-  bottom: calc(100% - 16px);
+  bottom: 100%;
   width: 150px;
-  height: 150px;
+  height: 157px;
   pointer-events: none;
-  z-index: 2;
+  z-index: 20;
 }
 .skill-start-panel {
   margin-top: 12px;
