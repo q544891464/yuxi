@@ -2579,12 +2579,7 @@ const createClientRequestId = () => {
   return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-const buildOptimisticHumanMessage = ({
-  requestId,
-  text,
-  imageContents = [],
-  attachments = []
-}) => {
+const buildOptimisticHumanMessage = ({ requestId, text, imageContents = [], attachments = [] }) => {
   const message = {
     id: requestId,
     role: 'user',
@@ -3758,12 +3753,23 @@ const buildExportPayload = () => {
   return payload
 }
 
+let lastSkillDraft = ''
+watch(
+  userInput,
+  (value) => {
+    if (!value) lastSkillDraft = ''
+  },
+  { flush: 'sync' }
+)
+
 defineExpose({
   getExportPayload: buildExportPayload,
   selectThreadFromRoute,
-  applySkillToDraft: (skill) => {
+  applySkillToDraft: (skill, prompt = '') => {
     if (currentChatId.value || !canReferenceSkill(skill, mentionConfig.value.skills)) return false
-    userInput.value = withSkillDraft(userInput.value, skill)
+    const current = userInput.value === lastSkillDraft ? '' : userInput.value
+    userInput.value = withSkillDraft(current, skill, prompt)
+    lastSkillDraft = current.trim() ? '' : userInput.value
     return true
   }
 })

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -62,3 +64,15 @@ def test_serialize_system_config_includes_field_metadata():
 
     assert result["default_model"] == "test-provider:latest"
     assert result["_config_items"]["default_model"]["type"] == "model"
+
+
+def test_regular_user_cannot_write_skill_navigation():
+    """普通用户通过真实 FastAPI 依赖链不能写共享菜单。"""
+    app = FastAPI()
+    app.include_router(system, prefix="/api")
+    app.dependency_overrides[system_router.get_required_user] = lambda: SimpleNamespace(role="user")
+    app.dependency_overrides[system_router.get_db] = lambda: object()
+
+    response = TestClient(app).put("/api/system/skill-navigation", json={"revision": 0, "tree": []})
+
+    assert response.status_code == 403

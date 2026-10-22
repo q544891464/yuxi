@@ -210,7 +210,8 @@ const openSkill = (skill) => {
     name: 'ChatComp',
     query: {
       ...(route.query.project_id ? { project_id: route.query.project_id } : {}),
-      skill: skill.slug
+      skill: skill.slug,
+      ...(skill.navigationId ? { skill_entry: skill.navigationId } : {})
     }
   })
 }
@@ -651,6 +652,7 @@ provide('settingsModal', {
                 :show-title="false"
                 v-show="skillsExpanded"
                 :selected-id="String(route.query.skill || '')"
+                :selected-entry-id="String(route.query.skill_entry || '')"
                 :disabled="threadCreationInFlight"
                 @select="openSkill"
                 @create="createSkill"

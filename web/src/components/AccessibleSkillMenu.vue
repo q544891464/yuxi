@@ -7,61 +7,88 @@
       </button>
     </div>
 
-    <div v-if="loading" class="menu-state" role="status">正在加载技能...</div>
-    <div v-else-if="error" class="menu-state menu-error" role="alert">
-      <span>{{ error }}</span>
+    <div v-if="loading || (!navigation.loaded && !menuError)" class="menu-state" role="status">
+      正在加载技能...
+    </div>
+    <div v-else-if="menuError" class="menu-state menu-error" role="alert">
+      <span>{{ menuError }}</span>
       <button type="button" @click="loadSkills">重试</button>
     </div>
-    <div v-else-if="!skills.length" class="menu-state">暂无可用技能</div>
-    <nav v-else class="skill-list" aria-label="可用技能">
-      <button
-        v-for="skill in skills"
-        :key="skill.slug"
-        type="button"
-        class="skill-entry"
-        :class="{ selected: selectedId === skill.slug }"
-        :title="skill.description || skill.name || skill.slug"
+    <div v-else-if="!entries.length && !listSkills.length" class="menu-state">暂无可用技能</div>
+    <div v-else>
+      <SkillNavigationTree
+        v-if="navigation.configured"
+        :nodes="entries"
+        :selected-id="selectedEntryId"
         :disabled="disabled"
-        @click="$emit('select', skill)"
-      >
-        <span class="skill-name">{{ skill.display_name || skill.name || skill.slug }}</span>
-      </button>
-    </nav>
+        @select="$emit('select', $event)"
+      />
+      <nav class="skill-list" aria-label="可用技能">
+        <button
+          v-for="skill in listSkills"
+          :key="skill.slug"
+          type="button"
+          class="skill-entry"
+          :class="{ selected: selectedId === skill.slug }"
+          :title="skill.description || skill.name || skill.slug"
+          :disabled="disabled"
+          @click="$emit('select', skill)"
+        >
+          <span class="skill-name">{{ skill.display_name || skill.name || skill.slug }}</span>
+        </button>
+      </nav>
+    </div>
   </section>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { listAccessibleSkills } from '@/apis/skill_api'
-import { normalizeAccessibleSkills } from '@/utils/accessibleSkills'
+import { normalizeAccessibleSkills, resolveNavigationTree } from '@/utils/accessibleSkills'
+import { useSkillNavigationStore } from '@/stores/skillNavigation'
+import SkillNavigationTree from '@/components/SkillNavigationTree.vue'
 
 defineProps({
   disabled: { type: Boolean, default: false },
   selectedId: { type: String, default: '' },
+  selectedEntryId: { type: String, default: '' },
   showTitle: { type: Boolean, default: true }
 })
-
 defineEmits(['select', 'create'])
-
+const navigation = useSkillNavigationStore()
 const skills = ref([])
 const loading = ref(false)
 const error = ref('')
+const menuError = computed(() => error.value || navigation.error)
+const entries = computed(() => resolveNavigationTree(navigation.tree, skills.value))
+const listSkills = computed(() =>
+  navigation.configured
+    ? skills.value.filter((skill) => skill.source_scope === 'personal')
+    : skills.value
+)
+let loadGeneration = 0
 
-/** 读取后端已按当前用户权限过滤的可用技能。 */
+/** 配置与可访问列表共同决定菜单，未保存配置沿用原列表。 */
 async function loadSkills() {
+  const version = ++loadGeneration
   loading.value = true
   error.value = ''
+  skills.value = []
   try {
-    const response = await listAccessibleSkills()
-    skills.value = normalizeAccessibleSkills(response)
+    const [response] = await Promise.all([listAccessibleSkills(), navigation.load()])
+    if (version === loadGeneration) skills.value = normalizeAccessibleSkills(response)
   } catch {
-    skills.value = []
-    error.value = '技能加载失败'
+    if (version === loadGeneration) error.value = '技能加载失败'
   } finally {
-    loading.value = false
+    if (version === loadGeneration) loading.value = false
   }
 }
-
+watch(
+  () => navigation.loaded,
+  (loaded) => {
+    if (!loaded) void loadSkills()
+  }
+)
 onMounted(loadSkills)
 </script>
 

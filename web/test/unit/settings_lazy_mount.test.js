@@ -8,6 +8,8 @@ import { createServer } from 'vite'
 
 test('设置仅挂载访问页，切换保留表单，关闭重开只挂载当前页', async () => {
   globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} }
+  globalThis.__settingsNavigationInvalidations = 0
+  globalThis.__settingsNavigationLoads = 0
   const server = await createServer({
     server: { middlewareMode: true, hmr: false },
     appType: 'custom',
@@ -26,6 +28,12 @@ test('设置仅挂载访问页，切换保留表单，关闭重开只挂载当�
                 return () => h('input', { panel: name, value: draft.value,
                   onInput: (event) => { draft.value = event.target.value } })
               } })`
+          }
+          if (id.endsWith('/src/stores/skillNavigation.js')) {
+            return `export const useSkillNavigationStore = () => ({
+              invalidate() { globalThis.__settingsNavigationInvalidations += 1 },
+              load() { globalThis.__settingsNavigationLoads += 1; return Promise.resolve() }
+            })`
           }
           if (id !== '\0virtual:settings-test') return
           // 在内存中编译真实客户端模板，避免 SSR 模板跳过 v-show 等交互语义。
@@ -144,8 +152,18 @@ test('设置仅挂载访问页，切换保留表单，关闭重开只挂载当�
     )
     assert.equal(agentEnv.props.value, 'env-draft')
 
+    await select('侧栏技能')
+    assert.ok(find(host, (node) => node.props.panel === 'SkillNavigationSettings'))
+    assert.equal(globalThis.__settingsNavigationInvalidations, 0)
+
     useUserStore().userRole = 'user'
     await nextTick()
+    assert.ok(find(host, (node) => node.props.panel === 'SkillCardList'))
+    const close = find(host, (node) => node.props['aria-label'] === '关闭设置')
+    close.props.onClick()
+    await nextTick()
+    assert.equal(globalThis.__settingsNavigationInvalidations, 1)
+    assert.equal(globalThis.__settingsNavigationLoads, 1)
     visible.value = false
     await nextTick()
     visible.value = true
@@ -162,11 +180,12 @@ test('设置仅挂载访问页，切换保留表单，关闭重开只挂载当�
   }
 })
 
-test('Basic 设置保留通用账户选项，不加载业务技能导航编辑器', () => {
+test('登录用户在桌面和移动设置导航均可找到侧栏技能入口', () => {
   const source = readFileSync(
     new URL('../../src/components/SettingsModal.vue', import.meta.url),
     'utf8'
   )
-  assert.match(source, /tabs\.push\('account', 'apiKeys', 'agentEnv'\)/)
-  assert.doesNotMatch(source, /SkillNavigationSettings|DocumentWorkflowSettings|RolePageAccessSettings/)
+  assert.match(source, /tabs\.push\('account', 'apiKeys', 'agentEnv', 'skillNavigation'\)/)
+  assert.equal((source.match(/侧栏技能/g) || []).length, 3)
+  assert.doesNotMatch(source, /DocumentWorkflowSettings|RolePageAccessSettings/)
 })

@@ -4,14 +4,15 @@ export const CREATE_SKILL_INTENT = 'create-personal-skill'
 export const CREATOR_SKILL_SLUG = 'skill-creator-v2'
 
 /** 在保留现有输入的同时引用技能，空草稿才填入引导提示。 */
-export function withSkillDraft(input, skill) {
+export function withSkillDraft(input, skill, presetPrompt = '') {
   const current = String(input || '')
   const token = formatMentionToken('skill', skill.slug)
   if (current.includes(token)) return current
   const prompt =
-    skill.slug === CREATOR_SKILL_SLUG
+    presetPrompt.trim() ||
+    (skill.slug === CREATOR_SKILL_SLUG
       ? '请引导我创建技能，先确认用途、输入材料和预期输出，再逐步完成创建与验证。'
-      : `请使用${skill.display_name || skill.name || skill.slug}协助我完成工作，请先说明需要的材料。`
+      : `请使用${skill.display_name || skill.name || skill.slug}协助我完成工作，请先说明需要的材料。`)
   return `${token} ${current.trim() ? current : prompt}`
 }
 

@@ -28,3 +28,12 @@ test('可访问但未被当前员工启用的技能不能预填', () => {
   assert.equal(canReferenceSkill(skill, []), false)
   assert.equal(canReferenceSkill(skill, undefined), false)
 })
+
+test('空草稿使用管理员预设指令，已有用户文本继续保留', () => {
+  const skill = { slug: 'report', name: '报告' }
+  assert.equal(
+    withSkillDraft('', skill, '请先校验数据，再生成报告。'),
+    '@skill:report 请先校验数据，再生成报告。'
+  )
+  assert.equal(withSkillDraft('保留我的要求', skill, '模板指令'), '@skill:report 保留我的要求')
+})

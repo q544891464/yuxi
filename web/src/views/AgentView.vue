@@ -20,6 +20,12 @@
                   <p>
                     {{ selectedSkill.description || '请上传所需材料，或在输入框中描述您的需求。' }}
                   </p>
+                  <p v-if="selectedNavigationEntry?.material">
+                    <strong>准备材料：</strong>{{ selectedNavigationEntry.material }}
+                  </p>
+                  <p v-if="selectedNavigationEntry?.result">
+                    <strong>用途与结果：</strong>{{ selectedNavigationEntry.result }}
+                  </p>
                   <a-button type="primary" @click="openUpload">上传材料</a-button>
                   <span>已引用该技能，编辑需求后点击发送开始使用。</span>
                 </section>
@@ -146,7 +152,8 @@ import { agentApi } from '@/apis/agent_api'
 import ChatWelcome from '@/components/ChatWelcome.vue'
 import EmployeePortrait from '@/components/EmployeePortrait.vue'
 import { listAccessibleSkills } from '@/apis/skill_api'
-import { normalizeAccessibleSkills } from '@/utils/accessibleSkills'
+import { normalizeAccessibleSkills, findNavigationEntry } from '@/utils/accessibleSkills'
+import { useSkillNavigationStore } from '@/stores/skillNavigation'
 import { CREATE_SKILL_INTENT, CREATOR_SKILL_SLUG } from '@/utils/skillDraft'
 import ActionDropdown from '@/components/common/ActionDropdown.vue'
 import ActionTrigger from '@/components/common/ActionTrigger.vue'
@@ -172,6 +179,8 @@ const consumerChat = computed(() => route.meta.consumerChat === true)
 const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
 
 const selectedSkill = ref(null)
+const selectedNavigationEntry = ref(null)
+const skillNavigation = useSkillNavigationStore()
 let skillSelectionVersion = 0
 /** 仅将可访问列表中的技能带入当前新会话草稿。 */
 const consumeRouteSkill = async () => {
@@ -179,6 +188,7 @@ const consumeRouteSkill = async () => {
   const slug = intent === CREATE_SKILL_INTENT ? CREATOR_SKILL_SLUG : intent
   const version = ++skillSelectionVersion
   selectedSkill.value = null
+  selectedNavigationEntry.value = null
   if (
     typeof slug !== 'string' ||
     !slug ||
@@ -189,6 +199,13 @@ const consumeRouteSkill = async () => {
     return
   try {
     await syncSelectedThreadFromRoute()
+    await skillNavigation.load()
+    const entryId = route.query.skill_entry
+    const entry = entryId ? findNavigationEntry(skillNavigation.tree, entryId, slug) : null
+    if (entryId && !entry) {
+      message.warning('该技能入口已移除或您暂无查看权限，请重新选择')
+      return
+    }
     const skills = normalizeAccessibleSkills(await listAccessibleSkills())
     if (version !== skillSelectionVersion || route.query.skill !== intent || getRouteThreadId())
       return
@@ -197,8 +214,10 @@ const consumeRouteSkill = async () => {
       message.warning('该技能不可用或您暂无访问权限')
       return
     }
-    if (chatComponentRef.value?.applySkillToDraft(skill)) selectedSkill.value = skill
-    else message.warning('当前数字员工未启用此技能，请切换数字员工或联系管理员配置')
+    if (chatComponentRef.value?.applySkillToDraft(skill, entry?.prompt)) {
+      selectedSkill.value = entry ? { ...skill, display_name: entry.name } : skill
+      selectedNavigationEntry.value = entry
+    } else message.warning('当前数字员工未启用此技能，请切换数字员工或联系管理员配置')
   } catch (error) {
     message.error(error?.message || '技能加载失败，请重新选择')
   }
@@ -206,6 +225,8 @@ const consumeRouteSkill = async () => {
 watch(
   () => [
     route.query.skill,
+    route.query.skill_entry,
+    skillNavigation.tree,
     route.params.thread_id,
     route.query.project_id,
     agentStore.selectedAgentId,
