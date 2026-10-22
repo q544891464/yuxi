@@ -637,7 +637,7 @@ provide('settingsModal', {
                 class="consumer-function-link"
                 @click="closeMobileSidebar"
               >
-                <UsersRound :size="18" /><span>数字员工选择</span>
+                <UsersRound :size="18" /><span>数字员工广场</span>
               </RouterLink>
               <button
                 type="button"
