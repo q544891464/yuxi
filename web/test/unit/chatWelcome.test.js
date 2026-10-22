@@ -1,50 +1,80 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { createSSRApp, h } from 'vue'
-import { renderToString } from 'vue/server-renderer'
-import { createServer } from 'vite'
-import { Button } from 'ant-design-vue'
-import { RouterLink } from 'vue-router'
-import { getEmployeeTaskGuide } from '../../src/utils/employeeTaskGuidance.js'
+import { summarizeChatWelcome } from '../../src/utils/chatWelcome.js'
+const ok = (value) => ({ status: 'fulfilled', value })
+const failed = { status: 'rejected', reason: new Error('unavailable') }
 
-test('欢迎页以员工用途、材料和结果引导首次任务，不把账号资源数量当作能力', async () => {
-  const server = await createServer({
-    server: { middlewareMode: true, hmr: false },
-    appType: 'custom'
+test('首页读取知识库问题并去重，文件夹和主智能体不计入统计', () => {
+  const result = summarizeChatWelcome([
+    ok({
+      databases: [
+        { file_count: 12, folder_count: 7, sample_questions: [' 申报流程？ ', '政策调整？'] },
+        {
+          file_count: 3,
+          folder_count: 2,
+          sample_questions: ['申报流程？', '', '地方优惠？', '材料要求？', '第五问？']
+        }
+      ]
+    }),
+    ok({ agents: [{ is_subagent: false }, { is_subagent: true }, { is_subagent: true }] }),
+    ok({ data: [{ name: 'one' }, { name: 'two' }] })
+  ])
+  assert.deepEqual(result, {
+    questions: ['申报流程？', '政策调整？', '地方优惠？', '材料要求？'],
+    fileCount: 15,
+    subagentCount: 2,
+    skillCount: 2
   })
-  try {
-    const { default: Component } = await server.ssrLoadModule('/src/components/ChatWelcome.vue')
-    const agent = {
-      slug: 'default-chatbot',
-      name: '智能助手',
-      starter_task_profile: 'default-chatbot',
-      config_json: { context: {} }
-    }
-    const guide = getEmployeeTaskGuide(agent, {}, {})
-    /** 装配真实按钮后读取欢迎区渲染结果。 */
-    const renderWelcome = (props) => {
-      const app = createSSRApp({ render: () => h(Component, props) })
-      app.component('a-button', Button)
-      app.component('router-link', RouterLink)
-      return renderToString(app)
-    }
-    const html = await renderWelcome({ agent, guide })
-    for (const text of [
-      '智能助手',
-      '准备材料',
-      '预期结果',
-      '提炼材料要点',
-      '整理行动清单',
-      '预览示例',
-      '检查后点击发送'
-    ])
-      assert.ok(html.includes(text), text)
-    assert.ok(!html.includes('resource-stats'))
-    assert.ok(!html.includes('Skills'))
-    const loading = await renderWelcome({ agent, guide, loading: true })
-    assert.ok(loading.includes('正在核对员工配置'))
-    assert.ok(!loading.includes('预览示例'))
-  } finally {
-    await server.close()
+})
+test('真实空资源显示零，不补写虚构示例问题', () => {
+  assert.deepEqual(
+    summarizeChatWelcome([ok({ databases: [] }), ok({ agents: [] }), ok({ data: [] })]),
+    { questions: [], fileCount: 0, subagentCount: 0, skillCount: 0 }
+  )
+})
+test('请求失败和服务端失败空列表显示未知，其他成功统计保留', () => {
+  const result = summarizeChatWelcome([
+    ok({ message: 'failed', databases: [] }),
+    failed,
+    ok({ data: [{ name: 'one' }] })
+  ])
+  assert.deepEqual(result, { questions: [], fileCount: null, subagentCount: null, skillCount: 1 })
+  assert.equal(summarizeChatWelcome([failed, failed, failed]).fileCount, null)
+})
+
+test('不完整的文件统计不会显示 NaN 或虚构数量', () => {
+  const result = summarizeChatWelcome([
+    ok({ databases: [{ sample_questions: [null, '有效问题？'] }] }),
+    ok({ agents: [] }),
+    ok({ data: [] })
+  ])
+  assert.equal(result.fileCount, null)
+  assert.deepEqual(result.questions, ['有效问题？'])
+})
+
+test('HTTP 成功但缺失响应体时展示未知并允许重试', () => {
+  for (const value of [null, undefined]) {
+    assert.deepEqual(summarizeChatWelcome([ok(value), ok(value), ok(value)]), {
+      questions: [],
+      fileCount: null,
+      subagentCount: null,
+      skillCount: null
+    })
   }
+})
+
+test('聊天欢迎区展示当前所选员工的名称、说明和形象', () => {
+  const welcomeSource = readFileSync(
+    new URL('../../src/components/ChatWelcome.vue', import.meta.url),
+    'utf8'
+  )
+  const agentViewSource = readFileSync(
+    new URL('../../src/views/AgentView.vue', import.meta.url),
+    'utf8'
+  )
+  assert.match(welcomeSource, /<h2>\{\{ agent\?\.name \|\| '智能助手' \}\}<\/h2>/)
+  assert.match(welcomeSource, /<p>\{\{ agent\?\.description \|\|/)
+  assert.match(welcomeSource, /:src="agent\.icon \|\| ''"/)
+  assert.match(agentViewSource, /<ChatWelcome :agent="selectedAgent">/)
 })

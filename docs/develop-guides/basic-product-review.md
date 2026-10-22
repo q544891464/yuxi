@@ -8,7 +8,7 @@
 
 源码与页面检查记为 `Inspected`；新用户理解成本和产品收益判断记为 `Inferred`。真实模型回答质量、知识检索、任务耗时、跨账号完整使用链路和普通用户可用性测试均为 `Not run`，原因是本次只读审查没有创建测试资源或提交模型任务。后续产品验收需要在隔离环境补齐这些证据。
 
-`9dd2ceab` 已实现知识库与技能管理拆分、删除重复管理工作台入口、侧栏技能配置迁入技能管理。相关问题按[管理导航拆分决策](./decisions/implemented/2026-10-22-management-navigation.md)核对，首轮只做回归与剩余术语收敛，不重复开发。[满意度与后台任务结果](./decisions/implemented/2026-10-22-dashboard-task-results.md)及[首次任务引导](./decisions/implemented/2026-10-22-first-task-guidance.md)已完成对应整改，当前事实与证据由实现决策维护；下文保留审查基线的问题与建议，其余建议不代表功能已交付。
+`9dd2ceab` 已实现知识库与技能管理拆分、删除重复管理工作台入口、侧栏技能配置迁入技能管理。相关问题按[管理导航拆分决策](./decisions/implemented/2026-10-22-management-navigation.md)核对，首轮只做回归与剩余术语收敛，不重复开发。满意度无样本和后台任务结果已完成首轮修复，事实与证据见[实现决策](./decisions/implemented/2026-10-22-dashboard-task-results.md)；下文保留审查基线的问题与建议，其余建议不代表功能已交付。
 
 ## 产品定位与已有能力
 
