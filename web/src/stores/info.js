@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { brandApi } from '@/apis/system_api'
+import { normalizePlatformBranding, PLATFORM_NAME } from '@/utils/platformBranding'
 
 function readDebugMode() {
   try {
@@ -23,7 +24,7 @@ export const useInfoStore = defineStore('info', () => {
   const organization = computed(
     () =>
       infoConfig.value.organization || {
-        name: '',
+        name: PLATFORM_NAME,
         logo: '',
         avatar: ''
       }
@@ -33,8 +34,8 @@ export const useInfoStore = defineStore('info', () => {
   const branding = computed(
     () =>
       infoConfig.value.branding || {
-        name: '',
-        title: '',
+        name: PLATFORM_NAME,
+        title: PLATFORM_NAME,
         subtitle: '',
         subtitles: []
       }
@@ -50,7 +51,7 @@ export const useInfoStore = defineStore('info', () => {
 
   // 动作方法
   function setInfoConfig(newConfig) {
-    infoConfig.value = newConfig
+    infoConfig.value = normalizePlatformBranding(newConfig)
     isLoaded.value = true
   }
 

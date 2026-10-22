@@ -26,6 +26,7 @@ function createTestRouter(userStore, { defaultAgentId = null, agents = [] } = {}
     'resolveDefaultEmployee',
     'sanitizeRedirect',
     'document',
+    'PLATFORM_NAME',
     source
   )
   return factory(
@@ -34,16 +35,18 @@ function createTestRouter(userStore, { defaultAgentId = null, agents = [] } = {}
     () => userStore,
     { get: async () => ({ default_agent_id: defaultAgentId }) },
     { getAgents: async () => ({ agents }) },
-    (slug, items) => items.find((item) => !item.is_subagent && (item.slug || item.id) === slug) || null,
+    (slug, items) =>
+      items.find((item) => !item.is_subagent && (item.slug || item.id) === slug) || null,
     sanitizeRedirect,
-    { title: '' }
+    { title: '' },
+    '智能数字员工平台'
   )
 }
 
-test('无有效默认员工时根路径进入广场，员工显式选择后打开新聊天', async () => {
+test('无有效默认员工时根路径进入聊天，员工选择页仍可显式打开', async () => {
   const router = createTestRouter({ token: 'test', userId: 1, isLoggedIn: true, isAdmin: true })
   await router.push('/')
-  assert.equal(router.currentRoute.value.name, 'EmployeeSquareHome')
+  assert.equal(router.currentRoute.value.name, 'ChatComp')
   await router.push('/employees')
   assert.equal(router.currentRoute.value.name, 'EmployeeSquare')
   await router.push('/chat?agent_id=helper')
@@ -63,7 +66,10 @@ test('根路径仅对当前可见主员工应用个人默认值', async () => {
   const user = { token: 'test', userId: 1, isLoggedIn: true, isAdmin: false }
   const router = createTestRouter(user, {
     defaultAgentId: 'helper',
-    agents: [{ id: 'helper', slug: 'helper' }, { id: 'child', slug: 'helper', is_subagent: true }]
+    agents: [
+      { id: 'helper', slug: 'helper' },
+      { id: 'child', slug: 'helper', is_subagent: true }
+    ]
   })
   await router.push('/')
   assert.equal(router.currentRoute.value.path, '/chat')
@@ -74,7 +80,7 @@ test('根路径仅对当前可见主员工应用个人默认值', async () => {
     agents: [{ id: 'child', slug: 'child', is_subagent: true }]
   })
   await invalidRouter.push('/')
-  assert.equal(invalidRouter.currentRoute.value.name, 'EmployeeSquareHome')
+  assert.equal(invalidRouter.currentRoute.value.name, 'ChatComp')
 })
 
 test('未登录访问聊天详情进入登录，普通用户不能进入管理员页面', async () => {
@@ -93,7 +99,7 @@ test('未登录访问聊天详情进入登录，普通用户不能进入管理�
 test('合法登录回跳仍保留，分享登录 hash 交给登录页处理', async () => {
   const router = createTestRouter({ token: 'test', userId: 1, isLoggedIn: true, isAdmin: true })
   await router.push('/login')
-  assert.equal(router.currentRoute.value.name, 'EmployeeSquareHome')
+  assert.equal(router.currentRoute.value.name, 'ChatComp')
   await router.push('/login?redirect=/workspace')
   assert.equal(router.currentRoute.value.path, '/workspace')
   await router.push('/login#key=example')
@@ -101,17 +107,45 @@ test('合法登录回跳仍保留，分享登录 hash 交给登录页处理', as
   assert.equal(router.currentRoute.value.hash, '#key=example')
 })
 
-test('密码、分享和 OIDC 登录默认回广场并保留安全的显式目标', () => {
+test('密码、分享和 OIDC 登录保持统一根入口并保留安全的显式目标', () => {
   assert.equal(resolvePostLoginRedirect(undefined), '/')
-  assert.equal(resolvePostLoginRedirect('/chat/thread-1?agent_id=helper'), '/chat/thread-1?agent_id=helper')
+  assert.equal(
+    resolvePostLoginRedirect('/chat/thread-1?agent_id=helper'),
+    '/chat/thread-1?agent_id=helper'
+  )
   assert.equal(resolvePostLoginRedirect('//outside.example'), '/')
 
-  const loginSource = readFileSync(new URL('../../src/views/LoginView.vue', import.meta.url), 'utf8')
+  const loginSource = readFileSync(
+    new URL('../../src/views/LoginView.vue', import.meta.url),
+    'utf8'
+  )
   const callbackSource = readFileSync(
     new URL('../../src/views/OIDCCallbackView.vue', import.meta.url),
     'utf8'
   )
   assert.match(loginSource, /router\.push\(redirectPath\)/)
-  assert.match(loginSource, /window\.location\.replace\(resolvePostLoginRedirect\(route\.query\.redirect\)\)/)
-  assert.match(callbackSource, /resolvePostLoginRedirect\(sessionStorage\.getItem\('oidc_redirect'\)\)/)
+  assert.match(
+    loginSource,
+    /window\.location\.replace\(resolvePostLoginRedirect\(route\.query\.redirect\)\)/
+  )
+  assert.match(
+    callbackSource,
+    /resolvePostLoginRedirect\(sessionStorage\.getItem\('oidc_redirect'\)\)/
+  )
+})
+
+test('消费端知识库保留布局，消费端总览仅管理员可访问', async () => {
+  const user = { token: 'test', userId: 1, isLoggedIn: true, isAdmin: false }
+  const router = createTestRouter(user)
+  await router.push('/chat/knowledge')
+  assert.equal(router.currentRoute.value.name, 'ConsumerKnowledge')
+  assert.equal(router.currentRoute.value.meta.consumerChat, true)
+  await router.push('/chat/knowledge/visible-kb')
+  assert.equal(router.currentRoute.value.name, 'ConsumerKnowledgeBaseDetail')
+  await router.push('/chat/dashboard')
+  assert.equal(router.currentRoute.value.name, 'ChatComp')
+  user.isAdmin = true
+  await router.push('/chat/dashboard')
+  assert.equal(router.currentRoute.value.name, 'ConsumerDashboard')
+  assert.equal(router.currentRoute.value.meta.consumerChat, true)
 })

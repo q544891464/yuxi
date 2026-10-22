@@ -76,5 +76,5 @@ test('聊天欢迎区展示当前所选员工的名称、说明和形象', () =>
   assert.match(welcomeSource, /<h2>\{\{ agent\?\.name \|\| '智能助手' \}\}<\/h2>/)
   assert.match(welcomeSource, /<p>\{\{ agent\?\.description \|\|/)
   assert.match(welcomeSource, /:src="agent\.icon \|\| ''"/)
-  assert.match(agentViewSource, /<ChatWelcome :agent="selectedAgent" \/>/)
+  assert.match(agentViewSource, /<ChatWelcome :agent="selectedAgent">/)
 })

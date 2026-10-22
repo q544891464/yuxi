@@ -156,6 +156,7 @@
             <slot
               name="welcome"
               :set-prompt="(text) => (userInput = text)"
+              :open-upload="handleAttachmentUpload"
             ></slot>
           </div>
           <div
@@ -284,6 +285,7 @@
               </div>
 
               <div class="composer-shell">
+                <slot name="input-decoration" :is-start-screen="!conversations.length"></slot>
                 <div class="input-container">
                   <div
                     class="message-input-stage"
@@ -882,6 +884,7 @@
 </template>
 
 <script setup>
+import { canReferenceSkill, withSkillDraft } from '@/utils/skillDraft'
 import {
   ref,
   reactive,
@@ -3758,6 +3761,11 @@ const buildExportPayload = () => {
 defineExpose({
   getExportPayload: buildExportPayload,
   selectThreadFromRoute,
+  applySkillToDraft: (skill) => {
+    if (currentChatId.value || !canReferenceSkill(skill, mentionConfig.value.skills)) return false
+    userInput.value = withSkillDraft(userInput.value, skill)
+    return true
+  }
 })
 
 const handleAgentStateRefresh = async (threadId = null) => {

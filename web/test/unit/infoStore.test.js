@@ -65,3 +65,31 @@ test('品牌配置合并并发读取，成功缓存，失败与强制刷新可�
     await server.close()
   }
 })
+
+test('旧默认品牌名称在前端配置入口显示为当前平台名', async (t) => {
+  const server = await createServer({
+    server: { middlewareMode: true, hmr: false },
+    appType: 'custom'
+  })
+  setActivePinia(createPinia())
+  try {
+    const { useInfoStore } = await server.ssrLoadModule('/src/stores/info.js')
+    const { brandApi } = await server.ssrLoadModule('/src/apis/system_api.js')
+    const store = useInfoStore()
+    t.mock.method(brandApi, 'getInfoConfig', async () => ({
+      success: true,
+      data: {
+        organization: { name: 'Yuxi', logo: '/favicon.svg' },
+        branding: { name: 'Yuxi', title: 'Yuxi 智能助手' }
+      }
+    }))
+    await store.loadInfoConfig()
+
+    assert.equal(store.organization.name, '智能数字员工平台')
+    assert.equal(store.organization.logo, '/favicon.svg')
+    assert.equal(store.branding.name, '智能数字员工平台')
+    assert.equal(store.branding.title, '智能数字员工平台')
+  } finally {
+    await server.close()
+  }
+})

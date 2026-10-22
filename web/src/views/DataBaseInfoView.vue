@@ -815,7 +815,11 @@ watch(
           showEditModal()
           return
         }
-        await router.replace({ path: '/extensions', query: { tab: 'knowledge' } })
+        await router.replace(
+          route.meta.consumerChat
+            ? { name: 'ConsumerKnowledge' }
+            : { path: '/extensions', query: { tab: 'knowledge' } }
+        )
         return
       }
       await detectVirtualFolders()
@@ -872,7 +876,11 @@ watch(
 )
 
 const backToDatabase = () => {
-  router.push({ path: '/extensions', query: { tab: 'knowledge' } })
+  router.push(
+    route.meta.consumerChat
+      ? { name: 'ConsumerKnowledge' }
+      : { path: '/extensions', query: { tab: 'knowledge' } }
+  )
 }
 
 const copyDatabaseId = async () => {

@@ -4,6 +4,7 @@ import { userConfigApi } from '@/apis/user_config_api'
 import { agentApi } from '@/apis/agent_api'
 import { resolveDefaultEmployee } from '@/utils/digitalEmployees'
 import { sanitizeRedirect } from '@/utils/oidcAutoStart'
+import { PLATFORM_NAME } from '@/utils/platformBranding'
 
 const AppLayout = () => import('@/layouts/AppLayout.vue')
 
@@ -16,7 +17,11 @@ const router = createRouter({
       component: AppLayout,
       meta: { requiresAuth: true, consumerChat: true, defaultEmployeeEntry: true },
       children: [
-        { path: '', name: 'EmployeeSquareHome', component: () => import('../views/EmployeeSquareView.vue') }
+        {
+          path: '',
+          name: 'EmployeeSquareHome',
+          component: () => import('../views/EmployeeSquareView.vue')
+        }
       ]
     },
     {
@@ -24,7 +29,11 @@ const router = createRouter({
       component: AppLayout,
       meta: { requiresAuth: true, consumerChat: true },
       children: [
-        { path: '', name: 'EmployeeSquare', component: () => import('../views/EmployeeSquareView.vue') }
+        {
+          path: '',
+          name: 'EmployeeSquare',
+          component: () => import('../views/EmployeeSquareView.vue')
+        }
       ]
     },
     {
@@ -52,6 +61,23 @@ const router = createRouter({
       children: [
         { path: '', name: 'ChatComp', component: () => import('../views/AgentView.vue') },
         { path: 'ducha', redirect: '/chat' },
+        {
+          path: 'knowledge',
+          name: 'ConsumerKnowledge',
+          component: () => import('../views/ConsumerKnowledgeView.vue')
+        },
+        {
+          path: 'knowledge/:kbId',
+          name: 'ConsumerKnowledgeBaseDetail',
+          component: () => import('../views/DataBaseInfoView.vue'),
+          meta: { keepAlive: true }
+        },
+        {
+          path: 'dashboard',
+          name: 'ConsumerDashboard',
+          component: () => import('../views/DashboardView.vue'),
+          meta: { requiresAdmin: true, keepAlive: true }
+        },
         {
           path: ':thread_id',
           name: 'ChatCompWithThreadId',
@@ -229,6 +255,7 @@ router.beforeEach(async (to) => {
       // 广场页面负责展示可恢复的列表错误；根路径不应因默认值读取失败而失去入口。
       console.warn('读取默认数字员工失败:', error)
     }
+    return '/chat'
   }
 
   // 如果用户已登录但访问登录页，按 redirect 参数跳转
@@ -241,7 +268,7 @@ router.beforeEach(async (to) => {
 })
 
 router.afterEach(() => {
-  document.title = 'Yuxi 智能助手'
+  document.title = PLATFORM_NAME
 })
 
 export default router

@@ -1,11 +1,12 @@
 <template>
   <section class="chat-welcome" :aria-label="`${agent?.name || '数字员工'}欢迎页`">
     <div class="welcome-hero">
+      <div class="assistant-portrait"><EmployeePortrait :agent="agent" /></div>
       <div class="welcome-copy">
-        <span class="welcome-eyebrow">Yuxi · 知识与智能体工作台</span>
-        <h1>您好，欢迎使用 Yuxi</h1>
+        <span class="welcome-eyebrow">专业 · 协作 · 智能 · 高效</span>
+        <h1>您好！</h1>
         <div class="welcome-rule"></div>
-        <p>可以直接提问，或引用文件、知识库和技能开始工作。</p>
+        <p>我是您的{{ agent?.name || '数字员工' }}，<br />请问需要协助什么？</p>
       </div>
     </div>
     <div class="welcome-role">
@@ -38,6 +39,7 @@
         </div>
       </dl>
     </div>
+    <slot name="skill-description"></slot>
     <div v-if="!loading && loadFailed" class="welcome-data-note" role="status">
       部分资源暂未加载 <button type="button" @click="loadResources">重试</button>
     </div>
@@ -51,8 +53,9 @@ import { databaseApi } from '@/apis/knowledge_api'
 import { agentApi } from '@/apis/agent_api'
 import { listAccessibleSkills } from '@/apis/skill_api'
 import { summarizeChatWelcome } from '@/utils/chatWelcome'
-import { generatePixelAvatar } from '@/utils/pixelAvatar'
+import { getDefaultEmployeePortrait } from '@/utils/employeePortraits'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
+import EmployeePortrait from '@/components/EmployeePortrait.vue'
 
 const props = defineProps({
   agent: {
@@ -69,9 +72,7 @@ const stats = computed(() => [
   { label: 'Skills', value: summary.value.skillCount, icon: Sparkles }
 ])
 const loadFailed = computed(() => stats.value.some((stat) => stat.value === null))
-const agentAvatar = computed(() =>
-  props.agent ? generatePixelAvatar(props.agent.slug || props.agent.id || props.agent.name) : ''
-)
+const agentAvatar = computed(() => getDefaultEmployeePortrait(props.agent))
 
 /** 进入新对话时读取当前用户可访问的资源快照。 */
 async function loadResources() {
@@ -104,7 +105,7 @@ onMounted(() => {
   align-items: center;
   min-height: clamp(164px, 23vh, 230px);
   margin-top: 24px;
-  padding: 22px clamp(24px, 5vw, 64px);
+
   border: 1px solid white;
   border-radius: 26px;
   overflow: visible;
@@ -120,6 +121,12 @@ onMounted(() => {
   border-radius: 100% 0 26px 0;
   background: #bddbff66;
   pointer-events: none;
+}
+.assistant-portrait {
+  flex: 0 0 clamp(170px, 20vw, 240px);
+  height: clamp(188px, calc(23vh + 24px), 254px);
+  margin: -24px 24px 0 16px;
+  align-self: flex-end;
 }
 .welcome-copy {
   position: relative;
@@ -231,6 +238,10 @@ onMounted(() => {
   .welcome-hero {
     min-height: 140px;
   }
+  .assistant-portrait {
+    height: 164px;
+    flex-basis: 160px;
+  }
   .welcome-copy {
     padding: 8px 0;
   }
@@ -264,6 +275,11 @@ onMounted(() => {
   .welcome-hero {
     min-height: 180px;
   }
+  .assistant-portrait {
+    flex-basis: 100px;
+    height: 150px;
+    margin: 0 6px 0 4px;
+  }
   .welcome-eyebrow {
     display: none;
   }
@@ -293,5 +309,37 @@ onMounted(() => {
     width: 40px;
     height: 40px;
   }
+}
+</style>
+
+<style>
+html.dark .chat-welcome {
+  color: var(--consumer-brand-color);
+}
+html.dark .chat-welcome .welcome-hero {
+  background: linear-gradient(135deg, var(--gray-100), var(--gray-0));
+  border-color: var(--gray-200);
+}
+html.dark .chat-welcome .welcome-hero::after {
+  background: color-mix(in srgb, var(--main-500) 12%, transparent);
+}
+html.dark .chat-welcome .welcome-copy h1 {
+  color: var(--consumer-brand-color);
+}
+html.dark .chat-welcome .welcome-eyebrow,
+html.dark .chat-welcome .welcome-role p,
+html.dark .chat-welcome .resource-stats dt {
+  color: var(--consumer-muted-color);
+}
+html.dark .chat-welcome .welcome-role {
+  background: var(--gray-0);
+  border-color: var(--gray-150);
+}
+html.dark .chat-welcome .welcome-role h2,
+html.dark .chat-welcome .resource-stats {
+  color: var(--main-300);
+}
+html.dark .chat-welcome .resource-stats > div {
+  border-color: var(--gray-200);
 }
 </style>

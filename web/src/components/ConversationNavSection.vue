@@ -2,10 +2,7 @@
   <section class="conversation-nav-section" :class="{ collapsed }">
     <div v-if="showHistory && !collapsed" class="history-panel">
       <div class="conversation-list">
-        <section
-          v-if="projectsLoading || projectsError || projectGroups.length"
-          class="history-group project-history-group"
-        >
+        <section class="history-group project-history-group">
           <button
             type="button"
             class="history-label"
@@ -27,11 +24,12 @@
                 <button type="button" @click="$emit('retry-projects')">重试</button>
               </div>
               <template v-else>
-                <section
-                  v-for="group in projectGroups"
-                  :key="group.project.id"
-                  class="project-group"
-                >
+                <template v-if="projectGroups.length">
+                  <section
+                    v-for="group in projectGroups"
+                    :key="group.project.id"
+                    class="project-group"
+                  >
                   <div
                     class="project-row"
                     :class="{ pending: projectPendingId === group.project.id }"
@@ -142,7 +140,9 @@
                       <div v-if="!group.conversations.length" class="project-empty">暂无对话</div>
                     </div>
                   </CollapseTransition>
-                </section>
+                  </section>
+                </template>
+                <div v-else class="list-state">暂无项目，可在输入框新建或选择</div>
               </template>
             </div>
           </CollapseTransition>
@@ -245,6 +245,7 @@ const emit = defineEmits([
   'archive-project',
   'open-archive',
   'create-project-chat',
+  'project-expanded',
   'retry-projects'
 ])
 const projectsExpanded = ref(true)
@@ -281,6 +282,7 @@ const toggleProject = (projectId) => {
   if (next.has(projectId)) next.delete(projectId)
   else next.add(projectId)
   expandedProjects.value = next
+  emit('project-expanded', next.has(projectId))
 }
 
 const renameProject = (project) => {

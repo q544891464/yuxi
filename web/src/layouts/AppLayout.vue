@@ -12,7 +12,9 @@ import {
   PanelLeftOpen,
   MessageCirclePlus,
   Search,
-  UsersRound
+  UsersRound,
+  WandSparkles,
+  ChevronDown
 } from '@lucide/vue'
 
 import { useConfigStore } from '@/stores/config'
@@ -34,6 +36,9 @@ import GlobalSearchModal from '@/components/GlobalSearchModal.vue'
 import { searchWorkspaceFiles } from '@/apis/workspace_api'
 import { projectApi } from '@/apis/project_api'
 import { threadApi } from '@/apis/agent_api'
+import AccessibleSkillMenu from '@/components/AccessibleSkillMenu.vue'
+import { PLATFORM_NAME } from '@/utils/platformBranding'
+import { CREATE_SKILL_INTENT } from '@/utils/skillDraft'
 
 const configStore = useConfigStore()
 const agentStore = useAgentStore()
@@ -57,6 +62,7 @@ const { sidebarCollapsed } = storeToRefs(chatUIStore)
 const mobileSidebarExpanded = ref(false)
 const conversationSearchOpen = ref(false)
 const projectPendingId = ref(null)
+const skillsExpanded = ref(true)
 const archiveOpen = ref(false)
 const archiveLoading = ref(false)
 const archiveError = ref('')
@@ -196,6 +202,27 @@ const mainList = computed(() => {
 
   return items
 })
+
+/** 将技能选择带入新草稿，项目上下文由聊天页保留。 */
+const openSkill = (skill) => {
+  closeMobileSidebar()
+  router.push({
+    name: 'ChatComp',
+    query: {
+      ...(route.query.project_id ? { project_id: route.query.project_id } : {}),
+      skill: skill.slug
+    }
+  })
+}
+const createSkill = () => openSkill({ slug: CREATE_SKILL_INTENT })
+const openKnowledge = () => {
+  closeMobileSidebar()
+  router.push({ name: 'ConsumerKnowledge' })
+}
+const openDashboard = () => {
+  closeMobileSidebar()
+  router.push({ name: 'ConsumerDashboard' })
+}
 
 const primaryNavItem = computed(() => mainList.value.find((item) => item.action) || null)
 const secondaryNavItems = computed(() => mainList.value.filter((item) => !item.action))
@@ -465,7 +492,10 @@ provide('settingsModal', {
     <header v-if="consumerChat" class="consumer-topbar">
       <RouterLink to="/" class="consumer-brand" @click="closeMobileSidebar">
         <span class="consumer-logo" aria-hidden="true"></span>
-        <span><strong>Yuxi 智能助手</strong><small>知识与智能体工作台</small></span>
+        <span
+          ><strong>{{ PLATFORM_NAME }}</strong
+          ><small>您的专属数字员工工作台</small></span
+        >
       </RouterLink>
       <button
         type="button"
@@ -512,12 +542,12 @@ provide('settingsModal', {
           </button>
         </div>
       </div>
-      <div class="nav">
+      <div class="nav" :class="{ 'consumer-primary-nav': consumerChat }">
         <RouterLink
           v-if="primaryNavItem"
           :to="primaryNavItem.path"
           class="nav-item"
-          :class="{ active: isNavItemActive(primaryNavItem) }"
+          :class="{ active: isNavItemActive(primaryNavItem), 'consumer-new-chat': consumerChat }"
           :active-class="primaryNavItem.action ? '' : 'active'"
           @click.stop="closeMobileSidebar"
         >
@@ -551,7 +581,7 @@ provide('settingsModal', {
           v-for="(item, index) in secondaryNavItems"
           :key="index"
           :to="item.path"
-          v-show="!item.hidden"
+          v-show="!consumerChat && !item.hidden"
           class="nav-item"
           :class="{ active: isNavItemActive(item) }"
           :active-class="item.action ? '' : 'active'"
@@ -593,7 +623,52 @@ provide('settingsModal', {
           @create-project-chat="handleCreateProjectChat"
           @retry-projects="loadProjects"
           @load-more-chats="() => chatThreadsStore.loadMoreThreads()"
-        />
+          @project-expanded="
+            (expanded) => {
+              if (expanded) skillsExpanded = false
+            }
+          "
+        >
+          <template v-if="consumerChat" #after-projects>
+            <div class="consumer-function-menu">
+              <RouterLink
+                to="/employees"
+                class="consumer-function-link"
+                @click="closeMobileSidebar"
+              >
+                <UsersRound :size="18" /><span>数字员工选择</span>
+              </RouterLink>
+              <button
+                type="button"
+                class="consumer-function-link"
+                :aria-expanded="skillsExpanded"
+                @click="skillsExpanded = !skillsExpanded"
+              >
+                <WandSparkles :size="18" /><span>技能</span
+                ><ChevronDown :size="14" :class="{ rotated: !skillsExpanded }" />
+              </button>
+              <AccessibleSkillMenu
+                :show-title="false"
+                v-show="skillsExpanded"
+                :selected-id="String(route.query.skill || '')"
+                :disabled="threadCreationInFlight"
+                @select="openSkill"
+                @create="createSkill"
+              />
+              <button type="button" class="consumer-function-link" @click="openKnowledge">
+                <LibraryBig :size="18" /><span>知识库</span>
+              </button>
+              <button
+                v-if="userStore.isAdmin"
+                type="button"
+                class="consumer-function-link"
+                @click="openDashboard"
+              >
+                <BarChart3 :size="18" /><span>数据总览</span>
+              </button>
+            </div>
+          </template>
+        </ConversationNavSection>
       </div>
       <div class="foo">
         <!-- 用户信息组件 -->
@@ -686,6 +761,50 @@ provide('settingsModal', {
   --consumer-background: var(--consumer-page-background);
   background: var(--consumer-background);
   background-attachment: fixed;
+  .consumer-function-menu {
+    margin: 12px 0;
+  }
+  .consumer-function-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--gray-800);
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .consumer-function-link:hover {
+    background: var(--main-20);
+    color: var(--main-color);
+  }
+  .consumer-function-link:focus-visible {
+    outline: 2px solid var(--main-300);
+  }
+  .consumer-function-link span {
+    flex: 1;
+  }
+  .consumer-function-link .rotated {
+    transform: rotate(-90deg);
+  }
+  .consumer-primary-nav {
+    flex-shrink: 0;
+  }
+  .consumer-primary-nav .consumer-new-chat.nav-item {
+    min-height: 48px;
+    height: auto;
+    padding: 11px 6px;
+    margin-bottom: 12px;
+    border: 1px solid #d2e2ff;
+    background: #eaf2ff;
+    color: #1765ff;
+  }
   .consumer-topbar {
     grid-column: 1 / -1;
     height: 76px;
@@ -780,6 +899,7 @@ provide('settingsModal', {
     display: none;
   }
   :deep(.chat-main) {
+    container-type: inline-size;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
@@ -787,14 +907,23 @@ provide('settingsModal', {
     min-height: 0;
   }
   :deep(.chat-main > .chat-box) {
-    max-width: 760px;
+    width: min(760px, calc(100% - 232px));
+    max-width: none;
+    margin-left: auto;
+    margin-right: max(24px, calc((100% - 1060px) / 2));
     grid-column: 1;
     grid-row: 1;
     min-height: 0;
     overflow-y: auto;
     padding-bottom: 8px;
-    @media (max-width: 1360px) {
-      max-width: 680px;
+  }
+  @container (max-width: 760px) {
+    :deep(.chat-main > .chat-box) {
+      width: calc(100% - 32px);
+      margin: 0 auto;
+    }
+    :deep(.composer-mascot) {
+      display: none;
     }
   }
   :deep(.custom-chat-welcome) {

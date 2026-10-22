@@ -10,18 +10,34 @@
           :is-new-conversation="!getRouteThreadId()"
           @thread-change="handleThreadChange"
         >
-          <template v-if="consumerChat" #welcome><ChatWelcome :agent="selectedAgent" /></template>
+          <template v-if="consumerChat" #welcome="{ openUpload }">
+            <ChatWelcome :agent="selectedAgent">
+              <template v-if="selectedSkill" #skill-description>
+                <section class="skill-start-panel" aria-label="技能说明">
+                  <h3>
+                    {{ selectedSkill.display_name || selectedSkill.name || selectedSkill.slug }}
+                  </h3>
+                  <p>
+                    {{ selectedSkill.description || '请上传所需材料，或在输入框中描述您的需求。' }}
+                  </p>
+                  <a-button type="primary" @click="openUpload">上传材料</a-button>
+                  <span>已引用该技能，编辑需求后点击发送开始使用。</span>
+                </section>
+              </template>
+            </ChatWelcome>
+          </template>
+          <template v-if="consumerChat" #input-decoration="{ isStartScreen }">
+            <div v-if="!isStartScreen" class="composer-mascot" aria-hidden="true">
+              <EmployeePortrait :agent="selectedAgent" />
+            </div>
+          </template>
           <template #input-actions-left="{ hasActiveThread, isCreatingThread }">
-            <a-button v-if="consumerChat" class="employee-square-link" @click="goToEmployeeSquare">
-              <template #icon><UsersRound :size="15" /></template>
-              员工广场
-            </a-button>
             <ActionDropdown
               upward
               v-if="selectedAgentId"
               v-model:open="agentDropdownOpen"
               v-model:search="agentSearchKeyword"
-              search-placeholder="搜索智能体"
+              search-placeholder="搜索数字员工"
               :disabled="isCreatingThread"
             >
               <template #trigger>
@@ -47,7 +63,7 @@
                 </ActionTrigger>
               </template>
               <div v-if="!filteredAgentOptions.length" class="agent-switch-empty" role="status">
-                暂无匹配智能体
+                暂无匹配数字员工
               </div>
               <button
                 v-for="agent in filteredAgentOptions"
@@ -83,7 +99,7 @@
               </button>
               <template #footer>
                 <div v-if="hasActiveThread" class="config-dropdown-hint">
-                  当前对话已绑定智能体，新对话可切换。
+                  当前对话已绑定数字员工，新对话可切换。
                 </div>
 
                 <div class="config-dropdown-divider"></div>
@@ -124,17 +140,21 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { Settings2, Check, Plus, UsersRound } from '@lucide/vue'
+import { Settings2, Check, Plus } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import { agentApi } from '@/apis/agent_api'
 import ChatWelcome from '@/components/ChatWelcome.vue'
+import EmployeePortrait from '@/components/EmployeePortrait.vue'
+import { listAccessibleSkills } from '@/apis/skill_api'
+import { normalizeAccessibleSkills } from '@/utils/accessibleSkills'
+import { CREATE_SKILL_INTENT, CREATOR_SKILL_SLUG } from '@/utils/skillDraft'
 import ActionDropdown from '@/components/common/ActionDropdown.vue'
 import ActionTrigger from '@/components/common/ActionTrigger.vue'
 import AgentChatComponent from '@/components/AgentChatComponent.vue'
 import AgentEditModal from '@/components/model-management/AgentEditModal.vue'
 import { isBuiltinAgent, useAgentStore } from '@/stores/agent'
 import { handleChatError } from '@/utils/errorHandler'
-import { generatePixelAvatar } from '@/utils/pixelAvatar'
+import { getDefaultEmployeePortrait } from '@/utils/employeePortraits'
 import { normalizeAgentBackendOption } from '@/utils/agentConfigUtils'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 
@@ -151,7 +171,50 @@ const router = useRouter()
 const consumerChat = computed(() => route.meta.consumerChat === true)
 const entryRoute = computed(() => (consumerChat.value ? 'ChatComp' : 'AgentComp'))
 
-const goToEmployeeSquare = () => router.push('/employees')
+const selectedSkill = ref(null)
+let skillSelectionVersion = 0
+/** 仅将可访问列表中的技能带入当前新会话草稿。 */
+const consumeRouteSkill = async () => {
+  const intent = route.query.skill
+  const slug = intent === CREATE_SKILL_INTENT ? CREATOR_SKILL_SLUG : intent
+  const version = ++skillSelectionVersion
+  selectedSkill.value = null
+  if (
+    typeof slug !== 'string' ||
+    !slug ||
+    getRouteThreadId() ||
+    !chatComponentRef.value ||
+    !agentStore.isInitialized
+  )
+    return
+  try {
+    await syncSelectedThreadFromRoute()
+    const skills = normalizeAccessibleSkills(await listAccessibleSkills())
+    if (version !== skillSelectionVersion || route.query.skill !== intent || getRouteThreadId())
+      return
+    const skill = skills.find((item) => item.slug === slug)
+    if (!skill) {
+      message.warning('该技能不可用或您暂无访问权限')
+      return
+    }
+    if (chatComponentRef.value?.applySkillToDraft(skill)) selectedSkill.value = skill
+    else message.warning('当前数字员工未启用此技能，请切换数字员工或联系管理员配置')
+  } catch (error) {
+    message.error(error?.message || '技能加载失败，请重新选择')
+  }
+}
+watch(
+  () => [
+    route.query.skill,
+    route.params.thread_id,
+    route.query.project_id,
+    agentStore.selectedAgentId,
+    agentStore.isInitialized,
+    chatComponentRef.value
+  ],
+  consumeRouteSkill,
+  { flush: 'post' }
+)
 
 // 从 agentStore 中获取响应式状态
 const { agents, selectedAgent, selectedAgentId, isLoadingConfig } = storeToRefs(agentStore)
@@ -224,11 +287,7 @@ const consumeRouteAgentSelection = async () => {
 }
 
 watch(
-  () => [
-    route.params.thread_id,
-    route.query.project_id,
-    agentStore.isInitialized
-  ],
+  () => [route.params.thread_id, route.query.project_id, agentStore.isInitialized],
   () => {
     syncSelectedThreadFromRoute()
   },
@@ -268,7 +327,7 @@ const agentQuickSwitchOptions = computed(() =>
       label: agent.name || agent.id,
       value: agent.id,
       icon: agent.icon || '',
-      defaultIcon: agent.id ? generatePixelAvatar(agent.id) : '',
+      defaultIcon: getDefaultEmployeePortrait(agent),
       isBuiltin: isBuiltinAgent(agent)
     }))
 )
@@ -279,7 +338,7 @@ const currentAgentOption = computed(() =>
 
 const currentAgentLabel = computed(() => {
   if (isLoadingConfig.value) return '加载中...'
-  return currentAgentOption.value?.label || '智能体'
+  return currentAgentOption.value?.label || '数字员工'
 })
 
 const agentSearchKeyword = ref('')
@@ -357,6 +416,38 @@ const openAgentManagement = async () => {
 </script>
 
 <style lang="less" scoped>
+.composer-mascot {
+  position: absolute;
+  left: 18px;
+  bottom: calc(100% - 16px);
+  width: 150px;
+  height: 150px;
+  pointer-events: none;
+  z-index: 2;
+}
+.skill-start-panel {
+  margin-top: 12px;
+  padding: 16px 20px;
+  background: var(--gray-0);
+  border: 1px solid var(--gray-150);
+  border-radius: 18px;
+}
+.skill-start-panel h3 {
+  margin: 0 0 8px;
+  color: var(--main-600);
+  font-size: 16px;
+}
+.skill-start-panel p {
+  margin: 0 0 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+.skill-start-panel span {
+  margin-left: 12px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
 .agent-switch-empty {
   padding: 20px 8px;
   color: var(--gray-500);
@@ -368,7 +459,8 @@ const openAgentManagement = async () => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 

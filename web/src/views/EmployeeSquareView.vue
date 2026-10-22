@@ -2,7 +2,7 @@
   <main class="employee-square">
     <header class="square-header">
       <div>
-        <p class="eyebrow">Yuxi</p>
+        <p class="eyebrow">数字员工</p>
         <h1>选择数字员工</h1>
         <p class="square-description">选择一个员工开始新的对话。已有对话会继续由原员工处理。</p>
       </div>
@@ -94,7 +94,7 @@ import { userConfigApi } from '@/apis/user_config_api'
 import { useUserStore } from '@/stores/user'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 import { normalizeAgent } from '@/utils/agentConfigUtils'
-import { generatePixelAvatar } from '@/utils/pixelAvatar'
+import { getDefaultEmployeePortrait } from '@/utils/employeePortraits'
 import { resolveDefaultEmployee, searchEmployees } from '@/utils/digitalEmployees'
 
 const router = useRouter()
@@ -173,7 +173,7 @@ const clearDefault = async () => {
   }
 }
 
-const defaultAvatar = (agent) => generatePixelAvatar(keyFor(agent))
+const defaultAvatar = (agent) => getDefaultEmployeePortrait(agent)
 
 const goToManagement = () => router.push('/agent-manage')
 

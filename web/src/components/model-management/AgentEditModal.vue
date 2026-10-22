@@ -17,7 +17,7 @@ import ShareConfigForm from '@/components/ShareConfigForm.vue'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 import { isBuiltinAgent, useAgentStore } from '@/stores/agent'
 import { useUserStore } from '@/stores/user'
-import { generatePixelAvatar } from '@/utils/pixelAvatar'
+import { DEFAULT_EMPLOYEE_PORTRAITS, getDefaultEmployeePortrait } from '@/utils/employeePortraits'
 import { MAX_IMAGE_UPLOAD_SIZE_BYTES, MAX_IMAGE_UPLOAD_SIZE_MB } from '@/utils/upload_limits'
 import { normalizeAgent } from '@/utils/agentConfigUtils'
 
@@ -192,7 +192,7 @@ const getAgentShareAllowedLevels = () => {
 
 const agentModalTitle = computed(() => (editingAgentId.value ? '编辑智能体' : '新增智能体'))
 const agentPreviewDefaultIcon = computed(() =>
-  editingAgentId.value ? generatePixelAvatar(editingAgentId.value) : ''
+  getDefaultEmployeePortrait({ slug: agentForm.slug || editingAgentId.value })
 )
 const agentPreviewName = computed(() => agentForm.name || editingAgentId.value || '智能体')
 const selectedBackendOption = computed(() =>
@@ -316,10 +316,10 @@ const uploadAgentIcon = async (file) => {
   try {
     const data = await userApi.uploadImage(file)
     agentForm.icon = data.image_url || data.url || ''
-    message.success('图标上传成功')
+    message.success('人物形象上传成功')
     return true
   } catch (error) {
-    message.error(error.message || '图标上传失败')
+    message.error(error.message || '人物形象上传失败')
     return false
   } finally {
     agentIconUploading.value = false
@@ -445,43 +445,19 @@ defineExpose({
       <div class="agent-modal-main">
         <section v-show="agentModalActiveTab === 'basic'" class="agent-modal-section">
           <div class="agent-profile-header">
-            <div class="agent-icon-preview" aria-label="智能体图标、名称与后端">
+            <div class="agent-icon-preview" aria-label="智能体人物形象、名称与后端">
               <div class="agent-profile-main">
-                <a-upload
-                  :show-upload-list="false"
-                  :before-upload="beforeAgentIconUpload"
-                  :disabled="agentIconUploading"
-                  accept="image/*"
-                >
-                  <div
-                    class="agent-icon-upload"
-                    :class="{
-                      uploading: agentIconUploading,
-                      'is-empty': !agentForm.icon && !editingAgentId
-                    }"
-                  >
-                    <FallbackAvatar
-                      v-if="agentForm.icon || editingAgentId"
-                      :src="agentForm.icon"
-                      :default-src="agentPreviewDefaultIcon"
-                      :name="agentPreviewName"
-                      :seed="editingAgentId || agentForm.slug || agentForm.name"
-                      kind="agent"
-                      :size="56"
-                      shape="rounded"
-                      :alt="`${agentForm.name || '智能体'}图标`"
-                      class="agent-icon-preview-avatar"
-                    />
-                    <div class="agent-icon-mask">
-                      <RefreshCw v-if="agentIconUploading" :size="16" class="spinning" />
-                      <Upload v-else :size="16" />
-                      <span>{{ agentForm.icon ? '更换图标' : '上传图标' }}</span>
-                    </div>
-                  </div>
-                </a-upload>
-                <span v-if="agentIconUploading" class="agent-icon-upload-status" role="status">
-                  图标上传中，保存会在完成后继续
-                </span>
+                <FallbackAvatar
+                  :src="agentForm.icon || agentPreviewDefaultIcon"
+                  :default-src="agentPreviewDefaultIcon"
+                  :name="agentPreviewName"
+                  :seed="editingAgentId || agentForm.slug || agentForm.name"
+                  kind="agent"
+                  :size="56"
+                  shape="rounded"
+                  :alt="`${agentForm.name || '智能体'}人物形象`"
+                  class="agent-icon-preview-avatar"
+                />
                 <div class="agent-icon-preview-text">
                   <input
                     ref="agentNameInputRef"
@@ -526,6 +502,59 @@ defineExpose({
               </div>
             </div>
           </div>
+          <section class="agent-character-config" aria-labelledby="agent-character-title">
+            <div class="agent-character-copy">
+              <span id="agent-character-title" class="agent-character-title">人物形象</span>
+              <p>这张图片会显示在欢迎页和对话框旁。建议使用透明背景的 PNG 或 WebP，方便完整展示人物。</p>
+            </div>
+            <div class="agent-character-content">
+              <div class="agent-character-preview" aria-label="人物形象完整预览">
+                <img
+                  :src="agentForm.icon || agentPreviewDefaultIcon"
+                  :alt="`${agentForm.name || '智能体'}人物形象完整预览`"
+                />
+              </div>
+              <div class="agent-character-presets" role="group" aria-label="选择默认人物形象">
+                <span class="agent-character-presets-label">选择默认形象</span>
+                <button
+                  v-for="portrait in DEFAULT_EMPLOYEE_PORTRAITS"
+                  :key="portrait.src"
+                  type="button"
+                  class="agent-character-preset"
+                  :class="{ selected: agentForm.icon === portrait.src }"
+                  :aria-pressed="agentForm.icon === portrait.src"
+                  :disabled="agentIconUploading"
+                  @click="agentForm.icon = portrait.src"
+                >
+                  <img :src="portrait.src" alt="" />
+                  <span>{{ portrait.name }}</span>
+                </button>
+              </div>
+              <div class="agent-character-actions">
+                <a-upload
+                  :show-upload-list="false"
+                  :before-upload="beforeAgentIconUpload"
+                  :disabled="agentIconUploading"
+                  accept="image/*"
+                >
+                  <a-button :disabled="agentIconUploading">
+                    <RefreshCw v-if="agentIconUploading" :size="16" class="spinning" />
+                    <Upload v-else :size="16" />
+                    {{
+                      agentIconUploading
+                        ? '正在上传'
+                        : agentForm.icon
+                          ? '更换人物形象'
+                          : '上传人物形象'
+                    }}
+                  </a-button>
+                </a-upload>
+                <span v-if="agentIconUploading" class="agent-icon-upload-status" role="status">
+                  上传完成后，保存会继续
+                </span>
+              </div>
+            </div>
+          </section>
           <div class="modal-form">
             <label class="form-label full-width">
               <span>描述</span>
@@ -773,10 +802,6 @@ defineExpose({
   width: 100%;
   min-width: 0;
   gap: 16px;
-
-  :deep(.ant-upload) {
-    display: block;
-  }
 }
 
 .agent-profile-main {
@@ -786,67 +811,132 @@ defineExpose({
   gap: 10px;
 }
 
-.agent-icon-upload {
-  position: relative;
+.agent-character-config {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  overflow: hidden;
-  border: 1px solid var(--gray-200);
-  border-radius: 12px;
-  background: var(--main-30);
-  cursor: pointer;
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 18px;
+  padding: 14px;
+  border: 1px solid var(--gray-150);
+  border-radius: 8px;
+  background: var(--gray-10);
+}
 
-  .agent-icon-preview-avatar {
-    width: 100%;
-    height: 100%;
-    border: 0;
-  }
+.agent-character-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 
-  &:hover,
-  &:focus-within,
-  &.uploading {
-    border-color: var(--main-300);
-    box-shadow: 0 0 0 3px var(--main-50);
-  }
-
-  &:hover .agent-icon-mask,
-  &:focus-within .agent-icon-mask,
-  &.uploading .agent-icon-mask,
-  &.is-empty .agent-icon-mask {
-    opacity: 1;
-  }
-
-  &.is-empty {
-    border-style: dashed;
-    background: var(--gray-0);
+  p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
   }
 }
 
-.agent-icon-mask {
-  position: absolute;
-  inset: 0;
+.agent-character-title {
+  color: var(--gray-800);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.agent-character-content {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.agent-character-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 220px;
+  height: 140px;
+  overflow: hidden;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  background: var(--gray-0);
+  color: var(--gray-500);
+  font-size: 12px;
+  text-align: center;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+}
+
+.agent-character-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 280px;
+}
+
+.agent-character-presets-label {
+  width: 100%;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.agent-character-preset {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  background: color-mix(in srgb, var(--gray-900) 62%, transparent);
-  color: var(--gray-0);
+  width: 72px;
+  min-height: 88px;
+  padding: 5px;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  background: var(--gray-0);
+  color: var(--color-text-secondary);
   font-size: 11px;
-  font-weight: 600;
-  opacity: 0;
-  transition: opacity 0.16s ease;
+  cursor: pointer;
+
+  img {
+    display: block;
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--main-300);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--main-300);
+    outline-offset: 1px;
+  }
+
+  &.selected {
+    border-color: var(--main-color);
+    color: var(--gray-900);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 }
 
-.agent-icon-upload.is-empty .agent-icon-mask {
-  background: transparent;
-  color: var(--gray-600);
+.agent-character-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.agent-character-actions :deep(.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .agent-icon-preview-text {

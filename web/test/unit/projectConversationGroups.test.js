@@ -101,10 +101,8 @@ test('侧边栏同时展示项目和最近分组，最近只展示其他对话',
   const projectSlotIndex = source.indexOf('<slot name="after-projects" />')
   assert.ok(projectSlotIndex > projectHeadingIndex)
   assert.ok(projectSlotIndex < recentHeadingIndex)
-  assert.match(
-    source,
-    /<section\s+v-if="projectsLoading \|\| projectsError \|\| projectGroups\.length"\s+class="history-group project-history-group"/
-  )
+  assert.match(source, /<section class="history-group project-history-group">/)
+  assert.match(source, /暂无项目，可在输入框新建或选择/)
   assert.ok(recentSectionStart >= 0)
   assert.match(recentSection, /v-if="projectsLoading"[^>]*>正在加载对话/)
   assert.match(recentSection, /v-else-if="projectsError"[^>]*>项目加载失败，暂时无法分类对话/)

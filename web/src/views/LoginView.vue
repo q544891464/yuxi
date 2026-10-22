@@ -18,7 +18,7 @@
     <nav class="login-navbar">
       <div class="navbar-content">
         <div class="brand-container" @click="goHome" style="cursor: pointer">
-          <img v-if="brandLogo" :src="brandLogo" alt="logo" class="brand-logo" />
+          <img v-if="brandLogo" :src="brandLogo" alt="组织标识" class="brand-logo" />
           <span v-else class="brand-shield" aria-hidden="true"></span>
           <div>
             <h1 class="brand-text">
@@ -295,6 +295,7 @@ import {
 } from '@lucide/vue'
 import { tryAutoStartOIDC, resolvePostLoginRedirect } from '@/utils/oidcAutoStart'
 import { MIN_PASSWORD_LENGTH } from '@/utils/passwordValidation'
+import { normalizePlatformName } from '@/utils/platformBranding'
 
 const router = useRouter()
 const route = useRoute()
@@ -306,11 +307,12 @@ const brandLogo = computed(() => {
   return infoStore.organization?.logo || ''
 })
 const brandOrgName = computed(() => {
-  return infoStore.organization?.name?.trim() || ''
+  const name = infoStore.organization?.name?.trim() || ''
+  return normalizePlatformName(name, '')
 })
 const brandName = computed(() => {
   const orgName = brandOrgName.value
-  const brandNameRaw = infoStore.branding?.name?.trim() || 'Yuxi 智能助手'
+  const brandNameRaw = normalizePlatformName(infoStore.branding?.name)
 
   if (orgName && brandNameRaw && orgName !== brandNameRaw) {
     return brandNameRaw
