@@ -9,6 +9,7 @@
             :aria-expanded="projectsExpanded"
             @click="projectsExpanded = !projectsExpanded"
           >
+            <FolderClosed :size="18" class="history-icon" />
             <span>项目</span>
             <ChevronDown
               :size="14"
@@ -42,10 +43,10 @@
                     >
                       <FolderOpen
                         v-if="isProjectExpanded(group.project.id)"
-                        :size="17"
+                        :size="16"
                         class="project-icon"
                       />
-                      <FolderClosed v-else :size="17" class="project-icon" />
+                      <FolderClosed v-else :size="16" class="project-icon" />
                       <span class="project-name" :title="group.project.name">{{
                         group.project.name
                       }}</span>
@@ -142,7 +143,7 @@
                   </CollapseTransition>
                   </section>
                 </template>
-                <div v-else class="list-state">暂无项目，可在输入框新建或选择</div>
+                <div v-else class="list-state" title="可在输入框中新建或选择项目">暂无项目</div>
               </template>
             </div>
           </CollapseTransition>
@@ -157,6 +158,7 @@
             :aria-expanded="recentExpanded"
             @click="recentExpanded = !recentExpanded"
           >
+            <History :size="18" class="history-icon" />
             <span>最近</span>
             <ChevronDown :size="14" class="collapse-icon" :class="{ collapsed: !recentExpanded }" />
           </button>
@@ -194,7 +196,7 @@
           {{ isLoadingMore ? '加载中...' : '加载更多' }}
         </button>
         <button type="button" class="archive-entry" @click="$emit('open-archive')">
-          <Archive :size="15" />已归档
+          <Archive :size="18" class="history-icon" /><span>已归档</span>
         </button>
       </div>
     </div>
@@ -209,6 +211,7 @@ import {
   Archive,
   FolderClosed,
   FolderOpen,
+  History,
   Loader2,
   MoreVertical,
   Plus,
@@ -355,9 +358,10 @@ const confirmArchiveProject = (project) => {
 .history-label {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
   width: 100%;
-  padding: 4px 8px;
+  min-height: 36px;
+  padding: 0 12px;
   border: 0;
   border-radius: 4px;
   background: transparent;
@@ -377,8 +381,21 @@ const confirmArchiveProject = (project) => {
     outline-offset: -2px;
   }
 }
+.history-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+.history-label > span {
+  flex: 1;
+  font-size: 14px;
+  line-height: 22px;
+}
 .collapse-icon {
-  opacity: 0;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  opacity: 1;
   transition:
     opacity 0.15s ease,
     transform 0.2s ease;
@@ -402,7 +419,7 @@ const confirmArchiveProject = (project) => {
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 30px;
+  min-height: 32px;
   border-radius: 8px;
   color: var(--gray-800);
   &:hover,
@@ -426,14 +443,15 @@ const confirmArchiveProject = (project) => {
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: 7px;
-  height: 30px;
-  padding: 0 4px 0 7px;
+  gap: 10px;
+  height: 32px;
+  padding: 0 4px 0 12px;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 22px;
   text-align: left;
   &:focus-visible {
     border-radius: 7px;
@@ -449,7 +467,9 @@ const confirmArchiveProject = (project) => {
   white-space: nowrap;
 }
 .project-icon {
-  flex: 0 0 17px;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 16px;
 }
 .project-status {
   position: absolute;
@@ -501,7 +521,7 @@ const confirmArchiveProject = (project) => {
   pointer-events: auto;
 }
 .project-empty {
-  padding: 3px 8px 7px 30px;
+  padding: 4px 12px 4px 40px;
   color: var(--gray-400);
   font-size: 12px;
 }
@@ -525,15 +545,15 @@ const confirmArchiveProject = (project) => {
   }
 }
 .list-state {
-  padding: 18px 8px;
+  padding: 6px 12px 6px 40px;
   color: var(--gray-500);
   font-size: 12px;
-  text-align: center;
+  text-align: left;
 }
 .list-error {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   color: var(--color-error-700);
   button {
@@ -555,16 +575,18 @@ const confirmArchiveProject = (project) => {
 .archive-entry {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 10px;
   width: 100%;
   margin-top: 8px;
-  padding: 8px;
+  min-height: 36px;
+  padding: 0 12px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--gray-600);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 22px;
   &:hover,
   &:focus-visible {
     background: var(--gray-50);
@@ -572,6 +594,10 @@ const confirmArchiveProject = (project) => {
   }
 }
 @media (hover: none) {
+  .history-label,
+  .archive-entry {
+    min-height: 40px;
+  }
   .project-row {
     min-height: 40px;
     padding-right: 16px;

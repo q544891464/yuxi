@@ -771,8 +771,8 @@ provide('settingsModal', {
     align-items: center;
     gap: 10px;
     width: 100%;
-    min-height: 38px;
-    padding: 8px 12px;
+    min-height: 36px;
+    padding: 0 12px;
     border: 0;
     border-radius: 8px;
     background: transparent;
@@ -781,6 +781,16 @@ provide('settingsModal', {
     text-align: left;
     text-decoration: none;
     cursor: pointer;
+  }
+  .consumer-function-link > svg:first-child {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+  }
+  .consumer-function-link > svg:not(:first-child) {
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
   }
   .consumer-function-link:hover {
     background: var(--main-20);
@@ -791,6 +801,8 @@ provide('settingsModal', {
   }
   .consumer-function-link span {
     flex: 1;
+    font-size: 14px;
+    line-height: 22px;
   }
   .consumer-function-link .rotated {
     transform: rotate(-90deg);
@@ -1072,6 +1084,11 @@ provide('settingsModal', {
     }
     &.mobile-sidebar-expanded.sidebar-collapsed .nav {
       padding: 0 @sidebar-padding-x;
+    }
+  }
+  @media (hover: none) {
+    .consumer-function-link {
+      min-height: 40px;
     }
   }
 }

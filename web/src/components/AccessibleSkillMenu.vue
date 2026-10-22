@@ -3,7 +3,8 @@
     <div class="menu-heading" :class="{ 'menu-heading-compact': !showTitle }">
       <span v-if="showTitle">技能</span>
       <button type="button" class="add-skill" :disabled="disabled" @click="$emit('create')">
-        添加技能
+        <Plus :size="14" aria-hidden="true" />
+        <span>添加技能</span>
       </button>
     </div>
 
@@ -34,6 +35,7 @@
           :disabled="disabled"
           @click="$emit('select', skill)"
         >
+          <FileText :size="14" class="skill-icon" aria-hidden="true" />
           <span class="skill-name">{{ skill.display_name || skill.name || skill.slug }}</span>
         </button>
       </nav>
@@ -43,6 +45,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { FileText, Plus } from '@lucide/vue'
 import { listAccessibleSkills } from '@/apis/skill_api'
 import { normalizeAccessibleSkills, resolveNavigationTree } from '@/utils/accessibleSkills'
 import { useSkillNavigationStore } from '@/stores/skillNavigation'
@@ -94,30 +97,48 @@ onMounted(loadSkills)
 
 <style lang="less" scoped>
 .accessible-skill-menu {
-  margin-top: 14px;
+  margin: 2px 0 8px 21px;
+  padding: 2px 0 2px 12px;
+  border-left: 1px solid var(--gray-200);
 }
 .menu-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
   color: var(--gray-600);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
 }
 .menu-heading-compact {
   justify-content: flex-start;
-  padding-left: 8px;
 }
 .add-skill,
 .menu-error button {
-  padding: 2px 4px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--main-color);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
+}
+.add-skill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  line-height: 20px;
+  text-align: left;
+}
+.add-skill:hover {
+  background: var(--main-10);
+}
+.add-skill svg,
+.skill-icon {
+  flex: 0 0 14px;
+}
+.menu-error button {
+  padding: 4px;
 }
 .add-skill:disabled,
 .skill-entry:disabled {
@@ -132,24 +153,28 @@ onMounted(loadSkills)
 .skill-entry {
   display: flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 8px 0 12px;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--gray-800);
   cursor: pointer;
   font-size: 13px;
+  line-height: 20px;
   text-align: left;
   &:hover,
   &.selected {
-    background: var(--gray-50);
+    background: var(--main-10);
     color: var(--main-color);
   }
-  &:focus-visible {
-    outline: 2px solid var(--main-300);
-    outline-offset: -2px;
-  }
+}
+.add-skill:focus-visible,
+.skill-entry:focus-visible {
+  outline: 2px solid var(--main-300);
+  outline-offset: -2px;
 }
 .skill-name {
   min-width: 0;
@@ -168,5 +193,11 @@ onMounted(loadSkills)
   justify-content: space-between;
   gap: 8px;
   color: var(--color-error-700);
+}
+@media (hover: none) {
+  .add-skill,
+  .skill-entry {
+    min-height: 40px;
+  }
 }
 </style>
