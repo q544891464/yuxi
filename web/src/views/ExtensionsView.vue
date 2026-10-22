@@ -3,17 +3,14 @@
     <PageHeader
       v-if="!isDetailPage"
       v-model:active-key="activeTab"
-      title="智能体扩展"
+      title="技能管理"
       :tabs="extensionTabs"
       :loading="activeChildLoading"
       :show-border="true"
-      aria-label="智能体扩展视图切换"
+      aria-label="技能管理视图切换"
     />
 
     <div v-if="!isDetailPage" class="extensions-content">
-      <div v-if="userStore.isAdmin && activeTab === 'knowledge'" class="tab-panel">
-        <DataBaseView ref="knowledgeRef" embedded />
-      </div>
       <div v-if="userStore.isAdmin && activeTab === 'tools'" class="tab-panel">
         <ToolsCardList ref="toolsRef" />
       </div>
@@ -22,6 +19,12 @@
       </div>
       <div v-if="userStore.isAdmin && activeTab === 'mcp'" class="tab-panel">
         <McpCardList ref="mcpRef" />
+      </div>
+      <div
+        v-if="userStore.isAdmin && activeTab === 'navigation'"
+        class="tab-panel navigation-panel"
+      >
+        <SkillNavigationSettings />
       </div>
     </div>
 
@@ -36,23 +39,22 @@ import ToolsCardList from '@/components/extensions/ToolsCardList.vue'
 import McpCardList from '@/components/extensions/McpCardList.vue'
 import SkillCardList from '@/components/extensions/SkillCardList.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
-import DataBaseView from '@/views/DataBaseView.vue'
+import SkillNavigationSettings from '@/components/SkillNavigationSettings.vue'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const activeTab = ref(null)
-const knowledgeRef = ref(null)
 const skillsRef = ref(null)
 const mcpRef = ref(null)
 const toolsRef = ref(null)
 
 const adminExtensionTabs = computed(() => [
-  { key: 'knowledge', label: '知识库' },
   { key: 'skills', label: '技能' },
   { key: 'tools', label: '工具' },
-  { key: 'mcp', label: 'MCP' }
+  { key: 'mcp', label: 'MCP' },
+  { key: 'navigation', label: '侧栏技能' }
 ])
 const userExtensionTabs = [{ key: 'skills', label: '技能' }]
 const extensionTabs = computed(() =>
@@ -77,16 +79,11 @@ const replaceTabQuery = (tab) => {
 }
 
 const isDetailPage = computed(() => {
-  return (
-    route.path.startsWith('/extensions/knowledgebase/') ||
-    route.path.startsWith('/extensions/mcp/') ||
-    route.path.startsWith('/extensions/skill/')
-  )
+  return route.path.startsWith('/extensions/mcp/') || route.path.startsWith('/extensions/skill/')
 })
 
 const activeChildLoading = computed(() => {
   const refMap = {
-    knowledge: knowledgeRef,
     tools: toolsRef,
     skills: skillsRef,
     mcp: mcpRef
@@ -121,6 +118,26 @@ watch(activeTab, (tab) => {
 @import '@/assets/css/extensions.less';
 
 .extensions-view {
+  @media (max-width: 600px) {
+    :deep(.page-header) {
+      height: auto;
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+
+    :deep(.page-header-left) {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    :deep(.page-header-tabs) {
+      border-left: 0;
+      padding-left: 0;
+      margin-left: 0;
+      height: auto;
+    }
+  }
+
   .extensions-content {
     flex: 1;
     min-height: 0;
@@ -130,6 +147,10 @@ watch(activeTab, (tab) => {
       height: 100%;
       min-height: 0;
       overflow-y: auto;
+    }
+
+    .navigation-panel {
+      padding: 24px;
     }
   }
 }

@@ -816,9 +816,9 @@ watch(
           return
         }
         await router.replace(
-          route.meta.consumerChat
+          route.name === 'ConsumerKnowledgeBaseDetail' || !userStore.isAdmin
             ? { name: 'ConsumerKnowledge' }
-            : { path: '/extensions', query: { tab: 'knowledge' } }
+            : { name: 'KnowledgeManage' }
         )
         return
       }
@@ -877,9 +877,9 @@ watch(
 
 const backToDatabase = () => {
   router.push(
-    route.meta.consumerChat
+    route.name === 'ConsumerKnowledgeBaseDetail' || !userStore.isAdmin
       ? { name: 'ConsumerKnowledge' }
-      : { path: '/extensions', query: { tab: 'knowledge' } }
+      : { name: 'KnowledgeManage' }
   )
 }
 

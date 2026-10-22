@@ -148,6 +148,30 @@ const router = createRouter({
       ]
     },
     {
+      path: '/knowledge',
+      component: AppLayout,
+      meta: { consumerChat: true, requiresAuth: true },
+      children: [
+        {
+          path: '',
+          name: 'KnowledgeManage',
+          component: () => import('../views/DataBaseView.vue'),
+          meta: { requiresAdmin: true }
+        },
+        {
+          path: ':kbId',
+          name: 'ExtensionKnowledgeBaseDetail',
+          component: () => import('../views/DataBaseInfoView.vue')
+        },
+        {
+          path: ':kbId/evaluation/:datasetId',
+          name: 'ExtensionEvaluationBenchmarkDetail',
+          component: () => import('../views/EvaluationBenchmarkDetailView.vue'),
+          meta: { requiresAdmin: true }
+        }
+      ]
+    },
+    {
       path: '/extensions',
       name: 'extensions',
       component: AppLayout,
@@ -164,19 +188,21 @@ const router = createRouter({
           children: [
             {
               path: 'knowledgebase/:kbId',
-              name: 'ExtensionKnowledgeBaseDetail',
-              component: () => import('../views/DataBaseInfoView.vue'),
-              meta: { keepAlive: false, requiresAuth: true }
+              redirect: (to) => ({
+                name: 'ExtensionKnowledgeBaseDetail',
+                params: to.params,
+                query: to.query,
+                hash: to.hash
+              })
             },
             {
               path: 'knowledgebase/:kbId/evaluation/:datasetId',
-              name: 'ExtensionEvaluationBenchmarkDetail',
-              component: () => import('../views/EvaluationBenchmarkDetailView.vue'),
-              meta: {
-                keepAlive: false,
-                requiresAuth: true,
-                requiresAdmin: true
-              }
+              redirect: (to) => ({
+                name: 'ExtensionEvaluationBenchmarkDetail',
+                params: to.params,
+                query: to.query,
+                hash: to.hash
+              })
             },
             {
               path: 'mcp/:slug',
@@ -213,6 +239,9 @@ const router = createRouter({
 // 全局前置守卫
 router.beforeEach(async (to) => {
   if (to.meta.public) return true
+  if (to.name === 'ExtensionsComp' && to.query.tab === 'knowledge') {
+    return { name: 'KnowledgeManage', query: { ...to.query, tab: undefined }, hash: to.hash }
+  }
   // 检查路由是否需要认证
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth === true)
   const requiresAdmin = to.matched.some((record) => record.meta.requiresAdmin)

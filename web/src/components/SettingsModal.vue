@@ -38,14 +38,6 @@
             <span>API Keys</span>
           </div>
           <div
-            v-if="userStore.isLoggedIn"
-            class="sider-item"
-            :class="{ activesec: activeTab === 'skillNavigation' }"
-            @click="activeTab = 'skillNavigation'"
-          >
-            <Settings class="icon" :size="18" /><span>侧栏技能</span>
-          </div>
-          <div
             class="sider-item"
             :class="{ activesec: activeTab === 'base' }"
             @click="activeTab = 'base'"
@@ -112,14 +104,6 @@
           API Keys
         </div>
         <div
-          v-if="userStore.isLoggedIn"
-          class="nav-item"
-          :class="{ active: activeTab === 'skillNavigation' }"
-          @click="activeTab = 'skillNavigation'"
-        >
-          侧栏技能
-        </div>
-        <div
           class="nav-item"
           :class="{ active: activeTab === 'agentEnv' }"
           @click="activeTab = 'agentEnv'"
@@ -179,18 +163,6 @@
           </div>
 
           <div
-            v-if="userStore.isLoggedIn && loadedTabs.has('skillNavigation')"
-            v-show="activeTab === 'skillNavigation'"
-          >
-            <SkillNavigationSettings v-if="userStore.isAdmin" />
-            <div v-else class="personal-skill-settings">
-              <h2>侧栏技能</h2>
-              <p>添加和管理您的个人技能；平台共享技能仅供查看，无法修改。</p>
-              <SkillCardList />
-            </div>
-          </div>
-
-          <div
             v-show="activeTab === 'agentEnv'"
             v-if="userStore.isLoggedIn && loadedTabs.has('agentEnv')"
           >
@@ -224,7 +196,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
-import { useSkillNavigationStore } from '@/stores/skillNavigation'
 import { CircleUser, Settings, Key, ScanText, SquareTerminal, User, Users, X } from '@lucide/vue'
 import { createAsyncPanel } from '@/utils/asyncPanel'
 
@@ -237,10 +208,6 @@ const OCRSettingsSection = createAsyncPanel(() => import('@/components/OCRSettin
 const ApiKeyManagementComponent = createAsyncPanel(
   () => import('@/components/ApiKeyManagementComponent.vue')
 )
-const SkillNavigationSettings = createAsyncPanel(
-  () => import('@/components/SkillNavigationSettings.vue')
-)
-const SkillCardList = createAsyncPanel(() => import('@/components/extensions/SkillCardList.vue'))
 const UserManagementComponent = createAsyncPanel(
   () => import('@/components/UserManagementComponent.vue')
 )
@@ -262,7 +229,6 @@ const props = defineProps({
 const emit = defineEmits(['update:visible', 'close'])
 
 const userStore = useUserStore()
-const skillNavigationStore = useSkillNavigationStore()
 const activeTab = ref('account')
 const loadedTabs = ref(new Set())
 const visible = computed({
@@ -272,7 +238,7 @@ const visible = computed({
 
 const availableTabs = computed(() => {
   const tabs = []
-  if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv', 'skillNavigation')
+  if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
   if (userStore.isAdmin) tabs.push('base', 'ocr', 'user')
   if (userStore.isSuperAdmin) tabs.push('department')
   return tabs
@@ -287,10 +253,6 @@ const setActiveTab = (preferredTab) => {
 }
 
 const handleClose = () => {
-  if (loadedTabs.value.has('skillNavigation')) {
-    skillNavigationStore.invalidate()
-    skillNavigationStore.load().catch(() => {})
-  }
   emit('close')
 }
 
@@ -328,21 +290,6 @@ watch(
   }
 
   .ant-modal-body {
-    padding: 0;
-  }
-}
-
-.personal-skill-settings {
-  h2 {
-    margin: 0 0 6px;
-  }
-
-  > p {
-    margin: 0 0 16px;
-    color: var(--color-text-secondary);
-  }
-
-  .skill-cards-page {
     padding: 0;
   }
 }

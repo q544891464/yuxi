@@ -14,8 +14,7 @@ import {
   Search,
   UsersRound,
   WandSparkles,
-  ChevronDown,
-  Settings2
+  ChevronDown
 } from '@lucide/vue'
 
 import { useConfigStore } from '@/stores/config'
@@ -187,7 +186,7 @@ const mainList = computed(() => {
   })
 
   items.push({
-    name: '知识库 · 技能',
+    name: '技能管理',
     path: '/extensions',
     activePaths: ['/extensions'],
     icon: LibraryBig,
@@ -211,16 +210,23 @@ const consumerTopItems = computed(() => {
   if (userStore.isAdmin) {
     items.push(
       { name: '员工管理', path: '/agent-manage', icon: Box, activeIcon: Box },
-      { name: '技能管理', path: '/extensions', icon: LibraryBig, activeIcon: LibraryBig },
-      {
-        name: '数据总览',
-        path: '/dashboard',
-        routeName: 'ConsumerDashboard',
-        icon: BarChart3,
-        activeIcon: BarChart3
-      },
-      { name: '管理工作台', path: '/agent', icon: Settings2, activeIcon: Settings2 }
+      { name: '知识库管理', path: '/knowledge', icon: LibraryBig, activeIcon: LibraryBig }
     )
+  }
+  items.push({
+    name: '技能管理',
+    path: '/extensions',
+    icon: WandSparkles,
+    activeIcon: WandSparkles
+  })
+  if (userStore.isAdmin) {
+    items.push({
+      name: '数据总览',
+      path: '/dashboard',
+      routeName: 'ConsumerDashboard',
+      icon: BarChart3,
+      activeIcon: BarChart3
+    })
   }
   items.push({ name: '数字员工广场', path: '/employees', icon: UsersRound, activeIcon: UsersRound })
   return items

@@ -150,7 +150,7 @@ test('消费端知识库保留布局，消费端总览仅管理员可访问', as
   assert.equal(router.currentRoute.value.meta.consumerChat, true)
 })
 
-test('业务配置与详情页保持前台外壳，只有管理工作台使用后台布局', async () => {
+test('业务配置与详情页保持前台外壳，既有管理员会话链接保留', async () => {
   const user = { token: 'test', userId: 1, isLoggedIn: true, isAdmin: true }
   const router = createTestRouter(user)
   for (const path of [
@@ -158,11 +158,11 @@ test('业务配置与详情页保持前台外壳，只有管理工作台使用�
     '/agent-manage',
     '/agent-manage?tab=providers',
     '/extensions',
-    '/extensions?tab=knowledge',
+    '/knowledge',
     '/extensions/skill/example',
     '/extensions/mcp/example',
-    '/extensions/knowledgebase/example',
-    '/extensions/knowledgebase/example/evaluation/dataset',
+    '/knowledge/example',
+    '/knowledge/example/evaluation/dataset',
     '/workspace',
     '/dashboard'
   ]) {
@@ -182,6 +182,7 @@ test('业务配置与详情页保持前台外壳，只有管理工作台使用�
   }
   for (const path of [
     '/agent',
+    '/knowledge',
     '/dashboard',
     '/extensions/mcp/example',
     '/extensions/knowledgebase/example/evaluation/dataset'
@@ -189,4 +190,28 @@ test('业务配置与详情页保持前台外壳，只有管理工作台使用�
     await router.push(path)
     assert.equal(router.currentRoute.value.path, '/chat', path)
   }
+})
+
+test('知识库旧链接进入独立管理页面并保留详情参数，普通用户只可读取详情', async () => {
+  const user = { token: 'test', userId: 1, isLoggedIn: true, isAdmin: true }
+  const router = createTestRouter(user)
+  for (const [oldPath, newPath] of [
+    ['/extensions?tab=knowledge', '/knowledge'],
+    ['/extensions/knowledgebase/example?action=edit', '/knowledge/example?action=edit'],
+    [
+      '/extensions/knowledgebase/example/evaluation/dataset?view=results&run=one#result',
+      '/knowledge/example/evaluation/dataset?view=results&run=one#result'
+    ]
+  ]) {
+    await router.push(oldPath)
+    assert.equal(router.currentRoute.value.fullPath, newPath)
+    assert.equal(router.currentRoute.value.meta.consumerChat, true)
+  }
+  user.isAdmin = false
+  await router.push('/extensions?tab=knowledge')
+  assert.equal(router.currentRoute.value.path, '/chat')
+  await router.push('/knowledge/example')
+  assert.equal(router.currentRoute.value.name, 'ExtensionKnowledgeBaseDetail')
+  await router.push('/knowledge/example/evaluation/dataset')
+  assert.equal(router.currentRoute.value.path, '/chat')
 })

@@ -47,10 +47,6 @@
             <template #icon><Terminal :size="16" /></template>
             <span class="menu-text">调试面板（非生产环境）</span>
           </a-menu-item>
-          <a-menu-item v-if="userStore.isAdmin" key="agent-settings" @click="router.push('/agent')">
-            <template #icon><Bot :size="16" /></template>
-            <span class="menu-text">管理工作台</span>
-          </a-menu-item>
           <a-menu-item key="setting" @click="goToSetting">
             <template #icon><Settings :size="16" /></template>
             <span class="menu-text">设置</span>
@@ -76,7 +72,7 @@ import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
 import DebugComponent from '@/components/DebugComponent.vue'
 import { message } from 'ant-design-vue'
-import { Sun, Moon, LogOut, Settings, Terminal, Bot } from '@lucide/vue'
+import { Sun, Moon, LogOut, Settings, Terminal } from '@lucide/vue'
 import { useThemeStore } from '@/stores/theme'
 import { generatePixelAvatar } from '@/utils/pixelAvatar'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'

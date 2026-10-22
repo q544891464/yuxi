@@ -6,11 +6,7 @@
         <h1>知识库</h1>
         <p>选择一个知识库，查看其中可访问的资料。</p>
       </div>
-      <RouterLink
-        v-if="isAdmin"
-        class="manage-link"
-        :to="{ path: '/extensions', query: { tab: 'knowledge' } }"
-      >
+      <RouterLink v-if="isAdmin" class="manage-link" :to="{ name: 'KnowledgeManage' }">
         管理知识库
       </RouterLink>
     </header>

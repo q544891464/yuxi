@@ -4,7 +4,9 @@
     <p class="hint">
       为登录用户整理共享技能菜单。删除菜单入口不会删除技能本体，也不会改变技能权限。
     </p>
-    <p v-if="!configured" class="hint">未配置时显示全部可访问技能；保存空菜单会隐藏共享菜单。</p>
+    <p v-if="!configured" class="hint">
+      未配置时显示当前员工已启用且可访问的技能；保存空菜单会隐藏共享菜单。
+    </p>
     <a-alert v-if="error" type="error" :message="error" show-icon />
     <a-alert
       v-if="refreshError"
@@ -73,7 +75,11 @@
         </div>
         <a-form v-if="selected" layout="vertical" class="entry-form" :disabled="saving">
           <a-form-item :label="isGroup(selected) ? '分组名称' : '技能中文显示名'" required>
-            <a-input v-model:value="selected.name" :maxlength="60" />
+            <a-input
+              v-model:value="selected.name"
+              :aria-label="isGroup(selected) ? '分组名称' : '技能中文显示名'"
+              :maxlength="60"
+            />
           </a-form-item>
           <a-form-item label="父级分组">
             <a-select v-model:value="selected.parentId" :options="parentOptions" />

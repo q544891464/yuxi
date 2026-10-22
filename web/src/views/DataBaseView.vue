@@ -1,14 +1,6 @@
 <template>
   <div class="database-container layout-container">
-    <PageHeader
-      v-if="!props.embedded"
-      title="知识库"
-      :active-key="knowledgeActiveView"
-      :tabs="knowledgeViewItems"
-      :loading="dbState.listLoading"
-      :show-border="true"
-      aria-label="知识库视图切换"
-    />
+    <PageHeader title="知识库管理" :loading="dbState.listLoading" :show-border="true" />
 
     <PageShoulder v-model:search="searchQuery" search-placeholder="搜索知识库...">
       <template #filters>
@@ -117,8 +109,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, watch, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, onMounted, reactive, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useDatabaseStore } from '@/stores/database'
 import { Copy, Pencil, Plus, Trash2 } from '@lucide/vue'
@@ -134,21 +126,11 @@ import dayjs, { parseToShanghai } from '@/utils/time'
 import { getKbTypeLabel, getKbTypeIcon, getKbTypeColor, kbUtils } from '@/utils/kb_utils'
 import { getShareConfigLabel } from '@/utils/shareConfig'
 
-const route = useRoute()
 const router = useRouter()
 const databaseStore = useDatabaseStore()
 
-const props = defineProps({
-  embedded: { type: Boolean, default: false }
-})
-
 // 使用 store 的状态
 const { databases, state: dbState } = storeToRefs(databaseStore)
-
-const knowledgeActiveView = 'documents'
-const knowledgeViewItems = [
-  { key: 'documents', label: '文档知识库', path: '/extensions?tab=knowledge' }
-]
 
 const kbTypes = computed(() => Object.keys(supportedKbTypes.value))
 const searchQuery = ref('')
@@ -253,7 +235,7 @@ const cardTags = (database) => {
 
 const navigateToDatabase = (database) => {
   if (kbUtils.isReadOnlyDatabase(database)) return
-  router.push({ path: `/extensions/knowledgebase/${database.kb_id}` })
+  router.push({ name: 'ExtensionKnowledgeBaseDetail', params: { kbId: database.kb_id } })
 }
 
 const copyDatabaseId = async (database) => {
@@ -297,7 +279,8 @@ const handleDatabaseAction = (key, database) => {
   }
   if (key === 'edit') {
     router.push({
-      path: `/extensions/knowledgebase/${database.kb_id}`,
+      name: 'ExtensionKnowledgeBaseDetail',
+      params: { kbId: database.kb_id },
       query: { action: 'edit' }
     })
     return
@@ -306,15 +289,6 @@ const handleDatabaseAction = (key, database) => {
     deleteDatabase(database)
   }
 }
-
-watch(
-  () => route.path,
-  (newPath) => {
-    if (newPath === '/extensions' && route.query.tab === 'knowledge') {
-      databaseStore.loadDatabases()
-    }
-  }
-)
 
 onMounted(() => {
   loadSupportedKbTypes()
