@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable, Iterable
@@ -13,7 +14,6 @@ from deepagents.middleware.summarization import (
     Command,
     ContextOverflowError,
     SummarizationMiddleware,
-    _aclip_overflow_tail,
     _clip_overflow_tail,
 )
 from langchain.agents.middleware.summarization import ContextSize
@@ -31,6 +31,8 @@ from yuxi.agents.context import (
     DEFAULT_YUXI_SUMMARY_PROMPT,
 )
 from yuxi.models.chat import load_chat_model, resolve_chat_model_spec
+from yuxi.models.context_tokenizer import VllmContextTokenizer
+from yuxi.agents.middlewares.context_budget import create_context_budget_middleware
 from yuxi.utils.logging_config import logger
 
 _APPROX_CHARS_PER_TOKEN = 4
@@ -107,14 +109,14 @@ class YuxiSummarizationMiddleware(SummarizationMiddleware):
         messages = list(state.get("messages") or [])
         previous_event = state.get("_summarization_event")
         effective_messages = self._apply_event_to_messages(messages, previous_event)
-        before_tokens = self._count_tokens(effective_messages, None, [])
+        before_tokens = await asyncio.to_thread(self._count_tokens, effective_messages, None, [])
         compacted_messages = self._compact_messages(effective_messages)
-        cutoff_index = self._determine_cutoff_index(compacted_messages)
+        cutoff_index = await asyncio.to_thread(self._determine_cutoff_index, compacted_messages)
         if cutoff_index <= 0:
             return {}, {
                 "status": "no_op",
                 "before_tokens": before_tokens,
-                "after_tokens": self._count_tokens(compacted_messages, None, []),
+                "after_tokens": await asyncio.to_thread(self._count_tokens, compacted_messages, None, []),
                 "reason": "insufficient_history",
             }
 
@@ -149,7 +151,7 @@ class YuxiSummarizationMiddleware(SummarizationMiddleware):
             "_summarization_session_id": session_id,
         }
         persisted_messages = self._apply_event_to_messages(messages, update["_summarization_event"])
-        after_tokens = self._count_tokens(persisted_messages, None, [])
+        after_tokens = await asyncio.to_thread(self._count_tokens, persisted_messages, None, [])
         return update, {
             "status": "completed",
             "before_tokens": before_tokens,
@@ -157,6 +159,18 @@ class YuxiSummarizationMiddleware(SummarizationMiddleware):
             "compressed_messages": cutoff_index,
             "file_path": file_path,
         }
+
+    def _count_tokens(self, messages, system_message=None, tools=None):
+        """真实计数包含完整系统与工具输入，未启用时沿用上游近似计数。"""
+        if isinstance(self.token_counter, VllmContextTokenizer):
+            combined = [system_message, *messages] if system_message else list(messages)
+            return self.token_counter(combined, tools=tools)
+        return super()._count_tokens(messages, system_message, tools)
+
+    def _truncate_args(self, messages, total_tokens):
+        """保持上游截断后的流式参数副本与 wire 调用一致。"""
+        truncated, changed = super()._truncate_args(messages, total_tokens)
+        return [_sync_tool_call_blocks(old, new) for old, new in zip(messages, truncated, strict=True)], changed
 
     def _wrap_model_call_with_compaction(
         self,
@@ -230,8 +244,10 @@ class YuxiSummarizationMiddleware(SummarizationMiddleware):
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse | ExtendedModelResponse:
         effective_messages = self._get_effective_messages(request)
-        total_tokens = self._count_tokens(effective_messages, request.system_message, request.tools)
-        truncated_messages, _ = self._truncate_args(effective_messages, total_tokens)
+        total_tokens = await asyncio.to_thread(
+            self._count_tokens, effective_messages, request.system_message, request.tools
+        )
+        truncated_messages, _ = await asyncio.to_thread(self._truncate_args, effective_messages, total_tokens)
         should_compact = self._should_summarize(truncated_messages, total_tokens)
 
         overflow_triggered = False
@@ -245,7 +261,9 @@ class YuxiSummarizationMiddleware(SummarizationMiddleware):
         if should_compact:
             _emit_compression_started_once()
 
-        compacted_tokens = self._count_tokens(compacted_messages, request.system_message, request.tools)
+        compacted_tokens = await asyncio.to_thread(
+            self._count_tokens, compacted_messages, request.system_message, request.tools
+        )
         pressure_threshold = self._entry_trigger_tokens()
         should_summarize = overflow_triggered or pressure_threshold is None or compacted_tokens >= pressure_threshold
         if not should_summarize:
@@ -257,7 +275,7 @@ class YuxiSummarizationMiddleware(SummarizationMiddleware):
                 _emit_compression("completed")
                 return response
 
-        cutoff_index = self._determine_cutoff_index(compacted_messages)
+        cutoff_index = await asyncio.to_thread(self._determine_cutoff_index, compacted_messages)
         if cutoff_index <= 0:
             response = await handler(request.override(messages=compacted_messages))
             if should_compact:
@@ -267,7 +285,8 @@ class YuxiSummarizationMiddleware(SummarizationMiddleware):
         messages_to_summarize, preserved_messages = self._partition_messages(compacted_messages, cutoff_index)
         new_state_tail: list[AnyMessage] = []
         if overflow_triggered:
-            preserved_messages, new_state_tail = await _aclip_overflow_tail(
+            preserved_messages, new_state_tail = await asyncio.to_thread(
+                _clip_overflow_tail,
                 preserved_messages,
                 self._backend,
                 keep=self._lc_helper.keep,
@@ -363,7 +382,7 @@ class YuxiSummarizationMiddleware(SummarizationMiddleware):
         return summary
 
     async def _acreate_summary(self, messages: list[AnyMessage]) -> str:
-        prompt = self._build_summary_prompt(messages) if messages else None
+        prompt = await asyncio.to_thread(self._build_summary_prompt, messages) if messages else None
         if prompt is None:
             raise RuntimeError("没有可供自动压缩的对话历史")
         response = await self.model.ainvoke(prompt, config=self._SUMMARY_INVOKE_CONFIG)
@@ -373,7 +392,7 @@ class YuxiSummarizationMiddleware(SummarizationMiddleware):
         return summary
 
     async def _acreate_summary_or_raise(self, messages: list[AnyMessage]) -> str:
-        prompt = self._build_summary_prompt(messages) if messages else None
+        prompt = await asyncio.to_thread(self._build_summary_prompt, messages) if messages else None
         if prompt is None:
             raise RuntimeError("没有可供主动压缩的对话历史")
         response = await self.model.ainvoke(prompt, config=self._SUMMARY_INVOKE_CONFIG)
@@ -455,6 +474,7 @@ def create_summary_middleware(
     summary_prompt: str | None = None,
     trim_tokens_to_summarize: int | None = None,
     tool_result_offload_token_limit: int | None = _DEFAULT_SUMMARY_TOOL_RESULT_LIMIT_TOKENS,
+    token_counter=None,
 ) -> YuxiSummarizationMiddleware:
     """创建绑定单次运行 backend 的摘要中间件。"""
     middleware_kwargs = {
@@ -462,7 +482,7 @@ def create_summary_middleware(
         "backend": backend,
         "trigger": trigger,
         "keep": keep,
-        "token_counter": _count_tokens_for_summary_trigger,
+        "token_counter": token_counter or _count_tokens_for_summary_trigger,
         "trim_tokens_to_summarize": trim_tokens_to_summarize,
         "tool_result_offload_token_limit": tool_result_offload_token_limit,
     }
@@ -474,9 +494,13 @@ def create_summary_middleware(
 def create_summary_middleware_from_context(context, *, backend) -> YuxiSummarizationMiddleware:
     """按 Agent 运行时配置创建自动与主动压缩共用的摘要器。"""
     trigger_tokens = getattr(context, "summary_threshold", DEFAULT_SUMMARY_THRESHOLD_K) * 1024
+    budget = create_context_budget_middleware(context)
+    if budget:
+        trigger_tokens = min(trigger_tokens, budget.input_budget * 9 // 10)
     model_spec = resolve_chat_model_spec(context.model)
     return create_summary_middleware(
         model=load_chat_model(fully_specified_name=model_spec, session_id=context.thread_id, uid=context.uid),
+        token_counter=budget.counter if budget else None,
         backend=backend,
         trigger=("tokens", trigger_tokens),
         keep=("messages", getattr(context, "summary_keep_messages", DEFAULT_SUMMARY_KEEP_MESSAGES)),
@@ -798,7 +822,28 @@ def _truncate_ai_tool_call_args(message: AIMessage, *, max_length: int) -> AIMes
     updated_message = message.model_copy(update={"additional_kwargs": additional_kwargs})
     if tool_calls_modified:
         updated_message.tool_calls = updated_tool_calls
-    return updated_message
+    return _sync_tool_call_blocks(message, updated_message)
+
+
+def _sync_tool_call_blocks(original, updated):
+    """仅同步原先一致的工具参数副本，保留 checkpoint 原消息。"""
+    if original is updated or not isinstance(original, AIMessage) or not isinstance(original.content, list):
+        return updated
+    old_calls = {call["id"]: call for call in original.tool_calls}
+    new_calls = {call["id"]: call for call in updated.tool_calls}
+    content = []
+    changed = False
+    for part in original.content:
+        if isinstance(part, dict) and part.get("type") == "tool_call":
+            old = old_calls.get(part.get("id"))
+            new = new_calls.get(part.get("id"))
+            if old and new and part.get("name") == old["name"] and part.get("args") == old["args"]:
+                if old["args"] != new["args"]:
+                    content.append({**part, "args": new["args"]})
+                    changed = True
+                    continue
+        content.append(part)
+    return updated.model_copy(update={"content": content}) if changed else updated
 
 
 def _truncate_tool_call_args(tool_call: dict[str, Any], max_length: int) -> tuple[dict[str, Any], bool]:

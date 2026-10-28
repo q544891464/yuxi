@@ -8,6 +8,8 @@ import pytest
 from yuxi.agents.buildin.chatbot import graph as chatbot_graph
 from yuxi.agents.buildin.subagent import graph as subagent_graph
 from yuxi.agents.middlewares import summary as summary_module
+from yuxi.agents.middlewares.context_budget import ContextBudgetMiddleware
+from yuxi.models.context_tokenizer import VllmContextTokenizer
 
 
 def _context(summary_threshold: int = 123) -> SimpleNamespace:
@@ -100,6 +102,41 @@ def test_shared_summary_factory_uses_one_threshold(monkeypatch: pytest.MonkeyPat
     assert captured["trigger"] == ("tokens", 96 * 1024)
     assert captured["trim_tokens_to_summarize"] == 96 * 1024
     assert "l1_l2_trigger_ratio" not in captured
+    assert captured["token_counter"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "graph_module,build_args", [(chatbot_graph, (object(),)), (subagent_graph, (object(), "default"))]
+)
+async def test_enabled_tokenizer_is_installed_after_prompt_injection(monkeypatch, graph_module, build_args):
+    """主子图都在所有注入器之后执行真实预算校验。"""
+    _patch_common_graph_deps(monkeypatch, graph_module, {})
+    if graph_module is chatbot_graph:
+        monkeypatch.setattr(graph_module, "create_subagent_task_middleware", AsyncMock(return_value=None))
+    info = SimpleNamespace(extra={"context_tokenizer": {"type": "vllm", "context_window": 131072}})
+    monkeypatch.setattr("yuxi.models.providers.cache.model_cache.get_model_info", lambda _: info)
+    middlewares = await graph_module._build_middlewares(_context(), *build_args)
+    assert isinstance(middlewares[-1], ContextBudgetMiddleware)
+    assert middlewares[-1].input_budget == 114688
+
+
+def test_enabled_summary_shares_real_tokenizer_and_window(monkeypatch):
+    """摘要阈值遵守实际窗口，并保留 Basic 的用户与线程身份。"""
+    captured = {}
+    info = SimpleNamespace(extra={"context_tokenizer": {"type": "vllm", "context_window": 131072}})
+    monkeypatch.setattr("yuxi.models.providers.cache.model_cache.get_model_info", lambda _: info)
+    monkeypatch.setattr(summary_module, "load_chat_model", lambda **kwargs: captured.update(kwargs) or object())
+    monkeypatch.setattr(
+        summary_module, "create_summary_middleware", lambda **kwargs: captured.update(kwargs) or object()
+    )
+    context = _context(summary_threshold=512)
+    context.thread_id, context.uid = "thread-fixture", "user-fixture"
+    summary_module.create_summary_middleware_from_context(context, backend=object())
+    assert isinstance(captured["token_counter"], VllmContextTokenizer)
+    assert captured["trigger"] == ("tokens", 103219)
+    assert captured["session_id"] == context.thread_id
+    assert captured["uid"] == context.uid
 
 
 @pytest.mark.parametrize(

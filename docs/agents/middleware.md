@@ -17,22 +17,24 @@
 
 ## 内置中间件顺序
 
-`ChatbotAgent` 的常见顺序如下；可选项只在对应能力启用时加入：
+`ChatbotAgent` 的组合顺序如下；可选项只在对应能力启用时加入，序号不代表删去可选项后的数组下标：
 
 | 顺序 | 中间件 | 作用 |
 | --- | --- | --- |
-| 1 | `SteerMiddleware` | 在安全边界发现待接替请求 |
-| 2 | `create_agent_filesystem_middleware` | 提供 Workdir、User Data、Skills 文件后端，并卸载过大的工具结果 |
-| 3 | `SkillsMiddleware` | 注入 Skill 说明，按激活状态开放依赖 |
-| 4 | `YuxiMemoryMiddleware` | Memory 开关开启且 `MEMORY.md` 有内容时，注入用户记忆并提供受限工具 |
-| 5 | `YuxiSubAgentMiddleware` | 主智能体有可见子智能体时提供子智能体生命周期工具 |
-| 6 | `YuxiSummarizationMiddleware` | 先确定性压缩工具结果，仍达到同一阈值时生成摘要 |
-| 7 | `TodoListMiddleware` | 保存待办，供状态面板展示 |
-| 8 | `PatchToolCallsMiddleware` | 修正部分工具调用消息形态 |
-| 9 | `NetworkRetryMiddleware` | 网络错误按预算、其他可重试模型错误按次数重试，耗尽后抛出异常 |
-| 10 | `ImageInputCompatibilityMiddleware` | 桥接工具读取图片与模型输入格式；必要时回退 OCR |
-| 11 | `TokenUsageMiddleware` | 记录近似上下文和主模型实际用量 |
-| 12 | 工具审批 middleware | 默认模式下拦截写文件、编辑文件和执行命令 |
+| 1 | `ToolErrorGuardMiddleware` | 隔离普通工具异常，保留取消与 interrupt 的传播 |
+| 2 | `SteerMiddleware` | 在安全边界发现待接替请求 |
+| 3 | `create_agent_filesystem_middleware` | 提供 Workdir、User Data、Skills 文件后端，并卸载过大的工具结果 |
+| 4 | `SkillsMiddleware` | 注入 Skill 说明，按激活状态开放依赖 |
+| 5 | `YuxiMemoryMiddleware` | Memory 开关开启且 `MEMORY.md` 有内容时，注入用户记忆并提供受限工具 |
+| 6 | `YuxiSubAgentMiddleware` | 主智能体有可见子智能体时提供子智能体生命周期工具 |
+| 7 | `YuxiSummarizationMiddleware` | 先确定性压缩工具结果，仍达到同一阈值时生成摘要 |
+| 8 | `TodoListMiddleware` | 保存待办，供状态面板展示 |
+| 9 | `PatchToolCallsMiddleware` | 修正部分工具调用消息形态 |
+| 10 | `NetworkRetryMiddleware` | 网络错误按预算、其他可重试模型错误按次数重试，耗尽后抛出异常 |
+| 11 | `ImageInputCompatibilityMiddleware` | 桥接工具读取图片与模型输入格式；必要时回退 OCR |
+| 12 | `TokenUsageMiddleware` | 记录近似上下文和主模型实际用量 |
+| 13 | 工具审批 middleware | 默认模式下拦截写文件、编辑文件和执行命令 |
+| 14 | `ContextBudgetMiddleware` | 供应商显式启用 tokenizer 时，在所有提示注入后校验真实输入和输出预算 |
 
 `SubAgentBackend` 复用文件、Skills、Summary、待办、重试和用量等能力，但不挂载子智能体 middleware，并过滤不适合子智能体的敏感或交互工具。
 
@@ -66,7 +68,7 @@ Summary 在文件和 Skills 等中间件之后运行。请求达到唯一压力�
 
 `TokenUsageMiddleware` 同时记录：
 
-- 近似上下文 token，用于摘要阈值和状态面板；
+- 近似上下文 token，用于状态面板；未启用 tokenizer 的供应商也用近似计数触发摘要，启用方式见[上下文压缩机制](../mechanisms/context-compression.md#模型计数口径)；
 - 主 Agent 模型返回的 `usage_metadata`，按最近调用、当前 Run、线程和模型分桶保存。
 
 `siliconflow-cn` 和 `siliconflow` 当前位于 Provider 用量黑名单：这两个供应商仍可提供近似上下文统计，但不会写入最近调用、Run 或线程的 Provider 实际用量聚合。其他能返回兼容 `usage_metadata` 的供应商才会进入这组实际用量统计。当前口径也不包含 Summary 内部摘要模型调用。Run 终态时，worker 把与当前 `run_id` 匹配的 state 快照写入 `AgentRun.token_usage`；父 Run 和子 Run 分开保存。

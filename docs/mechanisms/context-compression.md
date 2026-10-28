@@ -12,7 +12,7 @@
 
 ```mermaid
 flowchart TD
-    Request["模型请求：消息 + system + tools"] --> Count["近似计算 token"]
+    Request["模型请求：消息 + system + tools"] --> Count["供应商 tokenizer 或近似 token 计数"]
     Count --> Entry{"达到压力阈值？"}
     Entry -- "否" --> Model["直接调用主模型"]
     Model -- "ContextOverflowError" --> Compact["确定性压缩工具结果"]
@@ -26,6 +26,18 @@ flowchart TD
 
 入口阈值没有达到时，Yuxi 直接调用主模型。请求达到阈值后，确定性压缩先执行；压缩后的请求低于同一阈值时不调用摘要模型。主模型返回 `ContextOverflowError` 时，系统把它视为强制摘要信号。
 
+## 模型计数口径
+
+供应商扩展配置 `extra_json` 可显式启用已验证的 vLLM 聊天模板计数：
+
+```json
+{"context_tokenizer": {"type": "vllm", "context_window": 131072}}
+```
+
+计数器复用该供应商地址、鉴权与模型 ID，请求同源 `/tokenize`，包含 system、消息、工具定义和生成提示。服务返回的 `max_model_len` 必须等于声明窗口。主、子智能体的摘要压力和最终请求预算使用同一计数口径；输入预算为 `min(max_context_tokens × 1024, context_window) − 16384`，摘要触发不超过该输入预算的90%。`max_context_tokens` 默认128，`summary_threshold` 保持默认100K。
+
+只为已核对聊天模板与实际生成 usage 的服务启用此配置。计数失败或窗口不符时明确拒绝生成；未启用的供应商沿用原有近似 token 计数，不增加新的字节预算拦截。状态面板的近似用量展示继续用于提示，不能代替启用后的真实触发判据。流式工具调用的双表示只在 ID、名称和参数完全一致时去重，参数矛盾会拒绝计数；历史参数裁剪只同步请求副本，不修改原 checkpoint 消息。
+
 ## 确定性工具结果压缩
 
 确定性压缩为本次模型请求创建较小的消息视图：
@@ -36,7 +48,7 @@ flowchart TD
 - 其他工具结果保留 head、middle 和 tail；
 - 文件名使用工具名和内容哈希，同一内容可以稳定定位。
 
-token 数使用近似计算，只用于压力判断和预览长度，不是计费口径。完整结果无法写入 Workdir 时，系统拒绝用裁剪内容替换原 ToolMessage。
+工具结果卸载和预览长度使用近似 token 计算；完整请求的压力判断按上述供应商计数口径执行。这些数据不是计费口径。完整结果无法写入 Workdir 时，系统拒绝用裁剪内容替换原 ToolMessage。
 
 ## 摘要和 checkpoint
 
@@ -85,7 +97,7 @@ checkpoint 只拥有模型继续运行所需的压缩视图；PostgreSQL Message
 
 路径由 Workspace/Sandbox backend 校验；公共 Skill 目录不可写，宿主机路径不会暴露给模型。文件写入过程不做脱敏或加密。
 
-Summary 触发使用近似 token 统计；主模型返回的 `usage_metadata` 用于实际用量记录，但 `siliconflow-cn` 和 `siliconflow` 当前被排除在 Provider 用量聚合之外。内部摘要模型调用不进入这组统计，因此不能把状态面板数据直接当作完整账单。
+Summary 触发按供应商配置使用 tokenizer 或近似 token 统计；主模型返回的 `usage_metadata` 用于实际用量记录，但 `siliconflow-cn` 和 `siliconflow` 当前被排除在 Provider 用量聚合之外。内部摘要模型调用不进入这组统计，因此不能把状态面板数据直接当作完整账单。
 
 ## 失败和恢复
 

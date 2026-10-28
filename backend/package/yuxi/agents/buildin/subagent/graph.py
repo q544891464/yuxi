@@ -25,6 +25,7 @@ from yuxi.agents.middlewares import (
     create_summary_middleware_from_context,
 )
 from yuxi.agents.middlewares.skills import SkillsMiddleware
+from yuxi.agents.middlewares.context_budget import create_context_budget_middleware
 from yuxi.agents.tool_approval import SENSITIVE_BACKEND_TOOLS, normalize_tool_approval_mode
 from yuxi.agents.toolkits.service import resolve_configured_runtime_tools
 from yuxi.models.chat import load_chat_model, resolve_chat_model_spec
@@ -90,7 +91,7 @@ class _SubAgentToolFilterMiddleware(AgentMiddleware[Any, Any, Any]):
 async def _build_middlewares(context, backend, tool_approval_mode: str):
     # tool_approval_mode is normalized once by the caller (get_graph / SubAgentBackend.get_graph).
 
-    return [
+    middlewares = [
         # 子 Agent 的工具异常也在最外层隔离，避免打断父对话。
         ToolErrorGuardMiddleware(),
         create_agent_filesystem_middleware(
@@ -107,6 +108,10 @@ async def _build_middlewares(context, backend, tool_approval_mode: str):
         ImageInputCompatibilityMiddleware(),
         TokenUsageMiddleware(),
     ]
+    budget = create_context_budget_middleware(context)
+    if budget:
+        middlewares.append(budget)
+    return middlewares
 
 
 class SubAgentBackend(BaseAgent):

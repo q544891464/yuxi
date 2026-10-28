@@ -15,6 +15,7 @@ type ResourceSelection = Literal["all"] | list[str]
 WORKSPACE_AGENTS_PROMPT_MAX_BYTES = 64 * 1024
 WORKSPACE_BASE_CONTEXT_FILES = ("AGENTS.md", "USER.md")
 DEFAULT_SUMMARY_THRESHOLD_K = 100  # 100K tokens
+DEFAULT_MAX_CONTEXT_K = 128
 DEFAULT_SUMMARY_KEEP_MESSAGES = 10
 DEFAULT_SUMMARY_TOOL_RESULT_TOKEN_LIMIT = 300
 DEFAULT_MAX_EXECUTION_STEPS = 600
@@ -284,12 +285,23 @@ class BaseContext:
         },
     )
 
+    max_context_tokens: int = field(
+        default=DEFAULT_MAX_CONTEXT_K,
+        metadata={
+            "name": "tokenizer 上下文预算 (K)",
+            "description": "供应商显式启用 tokenizer 时生效，按真实 token 计量并收敛到模型窗口，预留16K输出。"
+            "未启用时沿用原有近似计数与摘要行为。",
+            "type": "number",
+            "auth": "admin",
+        },
+    )
+
     summary_threshold: int = field(
         default=DEFAULT_SUMMARY_THRESHOLD_K,
         metadata={
             "name": "上下文摘要触发阈值 (K)",
             "description": (
-                f"当上下文大小超过该值时，启用摘要功能以优化上下文使用。单位为 K，默认值为 "
+                f"超过该值时启用摘要；启用 tokenizer 后按真实 token 计数且不超过输入预算的90%。单位为 K，默认值为 "
                 f"{DEFAULT_SUMMARY_THRESHOLD_K}K。"
             ),
             "type": "number",

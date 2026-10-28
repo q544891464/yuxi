@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import json
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +18,7 @@ from yuxi.agents.middlewares.summary import (
     create_summary_middleware,
 )
 from yuxi.agents.backends.paths import workdir_runtime_paths
+from yuxi.models.context_tokenizer import VllmContextTokenizer
 
 WORKDIR_PATH = "/home/gem/user-data/projects/11111111-1111-4111-8111-111111111111"
 VIRTUAL_PATH_LARGE_TOOL_RESULTS, VIRTUAL_PATH_CONVERSATION_HISTORY = workdir_runtime_paths(WORKDIR_PATH)
@@ -1160,3 +1163,65 @@ async def test_awrap_model_call_emits_failed_when_handler_raises_after_started(
     statuses = [event["status"] for event in compression_events]
     assert statuses == ["started", "failed"]
     assert "model boom" in compression_events[-1]["error"]
+
+
+@pytest.mark.asyncio
+async def test_tokenizer_summary_pipeline_keeps_event_loop_available(monkeypatch):
+    """摘要的真实计数、历史保存与模型调用全链路不阻塞事件循环。"""
+    import httpx
+    from deepagents.backends.protocol import WriteResult
+
+    started, permit = threading.Event(), threading.Event()
+    payloads = []
+
+    def post(url, **kwargs):
+        """等待事件循环放行，若计数阻塞主循环则明确失败。"""
+        started.set()
+        assert permit.wait(1), "tokenizer blocked event loop"
+        payloads.append(kwargs["json"])
+        return httpx.Response(200, json={"count": 5000, "max_model_len": 131072}, request=httpx.Request("POST", url))
+
+    info = SimpleNamespace(model_id="fixture", base_url="http://model.test/v1", api_key="fixture", headers={})
+
+    class HistoryBackend(_MemoryBackend):
+        """返回真实协议写入结果，支持上游历史路径投影。"""
+
+        def write(self, path, content):
+            """保留历史原文并返回实际保存路径。"""
+            super().write(path, content)
+            return WriteResult(path=path)
+
+    memory = HistoryBackend()
+    middleware = create_summary_middleware(
+        model=_DummyModel(),
+        backend=_scoped_backend(memory),
+        trigger=("messages", 3),
+        keep=("messages", 1),
+        trim_tokens_to_summarize=None,
+        token_counter=VllmContextTokenizer(info, 131072),
+    )
+    monkeypatch.setattr(httpx, "post", post)
+
+    async def tick():
+        """只有事件循环仍可执行时才放行计数线程。"""
+        while not started.is_set():
+            await asyncio.sleep(0.001)
+        permit.set()
+
+    async def handler(request):
+        """摘要后保留当前用户请求，并正常完成生成。"""
+        assert request.messages[-1].content == "当前问题"
+        return ModelResponse(result=[AIMessage("ok")])
+
+    task = asyncio.create_task(tick())
+    try:
+        result = await middleware.awrap_model_call(
+            _model_request([HumanMessage("旧问题"), AIMessage("旧回答"), HumanMessage("当前问题")]), handler
+        )
+        await task
+        assert isinstance(result, ExtendedModelResponse)
+        assert len(payloads) >= 2
+        assert any("conversation_history" in path for path in memory.files)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

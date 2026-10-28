@@ -22,6 +22,7 @@ from yuxi.agents.middlewares import (
     create_summary_middleware_from_context,
 )
 from yuxi.agents.middlewares.skills import SkillsMiddleware
+from yuxi.agents.middlewares.context_budget import create_context_budget_middleware
 from yuxi.agents.middlewares.subagent_task import create_subagent_task_middleware
 from yuxi.agents.tool_approval import create_tool_approval_middleware, normalize_tool_approval_mode
 from yuxi.agents.toolkits.service import resolve_configured_runtime_tools
@@ -71,6 +72,9 @@ async def _build_middlewares(context, backend):
     )
     if approval_middleware:
         middlewares.append(approval_middleware)
+    budget = create_context_budget_middleware(context)
+    if budget:
+        middlewares.append(budget)
     return middlewares
 
 
