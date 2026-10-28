@@ -296,6 +296,17 @@ class BaseContext:
         },
     )
 
+    tool_token_limit: int = field(
+        default=DEFAULT_TOOL_RESULT_EVICTION_K_TOKENS,
+        metadata={
+            "name": "单次工具结果卸载阈值 (K)",
+            "description": "超过阈值的非豁免工具结果保存到文件并返回预览。按工具层近似 token 计量，"
+            "提高此值会保留更多工具正文；实际模型输入仍受已启用的上下文预算限制。",
+            "type": "number",
+            "auth": "admin",
+        },
+    )
+
     summary_threshold: int = field(
         default=DEFAULT_SUMMARY_THRESHOLD_K,
         metadata={

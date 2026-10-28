@@ -59,6 +59,7 @@ async def test_saved_restricted_settings_survive_runtime_but_writes_require_role
         "summary_tool_result_token_limit": 123,
         "max_execution_steps": 42,
         "model_retry_times": 5,
+        "tool_token_limit": 12,
     }
     context = {**saved, "secret_setting": "restricted", "unknown": 1}
     readable = context_module.filter_declared_config({"context": context}, SuperAdminOnlyContext)["context"]
@@ -93,6 +94,7 @@ def test_get_configurable_items_filters_admin_fields_for_user():
     assert "summary_prompt" not in items
     assert "summary_tool_result_token_limit" not in items
     assert "max_execution_steps" not in items
+    assert "tool_token_limit" not in items
 
 
 def test_get_configurable_items_allows_admin_and_superadmin_fields():
@@ -100,6 +102,7 @@ def test_get_configurable_items_allows_admin_and_superadmin_fields():
     superadmin_items = SuperAdminOnlyContext.get_configurable_items(user_role="superadmin")
 
     assert "summary_threshold" in admin_items
+    assert admin_items["tool_token_limit"]["default"] == 3
     assert "summary_keep_messages" in admin_items
     assert "summary_prompt" in admin_items
     assert "summary_tool_result_token_limit" in admin_items

@@ -10,6 +10,12 @@ from yuxi.agents.buildin.subagent import graph as subagent_graph
 from yuxi.agents.middlewares import summary as summary_module
 from yuxi.agents.middlewares.context_budget import ContextBudgetMiddleware
 from yuxi.models.context_tokenizer import VllmContextTokenizer
+from yuxi.agents.context import filter_declared_config
+from yuxi.agents.backends.composite import YuxiFilesystemMiddleware
+from yuxi.agents.buildin.chatbot.prompt import TODO_MID_PROMPT
+from deepagents.backends import CompositeBackend
+from deepagents.backends.protocol import WriteResult
+from langchain_core.messages import ToolMessage
 
 
 def _context(summary_threshold: int = 123) -> SimpleNamespace:
@@ -70,6 +76,56 @@ async def test_graph_uses_shared_summary_middleware_factory(
     assert middleware_names.index("NetworkRetryMiddleware") < middleware_names.index(
         "ImageInputCompatibilityMiddleware"
     )
+    todo = next(middleware for middleware in middlewares if type(middleware).__name__ == "TodoListMiddleware")
+    assert todo.system_prompt == TODO_MID_PROMPT
+    assert "首项立即标为 in_progress" in todo.system_prompt
+    assert "先调用 write_todos" in todo.system_prompt
+    assert "不要等所有核验结束后批量更新" in todo.system_prompt
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("graph_module", [chatbot_graph, subagent_graph])
+@pytest.mark.parametrize("limit_k", [3, 16])
+async def test_saved_tool_output_threshold_controls_main_and_subagent_eviction(monkeypatch, graph_module, limit_k):
+    """实际配置穿过主子图，改变工具结果卸载并保留原文。"""
+
+    class MemoryBackend:
+        """记录本次隔离运行实际保存的完整工具输出。"""
+
+        def __init__(self):
+            self.files = {}
+
+        def write(self, path, content):
+            """保存正文并返回真实后端协议结果。"""
+            self.files[path] = content
+            return WriteResult(path=path)
+
+    saved = filter_declared_config({"context": {"tool_token_limit": limit_k}})
+    context = _context()
+    context.tool_token_limit = saved["context"]["tool_token_limit"]
+    memory = MemoryBackend()
+    backend = CompositeBackend(default=memory, routes={}, artifacts_root=f"{context.workdir_path}/outputs")
+    monkeypatch.setattr(graph_module, "create_summary_middleware_from_context", lambda *args, **kwargs: object())
+    monkeypatch.setattr(graph_module, "create_context_budget_middleware", lambda _: None)
+    if graph_module is chatbot_graph:
+        monkeypatch.setattr(graph_module, "create_memory_middleware", AsyncMock(return_value=None))
+        monkeypatch.setattr(graph_module, "create_subagent_task_middleware", AsyncMock(return_value=None))
+        middlewares = await graph_module._build_middlewares(context, backend)
+    else:
+        middlewares = await graph_module._build_middlewares(context, backend, "default")
+    filesystem = next(item for item in middlewares if isinstance(item, YuxiFilesystemMiddleware))
+    content = "word " * 7000
+    request = SimpleNamespace(tool_call={"name": "query_kb"}, runtime=SimpleNamespace())
+    result = filesystem.wrap_tool_call(
+        request, lambda _: ToolMessage(content=content, name="query_kb", tool_call_id="large-result")
+    )
+    if limit_k == 3:
+        assert list(memory.files.values()) == [content]
+        assert len(result.content) < len(content)
+        assert "large_tool_results" in result.content
+    else:
+        assert memory.files == {}
+        assert result.content == content
 
 
 @pytest.mark.unit

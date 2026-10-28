@@ -28,7 +28,7 @@
 | 5 | `YuxiMemoryMiddleware` | Memory 开关开启且 `MEMORY.md` 有内容时，注入用户记忆并提供受限工具 |
 | 6 | `YuxiSubAgentMiddleware` | 主智能体有可见子智能体时提供子智能体生命周期工具 |
 | 7 | `YuxiSummarizationMiddleware` | 先确定性压缩工具结果，仍达到同一阈值时生成摘要 |
-| 8 | `TodoListMiddleware` | 保存待办，供状态面板展示 |
+| 8 | `TodoListMiddleware` | 提示模型分阶段及时更新待办，并保存状态供面板展示 |
 | 9 | `PatchToolCallsMiddleware` | 修正部分工具调用消息形态 |
 | 10 | `NetworkRetryMiddleware` | 网络错误按预算、其他可重试模型错误按次数重试，耗尽后抛出异常 |
 | 11 | `ImageInputCompatibilityMiddleware` | 桥接工具读取图片与模型输入格式；必要时回退 OCR |
@@ -40,6 +40,8 @@
 
 模型重试耗尽后，异常进入 Run 失败通道，持久化 `failed` 状态与错误原因；已有部分输出保留错误元数据。子 Run 的失败通过 `subagent_await` / `subagent_status` 返回给父智能体，由父智能体决定后续处理。最终正常回答仍须满足同 Run 的 model lifecycle 审计关联。
 
+主、子智能体使用相同的待办提示：复杂任务先建立3–5个阶段，首项立即进入进行中；阶段完成时先更新当前项及下一项，再开展后续工作。交付文件实际生成并检查后才标记完成，未完成或等待补充的工作保留未完成状态。这是模型执行指引，模型仍可能延迟调用更新工具；状态传播测试不代表任意模型的业务进度都能及时更新。
+
 ## Skills 和知识库
 
 Skills middleware 将 Skill 说明按模型请求注入：预加载 Skill 从首轮开放工具和 MCP 依赖，普通 Skill 在模型读取对应 `SKILL.md` 后激活，再开放声明的依赖。Agent 显式选择的 MCP 服务器从运行开始提供工具。
@@ -47,6 +49,8 @@ Skills middleware 将 Skill 说明按模型请求注入：预加载 Skill 从首
 知识库能力由内置 `knowledge-base` Skill 提供。它的工具是否注册、模型是否可见、参数是否能访问目标知识库分别由工具组装、Skill 激活和知识库权限检查负责。完整链路见[工具系统](./tools-system.md)和[知识库机制详解](../mechanisms/knowledge-base.md)。
 
 ## 文件和附件
+
+文件中间件在工具返回后按 `tool_token_limit × 1024` 个近似 token 判断是否卸载大结果，默认3K。管理员可在员工配置中调整该值，主、子智能体使用各自保存的配置；提高阈值会让更多工具正文直接进入上下文。现有文件工具分页及 `open_kb_document` 豁免继续生效，整体输入仍按已启用的上下文预算检查。摘要阶段的工具预览长度由 `summary_tool_result_token_limit` 单独控制，详见[上下文压缩机制](../mechanisms/context-compression.md)。
 
 附件确认后写入当前 Project Workdir。每次 Run 会把线程历史附件的文件名和实时路径加入本轮用户消息，让模型按需调用 `read_file`；持久化 Message 仍保存原始文本，不会把这段模型专用路径混进用户可见消息。
 

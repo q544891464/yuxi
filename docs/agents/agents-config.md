@@ -57,6 +57,7 @@ Basic 首页将主智能体作为数字员工展示；名称、描述和形象�
 | `skills` | 选择共享和内置 Skill；个人 Skill 始终可用 |
 | `preload_skills` | 从首轮请求加载完整说明和依赖的 Skill 子集 |
 | `max_context_tokens` | 供应商启用 tokenizer 时的上下文预算（K）；收敛到模型窗口并预留16K输出，详见[计数口径](../mechanisms/context-compression.md#模型计数口径) |
+| `tool_token_limit` | 管理员配置单次工具结果卸载阈值（K），默认3；主、子智能体均读取各自的配置，按工具层近似 token 计量 |
 | `summary_threshold`、`summary_keep_messages` | 上下文压缩的唯一压力阈值和摘要后保留消息数 |
 | `summary_prompt`、`summary_tool_result_token_limit` | 摘要提示词和工具结果预览上限 |
 | `max_execution_steps`、`model_retry_times` | 单次运行步数和模型重试次数 |
